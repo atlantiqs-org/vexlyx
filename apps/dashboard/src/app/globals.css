@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+/*
+ * Vexlyx Design System — Theme Variables
+ *
+ * Color palette follows CLAUDE.md Section 15:
+ * - Slate-based neutrals (no pure black/white)
+ * - Indigo primary
+ * - Emerald success, amber warning, rose error
+ *
+ * "Vercel dashboard meets Linear app" — clean, minimal, intentional.
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * Light Mode — slate-50 background, white cards, indigo-600 primary
+ * No pure white (#fff) — use slate-50 for backgrounds
+ */
+:root {
+  --background: oklch(0.984 0.003 247.858);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(0.967 0.003 264.542);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(0.967 0.003 264.542);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.457 0.24 277.023);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.929 0.013 255.508);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.929 0.013 255.508);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.929 0.013 255.508);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.869 0.022 252.894);
+  --input: oklch(0.869 0.022 252.894);
+  --ring: oklch(0.457 0.24 277.023);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.967 0.003 264.542);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-border: oklch(0.869 0.022 252.894);
+  --sidebar-accent: oklch(0.929 0.013 255.508);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+}
+
+/*
+ * Dark Mode — slate-950 background, slate-900 cards, indigo-400 primary
+ * No pure black (#000) — use slate-950 for backgrounds
+ */
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.673 0.182 276.935);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.279 0.041 260.031);
+  --input: oklch(0.279 0.041 260.031);
+  --ring: oklch(0.673 0.182 276.935);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(0.279 0.041 260.031);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+}
+
+/*
+ * Base styles — antialiased text, smooth transitions.
+ * 14px base font size per CLAUDE.md Section 15 Typography.
+ */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+}

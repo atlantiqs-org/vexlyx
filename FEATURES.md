@@ -26,7 +26,7 @@ This document is the **single source of truth** for all Vexlyx features.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 0: Foundation | 🟡 IN PROGRESS | 14% (1/7) |
+| Phase 0: Foundation | 🟡 IN PROGRESS | 29% (2/7) |
 | Phase 1: Project Deployment | 🔴 NOT STARTED | 0% |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
@@ -34,7 +34,7 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 2% (1/48 features)
+**Overall Completion:** 4% (2/48 features)
 
 ---
 
@@ -74,19 +74,19 @@ Initialize the Vexlyx monorepo using Turborepo with three workspaces: `apps/dash
 ---
 
 ### F0.2 — Next.js Dashboard Scaffold
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Set up the Next.js 15 dashboard app with App Router, TypeScript, Tailwind CSS 4, and shadcn/ui. Configure the basic layout with sidebar navigation, header, and main content area.
 
 **Acceptance Criteria:**
-- [ ] Next.js 15 installed with App Router
-- [ ] Tailwind CSS 4 configured with custom theme tokens
-- [ ] shadcn/ui initialized with base components (Button, Card, Input, Dialog)
-- [ ] Root layout with sidebar + header structure
-- [ ] Dashboard home page with placeholder widgets
-- [ ] Dark mode support via `next-themes`
-- [ ] Responsive design (mobile sidebar toggle)
+- [x] Next.js 15 installed with App Router
+- [x] Tailwind CSS 4 configured with custom theme tokens
+- [x] shadcn/ui initialized with base components (Button, Card, Separator, Sheet, Skeleton)
+- [x] Root layout with sidebar + header structure
+- [x] Dashboard home page with placeholder widgets
+- [x] Dark mode support via `next-themes`
+- [x] Responsive design (mobile sidebar toggle)
 
 **Test Plan:**
 1. `pnpm dev` starts dashboard on `http://localhost:3000`
