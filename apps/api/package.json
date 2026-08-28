@@ -1,0 +1,17 @@
+{
+  "name": "@vexlyx/api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Vexlyx API server (Fastify)",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --build",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo tsconfig.tsbuildinfo"
+  },
+  "dependencies": {
+    "@vexlyx/shared": "workspace:*"
+  }
+}

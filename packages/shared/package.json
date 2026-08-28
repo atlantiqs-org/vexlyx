@@ -1,0 +1,22 @@
+{
+  "name": "@vexlyx/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared Zod schemas and TypeScript types for Vexlyx",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsc --build --watch",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo tsconfig.tsbuildinfo"
+  },
+  "files": ["dist"]
+}
