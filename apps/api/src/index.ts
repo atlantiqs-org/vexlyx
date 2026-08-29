@@ -10,6 +10,7 @@ import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { authSessionPlugin } from "./plugins/auth.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { projectRoutes } from "./modules/projects/routes.js";
 
 /**
  * Creates and configures the Fastify application instance.
@@ -49,6 +50,7 @@ async function buildApp() {
   await app.register(healthRoutes, { prefix: "/api/health" });
 
   await app.register(authRoutes, { prefix: "/api/auth" });
+  await app.register(projectRoutes, { prefix: "/api/projects" });
 
   return app;
 }

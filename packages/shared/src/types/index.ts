@@ -23,3 +23,52 @@ export type ApiError = {
   code: string;
   details: Record<string, unknown>;
 };
+
+/** Supported project/application types — mirrors the Prisma ProjectType enum */
+export type ProjectType =
+  | "NODEJS"
+  | "NEXTJS"
+  | "PYTHON"
+  | "REACT"
+  | "STATIC"
+  | "PHP"
+  | "WORDPRESS"
+  | "DOCKER";
+
+/** Lifecycle status of a hosted project — mirrors the Prisma ProjectStatus enum */
+export type ProjectStatus =
+  | "CREATING"
+  | "ACTIVE"
+  | "STOPPED"
+  | "ERROR"
+  | "DELETED";
+
+/**
+ * Public project object returned by the API.
+ * Sensitive internals (deletedAt) are never included in responses.
+ */
+export type Project = {
+  id: string;
+  name: string;
+  type: ProjectType;
+  status: ProjectStatus;
+  gitUrl: string | null;
+  branch: string;
+  buildCmd: string | null;
+  startCmd: string | null;
+  port: number | null;
+  userId: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+/** Paginated list response wrapper for projects */
+export type PaginatedProjects = {
+  projects: Project[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};

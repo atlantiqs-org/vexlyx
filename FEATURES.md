@@ -303,20 +303,20 @@ Create the shared package containing Zod schemas and TypeScript types used by bo
 ## Phase 1: Project Deployment
 
 ### F1.1 — Project CRUD API
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Build the complete project management API. Users can create, read, update, and delete hosting projects. Each project has a name, type, git URL, and status.
 
 **Acceptance Criteria:**
-- [ ] `GET /api/projects` — list user's projects with pagination
-- [ ] `POST /api/projects` — create new project
-- [ ] `GET /api/projects/:id` — get single project details
-- [ ] `PUT /api/projects/:id` — update project settings
-- [ ] `DELETE /api/projects/:id` — delete project and cleanup resources
-- [ ] Projects are scoped to the authenticated user
-- [ ] Validation via Zod schemas from shared package
-- [ ] Soft delete (mark as deleted, cleanup async)
+- [x] `GET /api/projects` — list user's projects with pagination
+- [x] `POST /api/projects` — create new project
+- [x] `GET /api/projects/:id` — get single project details
+- [x] `PUT /api/projects/:id` — update project settings
+- [x] `DELETE /api/projects/:id` — delete project and cleanup resources
+- [x] Projects are scoped to the authenticated user
+- [x] Validation via Zod schemas from shared package
+- [x] Soft delete (mark as deleted, cleanup async)
 
 **Test Plan:**
 1. Create project → returns 201 with project data
@@ -329,10 +329,17 @@ Build the complete project management API. Users can create, read, update, and d
 **Developer Docs:**
 - **Location:** `docs/dev/projects-api.md`
 
-**Files to Create:**
+**Files Created:**
 - `apps/api/src/modules/projects/routes.ts`
 - `apps/api/src/modules/projects/service.ts`
 - `apps/api/src/modules/projects/schema.ts`
+- `packages/shared/src/schemas/projects.ts`
+
+**Files Modified:**
+- `packages/shared/src/index.ts` (exports project schemas/types)
+- `packages/shared/src/types/index.ts` (added Project, ProjectType, ProjectStatus, PaginatedProjects)
+- `apps/api/prisma/schema.prisma` (added `deletedAt` to Project)
+- `apps/api/src/index.ts` (registered `/api/projects` routes)
 
 ---
 
