@@ -37,3 +37,10 @@ apps/api/prisma/generated/
 
 # Docker volumes
 docker/data/
+
+# Local workspaces & generated keys (F1.3)
+workspaces/
+apps/api/workspaces/
+
+# Windows Python launcher local cache/installs
+**/Python/

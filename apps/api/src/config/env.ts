@@ -18,6 +18,10 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
+  // Git integration (F1.3)
+  PROJECTS_DIR: z.string().min(1).default("./workspaces/projects"),
+  SSH_KEYS_DIR: z.string().min(1).default("./workspaces/keys"),
+  API_BASE_URL: z.string().url().default("http://localhost:5000"),
 });
 
 /**

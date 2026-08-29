@@ -92,3 +92,34 @@ export const ProjectListQuerySchema = z.object({
 });
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;
+
+// ---------------------------------------------------------------------------
+// Git integration (F1.3)
+// ---------------------------------------------------------------------------
+
+// Allow-list of supported Git hosts. SSH URLs (git@...) are also supported.
+const GIT_URL_REGEX =
+  /^(https?:\/\/|git@)(github\.com|gitlab\.com|bitbucket\.org)[:/].+\/.+$/;
+
+export const ConnectRepoSchema = z.object({
+  gitUrl: z
+    .string()
+    .min(1, "Git URL is required")
+    .regex(
+      GIT_URL_REGEX,
+      "Must be a GitHub, GitLab, or Bitbucket URL (HTTPS or SSH format)",
+    ),
+  branch: z.string().min(1).max(255).default("main"),
+  isPrivate: z.boolean().default(false),
+});
+
+export type ConnectRepoInput = z.infer<typeof ConnectRepoSchema>;
+
+export interface GitMetadata {
+  gitUrl: string | null;
+  branch: string;
+  sshPublicKey: string | null;
+  webhookUrl: string | null;
+  isPrivate: boolean;
+}
+

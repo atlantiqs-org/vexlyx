@@ -108,31 +108,54 @@ export class ProjectService {
       select: { id: true, status: true },
     });
 
-    if (existing && existing.status !== "DELETED") {
-      throw new ProjectError(
-        `A project named "${data.name}" already exists`,
-        "PROJECT_NAME_EXISTS",
-        409,
-      );
+    if (existing) {
+      if (existing.status !== "DELETED") {
+        throw new ProjectError(
+          `A project named "${data.name}" already exists`,
+          "PROJECT_NAME_EXISTS",
+          409,
+        );
+      }
+
+      // If an old soft-deleted project occupied this name, remove it to allow re-creation
+      await this.prisma.project.delete({
+        where: { id: existing.id },
+      });
     }
 
-    const project = await this.prisma.project.create({
-      data: {
-        userId,
-        name: data.name,
-        type: data.type,
-        // Start as ACTIVE — build engine (F1.4) will manage CREATING→ACTIVE later
-        status: "ACTIVE",
-        gitUrl: data.gitUrl || null,
-        branch: data.branch,
-        buildCmd: data.buildCmd ?? null,
-        startCmd: data.startCmd ?? null,
-        port: data.port ?? null,
-      },
-      select: PROJECT_SELECT,
-    });
+    try {
+      const project = await this.prisma.project.create({
+        data: {
+          userId,
+          name: data.name,
+          type: data.type,
+          // Start as ACTIVE — build engine (F1.4) will manage CREATING→ACTIVE later
+          status: "ACTIVE",
+          gitUrl: data.gitUrl || null,
+          branch: data.branch,
+          buildCmd: data.buildCmd ?? null,
+          startCmd: data.startCmd ?? null,
+          port: data.port ?? null,
+        },
+        select: PROJECT_SELECT,
+      });
 
-    return project;
+      return project;
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "P2002"
+      ) {
+        throw new ProjectError(
+          `A project named "${data.name}" already exists`,
+          "PROJECT_NAME_EXISTS",
+          409,
+        );
+      }
+      throw err;
+    }
   }
 
   async update(userId: string, projectId: string, data: UpdateProjectInput) {
@@ -143,32 +166,54 @@ export class ProjectService {
     if (data.name) {
       const collision = await this.prisma.project.findUnique({
         where: { userId_name: { userId, name: data.name } },
-        select: { id: true },
+        select: { id: true, status: true },
       });
 
       if (collision && collision.id !== projectId) {
+        if (collision.status !== "DELETED") {
+          throw new ProjectError(
+            `A project named "${data.name}" already exists`,
+            "PROJECT_NAME_EXISTS",
+            409,
+          );
+        }
+        // If colliding record was soft-deleted, clean it up
+        await this.prisma.project.delete({
+          where: { id: collision.id },
+        });
+      }
+    }
+
+    try {
+      const updated = await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.gitUrl !== undefined && { gitUrl: data.gitUrl || null }),
+          ...(data.branch !== undefined && { branch: data.branch }),
+          ...(data.buildCmd !== undefined && { buildCmd: data.buildCmd }),
+          ...(data.startCmd !== undefined && { startCmd: data.startCmd }),
+          ...(data.port !== undefined && { port: data.port }),
+        },
+        select: PROJECT_SELECT,
+      });
+
+      return updated;
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "P2002"
+      ) {
         throw new ProjectError(
           `A project named "${data.name}" already exists`,
           "PROJECT_NAME_EXISTS",
           409,
         );
       }
+      throw err;
     }
-
-    const updated = await this.prisma.project.update({
-      where: { id: projectId },
-      data: {
-        ...(data.name !== undefined && { name: data.name }),
-        ...(data.gitUrl !== undefined && { gitUrl: data.gitUrl || null }),
-        ...(data.branch !== undefined && { branch: data.branch }),
-        ...(data.buildCmd !== undefined && { buildCmd: data.buildCmd }),
-        ...(data.startCmd !== undefined && { startCmd: data.startCmd }),
-        ...(data.port !== undefined && { port: data.port }),
-      },
-      select: PROJECT_SELECT,
-    });
-
-    return updated;
   }
 
   async softDelete(userId: string, projectId: string) {
