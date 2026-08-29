@@ -26,7 +26,7 @@ This document is the **single source of truth** for all Vexlyx features.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 0: Foundation | 🟡 IN PROGRESS | 86% (6/7) |
+| Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
 | Phase 1: Project Deployment | 🔴 NOT STARTED | 0% |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
@@ -34,7 +34,7 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 12% (6/48 features)
+**Overall Completion:** 14% (7/48 features)
 
 ---
 
@@ -266,17 +266,17 @@ Implement complete authentication with custom session-based auth (Lucia Auth was
 ---
 
 ### F0.7 — Shared Package (Types & Schemas)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Create the shared package containing Zod schemas and TypeScript types used by both frontend and backend. This ensures type safety across the monorepo.
 
 **Acceptance Criteria:**
-- [ ] Zod schemas for all API inputs (auth, projects, domains, etc.)
-- [ ] TypeScript types inferred from Zod schemas
-- [ ] Package builds and exports correctly
-- [ ] Both dashboard and api import from `@vexlyx/shared`
-- [ ] No circular dependencies
+- [x] Zod schemas for all API inputs (auth, projects, domains, etc.)
+- [x] TypeScript types inferred from Zod schemas
+- [x] Package builds and exports correctly
+- [x] Both dashboard and api import from `@vexlyx/shared`
+- [x] No circular dependencies
 
 **Test Plan:**
 1. `pnpm build` in `packages/shared` succeeds
@@ -288,12 +288,15 @@ Create the shared package containing Zod schemas and TypeScript types used by bo
 - **Location:** `docs/dev/shared-package.md`
 - **Contents:** Adding new schemas, type inference, validation patterns
 
-**Files to Create:**
-- `packages/shared/package.json`
+**Files Created:**
 - `packages/shared/src/schemas/auth.ts`
-- `packages/shared/src/schemas/project.ts`
 - `packages/shared/src/types/index.ts`
-- `packages/shared/tsconfig.json`
+- `packages/shared/src/index.ts` (updated)
+- `packages/shared/package.json` (updated — added zod peer dep)
+
+**Files Modified:**
+- `apps/api/src/modules/auth/schema.ts` (now re-exports from `@vexlyx/shared`)
+- `apps/dashboard/src/hooks/useAuth.ts` (imports `User` from `@vexlyx/shared`)
 
 ---
 

@@ -18,5 +18,11 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist .turbo tsconfig.tsbuildinfo"
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "peerDependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "zod": "^4.4.3"
+  }
 }
