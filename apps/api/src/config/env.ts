@@ -11,6 +11,7 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
   CORS_ORIGIN: z.string().url().default("http://localhost:3000"),
+  DATABASE_URL: z.string().url(),
 });
 
 /**

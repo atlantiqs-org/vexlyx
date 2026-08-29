@@ -26,7 +26,7 @@ This document is the **single source of truth** for all Vexlyx features.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 0: Foundation | 🟡 IN PROGRESS | 43% (3/7) |
+| Phase 0: Foundation | 🟡 IN PROGRESS | 57% (4/7) |
 | Phase 1: Project Deployment | 🔴 NOT STARTED | 0% |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
@@ -34,7 +34,7 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 6% (3/48 features)
+**Overall Completion:** 8% (4/48 features)
 
 ---
 
@@ -148,19 +148,19 @@ Set up the Fastify backend API with TypeScript, Zod validation, and a modular pl
 ---
 
 ### F0.4 — Prisma Schema & Database
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Design and implement the complete Prisma schema for Vexlyx. Set up PostgreSQL via Docker Compose for local development. Run initial migration and generate Prisma Client.
 
 **Acceptance Criteria:**
-- [ ] Complete Prisma schema with all models (User, Project, Domain, Database, Mailbox, Deployment, etc.)
-- [ ] All enums defined (Role, ProjectType, Status, etc.)
-- [ ] Relations properly configured with foreign keys
-- [ ] Docker Compose includes PostgreSQL 16 service
-- [ ] Initial migration created and applied
-- [ ] Prisma Client generated and exported from `apps/api/src/config/database.ts`
-- [ ] Seed script creates admin user for development
+- [x] Complete Prisma schema with all models (User, Project, Domain, Database, Mailbox, Deployment, etc.)
+- [x] All enums defined (Role, ProjectType, Status, etc.)
+- [x] Relations properly configured with foreign keys
+- [x] Docker Compose includes PostgreSQL 16 service
+- [x] Initial migration created and applied
+- [x] Prisma Client generated and exported from `apps/api/src/config/database.ts`
+- [x] Seed script creates admin user for development
 
 **Test Plan:**
 1. `docker-compose up postgres` starts PostgreSQL
@@ -173,7 +173,7 @@ Design and implement the complete Prisma schema for Vexlyx. Set up PostgreSQL vi
 - **Location:** `docs/dev/database.md`
 - **Contents:** Schema overview, migration workflow, seeding, querying patterns, adding new models
 
-**Files to Create:**
+**Files Created:**
 - `apps/api/prisma/schema.prisma`
 - `apps/api/prisma/migrations/`
 - `apps/api/prisma/seed.ts`
