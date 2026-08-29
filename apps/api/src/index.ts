@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import { APP_NAME, VEXLYX_VERSION } from "@vexlyx/shared";
 import { env } from "./config/env.js";
 import { databasePlugin } from "./config/database.js";
+import { redisClientPlugin } from "./config/redis.js";
+import { queuePlugin_ } from "./config/queue.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { healthRoutes } from "./modules/health/routes.js";
 
@@ -35,6 +37,8 @@ async function buildApp() {
   });
 
   await app.register(databasePlugin);
+  await app.register(redisClientPlugin);
+  await app.register(queuePlugin_);
   await app.register(errorHandlerPlugin);
 
   await app.register(healthRoutes, { prefix: "/api/health" });
