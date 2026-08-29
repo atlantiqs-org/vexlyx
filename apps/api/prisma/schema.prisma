@@ -1,0 +1,237 @@
+/// Prisma schema for Vexlyx — open-source hybrid hosting control panel.
+/// Defines all core models: users, projects, deployments, domains, databases, and mail.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Roles available to panel users.
+enum Role {
+  ADMIN
+  USER
+}
+
+/// Supported project/application types for deployment.
+enum ProjectType {
+  NODEJS
+  NEXTJS
+  PYTHON
+  REACT
+  STATIC
+  PHP
+  WORDPRESS
+  DOCKER
+}
+
+/// Lifecycle status of a hosted project.
+enum ProjectStatus {
+  CREATING
+  ACTIVE
+  STOPPED
+  ERROR
+  DELETED
+}
+
+/// Status of a single deployment attempt.
+enum DeploymentStatus {
+  QUEUED
+  BUILDING
+  DEPLOYING
+  RUNNING
+  FAILED
+  CANCELLED
+}
+
+/// Verification/routing status of a custom domain.
+enum DomainStatus {
+  PENDING
+  ACTIVE
+  ERROR
+}
+
+/// Supported database engines that users can provision.
+enum DatabaseType {
+  POSTGRESQL
+  MYSQL
+}
+
+/// Status of a user-provisioned mailbox.
+enum MailboxStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+/// A panel user who can own projects, domains, databases, and mailboxes.
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projects  Project[]
+  domains   Domain[]
+  databases Database[]
+  mailboxes Mailbox[]
+
+  @@map("users")
+}
+
+/// A hosted application or website managed by the panel.
+/// Project names are unique per user.
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  type        ProjectType
+  status      ProjectStatus @default(CREATING)
+  gitUrl      String?       @map("git_url")
+  branch      String        @default("main")
+  buildCmd    String?       @map("build_cmd")
+  startCmd    String?       @map("start_cmd")
+  port        Int?
+  userId      String        @map("user_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deployments Deployment[]
+  envVars     EnvVar[]
+  domains     Domain[]
+  databases   Database[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("projects")
+}
+
+/// A single deployment attempt for a project (build + deploy lifecycle).
+model Deployment {
+  id          String           @id @default(cuid())
+  status      DeploymentStatus @default(QUEUED)
+  commitHash  String?          @map("commit_hash")
+  commitMsg   String?          @map("commit_msg")
+  buildLogs   String?          @map("build_logs")
+  duration    Int?
+  projectId   String           @map("project_id")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("deployments")
+}
+
+/// An encrypted environment variable belonging to a project.
+/// Values are encrypted with AES-256-GCM at rest.
+model EnvVar {
+  id        String   @id @default(cuid())
+  key       String
+  value     String
+  projectId String   @map("project_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([projectId])
+  @@map("env_vars")
+}
+
+/// A custom domain attached to a user's project.
+/// Includes SSL and verification status.
+model Domain {
+  id         String       @id @default(cuid())
+  hostname   String       @unique
+  status     DomainStatus @default(PENDING)
+  sslEnabled Boolean      @default(false) @map("ssl_enabled")
+  userId     String       @map("user_id")
+  projectId  String?      @map("project_id")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  dnsRecords DnsRecord[]
+  mailboxes  Mailbox[]
+
+  @@index([userId])
+  @@map("domains")
+}
+
+/// A DNS record belonging to a domain zone.
+model DnsRecord {
+  id        String   @id @default(cuid())
+  type      String
+  name      String
+  value     String
+  ttl       Int      @default(3600)
+  priority  Int?
+  domainId  String   @map("domain_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([domainId])
+  @@map("dns_records")
+}
+
+/// A user-provisioned database instance (MySQL or PostgreSQL).
+model Database {
+  id         String       @id @default(cuid())
+  name       String
+  type       DatabaseType
+  host       String
+  port       Int
+  dbUser     String       @map("db_user")
+  dbPassword String       @map("db_password")
+  userId     String       @map("user_id")
+  projectId  String?      @map("project_id")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("databases")
+}
+
+/// An email mailbox associated with a domain.
+model Mailbox {
+  id        String        @id @default(cuid())
+  address   String        @unique
+  password  String
+  quota     Int           @default(1024)
+  status    MailboxStatus @default(ACTIVE)
+  userId    String        @map("user_id")
+  domainId  String        @map("domain_id")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain    Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([domainId])
+  @@map("mailboxes")
+}
