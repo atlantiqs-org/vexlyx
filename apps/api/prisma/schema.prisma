@@ -85,12 +85,27 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  sessions  Session[]
   projects  Project[]
   domains   Domain[]
   databases Database[]
   mailboxes Mailbox[]
 
   @@map("users")
+}
+
+/// A server-side session for authenticated users.
+/// Primary lookup via Redis; PostgreSQL stores for audit and admin invalidation.
+model Session {
+  id        String   @id
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 /// A hosted application or website managed by the panel.
