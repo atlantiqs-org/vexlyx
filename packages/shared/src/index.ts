@@ -7,4 +7,25 @@ export const APP_NAME = "Vexlyx";
 export { RegisterSchema, LoginSchema } from "./schemas/auth.js";
 export type { RegisterInput, LoginInput } from "./schemas/auth.js";
 
-export type { User, Role, ApiError } from "./types/index.js";
+export {
+  ProjectTypeSchema,
+  ProjectStatusSchema,
+  CreateProjectSchema,
+  UpdateProjectSchema,
+  ProjectListQuerySchema,
+} from "./schemas/projects.js";
+export type {
+  CreateProjectInput,
+  UpdateProjectInput,
+  ProjectListQuery,
+} from "./schemas/projects.js";
+
+export type {
+  User,
+  Role,
+  ApiError,
+  Project,
+  ProjectType,
+  ProjectStatus,
+  PaginatedProjects,
+} from "./types/index.js";
