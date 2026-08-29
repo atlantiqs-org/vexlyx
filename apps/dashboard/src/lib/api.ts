@@ -28,7 +28,9 @@ export async function fetchAPI<T>(
   const response = await fetch(url, {
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      // Only set Content-Type when there is a body — Fastify rejects
+      // an 'application/json' content-type on bodyless requests (DELETE, GET).
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },
     ...options,
@@ -51,6 +53,12 @@ export async function fetchAPI<T>(
       response.status,
       errorData.details,
     );
+  }
+
+  // 204 No Content (and similar) have no body — skip JSON parsing.
+  // Calling response.json() on an empty body throws a SyntaxError.
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;

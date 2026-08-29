@@ -344,19 +344,19 @@ Build the complete project management API. Users can create, read, update, and d
 ---
 
 ### F1.2 — Project Dashboard UI
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Build the project management interface in the dashboard. List view with cards/table, create project modal, and project detail page.
 
 **Acceptance Criteria:**
-- [ ] `/projects` page lists all user projects in a card grid
-- [ ] "New Project" button opens creation modal
-- [ ] Modal has form: name, type (select), git URL (optional)
-- [ ] Project cards show status badge, type icon, last deployed
-- [ ] Clicking card navigates to `/projects/[id]`
-- [ ] Empty state for new users
-- [ ] Real-time status updates via polling or Socket.io
+- [x] `/projects` page lists all user projects in a card grid
+- [x] "New Project" button opens creation modal
+- [x] Modal has form: name, type (select), git URL (optional)
+- [x] Project cards show status badge, type icon, last deployed
+- [x] Clicking card navigates to `/projects/[id]`
+- [x] Empty state for new users
+- [x] Real-time status updates via polling (30s interval)
 
 **Test Plan:**
 1. Create project via modal → appears in list immediately
@@ -367,12 +367,16 @@ Build the project management interface in the dashboard. List view with cards/ta
 **Developer Docs:**
 - **Location:** `docs/dev/projects-ui.md`
 
-**Files to Create:**
-- `apps/dashboard/app/projects/page.tsx`
-- `apps/dashboard/app/projects/[id]/page.tsx`
-- `apps/dashboard/components/projects/ProjectCard.tsx`
-- `apps/dashboard/components/projects/ProjectList.tsx`
-- `apps/dashboard/components/projects/CreateProjectModal.tsx`
+**Files Created:**
+- `apps/dashboard/src/app/(panel)/projects/page.tsx`
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
+- `apps/dashboard/src/components/projects/ProjectCard.tsx`
+- `apps/dashboard/src/components/projects/ProjectList.tsx`
+- `apps/dashboard/src/components/projects/CreateProjectModal.tsx`
+- `apps/dashboard/src/hooks/useProjects.ts`
+- `apps/dashboard/src/components/ui/dialog.tsx` (shadcn)
+- `apps/dashboard/src/components/ui/select.tsx` (shadcn)
+- `apps/dashboard/src/components/ui/badge.tsx` (shadcn)
 
 ---
 
