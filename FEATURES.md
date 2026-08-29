@@ -26,7 +26,7 @@ This document is the **single source of truth** for all Vexlyx features.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 0: Foundation | 🟡 IN PROGRESS | 57% (4/7) |
+| Phase 0: Foundation | 🟡 IN PROGRESS | 71% (5/7) |
 | Phase 1: Project Deployment | 🔴 NOT STARTED | 0% |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
@@ -34,7 +34,7 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 8% (4/48 features)
+**Overall Completion:** 10% (5/48 features)
 
 ---
 
@@ -183,19 +183,19 @@ Design and implement the complete Prisma schema for Vexlyx. Set up PostgreSQL vi
 ---
 
 ### F0.5 — Redis & Docker Compose Dev Environment
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Set up the complete Docker Compose development environment with PostgreSQL, Redis, and Traefik. Configure Redis for sessions, caching, and BullMQ queues.
 
 **Acceptance Criteria:**
-- [ ] Docker Compose includes PostgreSQL 16, Redis 7, and Traefik v3 services
-- [ ] Redis client configured in API with connection pooling
-- [ ] Redis used for session storage
-- [ ] BullMQ configured for background job processing
-- [ ] Traefik dashboard accessible on `localhost:8080`
-- [ ] Persistent volumes for PostgreSQL and Redis data
-- [ ] Health checks for all services
+- [x] Docker Compose includes PostgreSQL 16, Redis 7, and Traefik v3 services
+- [x] Redis client configured in API with connection pooling
+- [x] Redis used for session storage
+- [x] BullMQ configured for background job processing
+- [x] Traefik dashboard accessible on `localhost:8080`
+- [x] Persistent volumes for PostgreSQL and Redis data
+- [x] Health checks for all services
 
 **Test Plan:**
 1. `docker-compose up -d` starts all services
@@ -208,10 +208,11 @@ Set up the complete Docker Compose development environment with PostgreSQL, Redi
 - **Location:** `docs/dev/infrastructure.md`
 - **Contents:** Docker services overview, Redis usage patterns, BullMQ queue setup, Traefik routing basics
 
-**Files to Create:**
+**Files Created:**
 - `docker-compose.yml`
 - `apps/api/src/config/redis.ts`
 - `apps/api/src/config/queue.ts`
+- `apps/api/src/config/env.ts` (modified — added `REDIS_URL`)
 - `docker/traefik/traefik.yml`
 - `docker/traefik/dynamic/`
 

@@ -12,6 +12,7 @@ const envSchema = z.object({
     .default("development"),
   CORS_ORIGIN: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().url(),
+  REDIS_URL: z.string().default("redis://localhost:6379"),
 });
 
 /**
