@@ -3,14 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { fetchAPI } from "@/lib/api";
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "ADMIN" | "USER";
-  createdAt: string;
-}
+import type { User } from "@vexlyx/shared";
 
 interface AuthState {
   user: User | null;
