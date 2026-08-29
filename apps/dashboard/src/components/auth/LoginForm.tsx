@@ -1,0 +1,140 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { z } from "zod";
+import { useAuth } from "@/hooks/useAuth";
+import { ApiRequestError } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+} from "@/components/ui/card";
+import { toast } from "sonner";
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+type FieldErrors = Partial<Record<"email" | "password" | "root", string>>;
+
+export function LoginForm() {
+  const { login } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrors({});
+
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    const result = loginSchema.safeParse({ email, password });
+
+    if (!result.success) {
+      const fieldErrors: FieldErrors = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof FieldErrors;
+        fieldErrors[field] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await login(email, password);
+      toast.success("Welcome back!");
+    } catch (err) {
+      if (err instanceof ApiRequestError) {
+        setErrors({ root: err.message });
+        toast.error(err.message);
+      } else {
+        setErrors({ root: "An unexpected error occurred" });
+        toast.error("An unexpected error occurred");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="border-border">
+      <CardHeader className="space-y-1 text-center">
+        <h1 className="text-xl font-semibold tracking-tight">
+          Sign in to Vexlyx
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Enter your credentials to access the panel
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {errors.root && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {errors.root}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="login-email">Email</Label>
+            <Input
+              id="login-email"
+              name="email"
+              type="email"
+              placeholder="admin@example.com"
+              autoComplete="email"
+              autoFocus
+              disabled={isLoading}
+              aria-invalid={!!errors.email}
+            />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="login-password">Password</Label>
+            <Input
+              id="login-password"
+              name="password"
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              disabled={isLoading}
+              aria-invalid={!!errors.password}
+            />
+            {errors.password && (
+              <p className="text-xs text-destructive">{errors.password}</p>
+            )}
+          </div>
+
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={isLoading}
+          >
+            {isLoading ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Create one
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

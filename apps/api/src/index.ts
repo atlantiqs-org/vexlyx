@@ -1,12 +1,15 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import formbody from "@fastify/formbody";
 import { APP_NAME, VEXLYX_VERSION } from "@vexlyx/shared";
 import { env } from "./config/env.js";
 import { databasePlugin } from "./config/database.js";
 import { redisClientPlugin } from "./config/redis.js";
 import { queuePlugin_ } from "./config/queue.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
+import { authSessionPlugin } from "./plugins/auth.js";
 import { healthRoutes } from "./modules/health/routes.js";
+import { authRoutes } from "./modules/auth/routes.js";
 
 /**
  * Creates and configures the Fastify application instance.
@@ -36,12 +39,16 @@ async function buildApp() {
     credentials: true,
   });
 
+  await app.register(formbody);
   await app.register(databasePlugin);
   await app.register(redisClientPlugin);
   await app.register(queuePlugin_);
   await app.register(errorHandlerPlugin);
+  await app.register(authSessionPlugin);
 
   await app.register(healthRoutes, { prefix: "/api/health" });
+
+  await app.register(authRoutes, { prefix: "/api/auth" });
 
   return app;
 }

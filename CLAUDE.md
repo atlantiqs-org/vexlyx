@@ -58,7 +58,7 @@ pnpm build            # Must pass before any PR
 | Data Fetching | TanStack Query | Server state, caching, auto-refetch |
 | Backend | Fastify + TypeScript | 3x faster than Express, built-in validation |
 | Validation | Zod | Runtime + static type safety |
-| Auth | Lucia Auth | Session-based, HTTP-only cookies |
+| Auth | Custom (Argon2id + Redis sessions) | Session-based, HTTP-only cookies, Lucia deprecated |
 | ORM | Prisma | Type-safe queries, migrations |
 | Queue | BullMQ + Redis | Background jobs, reliable |
 | Real-time | Socket.io | Live logs, deployment status |
@@ -529,6 +529,7 @@ Record important architectural decisions here as they happen:
 | 2026-08-28 | Use Turborepo monorepo | Shared types, coordinated builds |
 | 2026-08-28 | Use Fastify over Express | Performance, built-in validation |
 | 2026-08-28 | Use Lucia Auth over NextAuth | Session control, no vendor lock-in |
+| 2026-08-29 | Replace Lucia with custom auth | Lucia deprecated March 2025, custom gives full control |
 | 2026-08-28 | Use shadcn/ui over custom components | Accessibility, consistency, speed |
 | 2026-08-28 | Use Python for system layer | Better than Bash for complex Docker ops |
 | 2026-08-28 | Use Nixpacks over custom build scripts | Zero-config, community maintained |

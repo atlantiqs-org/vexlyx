@@ -26,7 +26,7 @@ This document is the **single source of truth** for all Vexlyx features.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 0: Foundation | 🟡 IN PROGRESS | 71% (5/7) |
+| Phase 0: Foundation | 🟡 IN PROGRESS | 86% (6/7) |
 | Phase 1: Project Deployment | 🔴 NOT STARTED | 0% |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
@@ -34,7 +34,7 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 10% (5/48 features)
+**Overall Completion:** 12% (6/48 features)
 
 ---
 
@@ -219,22 +219,22 @@ Set up the complete Docker Compose development environment with PostgreSQL, Redi
 ---
 
 ### F0.6 — Authentication System
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Implement complete authentication with Lucia Auth. Support email/password registration and login. Use Argon2id for password hashing. Session-based auth with HTTP-only cookies.
+Implement complete authentication with custom session-based auth (Lucia Auth was deprecated March 2025). Support email/password registration and login. Use Argon2id for password hashing. Session-based auth with HTTP-only cookies stored in Redis.
 
 **Acceptance Criteria:**
-- [ ] `POST /api/auth/register` — creates user, hashes password with Argon2id
-- [ ] `POST /api/auth/login` — validates credentials, creates session
-- [ ] `POST /api/auth/logout` — destroys session
-- [ ] `GET /api/auth/me` — returns current user
-- [ ] Session stored in Redis with TTL
-- [ ] CSRF protection enabled
-- [ ] Rate limiting: 5 login attempts per 15 minutes per IP
-- [ ] Frontend login/register forms with validation
-- [ ] Protected routes redirect to login
-- [ ] Auth context/provider in React
+- [x] `POST /api/auth/register` — creates user, hashes password with Argon2id
+- [x] `POST /api/auth/login` — validates credentials, creates session
+- [x] `POST /api/auth/logout` — destroys session
+- [x] `GET /api/auth/me` — returns current user
+- [x] Session stored in Redis with TTL
+- [x] CSRF protection via SameSite=Lax cookies
+- [x] Rate limiting: 5 login attempts per 15 minutes per IP
+- [x] Frontend login/register forms with validation
+- [x] Protected routes redirect to login
+- [x] Auth hook (`useAuth`) in React
 
 **Test Plan:**
 1. Register new user → user created in database with hashed password
@@ -247,19 +247,21 @@ Implement complete authentication with Lucia Auth. Support email/password regist
 
 **Developer Docs:**
 - **Location:** `docs/dev/authentication.md`
-- **Contents:** Lucia setup, session flow, password hashing, protected routes, frontend auth hooks
+- **Contents:** Custom auth setup, session flow, password hashing, protected routes, frontend auth hooks
 
-**Files to Create:**
+**Files Created:**
 - `apps/api/src/modules/auth/routes.ts`
 - `apps/api/src/modules/auth/service.ts`
 - `apps/api/src/modules/auth/schema.ts`
 - `apps/api/src/plugins/auth.ts`
-- `apps/dashboard/app/login/page.tsx`
-- `apps/dashboard/app/register/page.tsx`
-- `apps/dashboard/components/auth/LoginForm.tsx`
-- `apps/dashboard/components/auth/RegisterForm.tsx`
-- `apps/dashboard/lib/auth.ts`
-- `apps/dashboard/stores/auth.ts`
+- `apps/dashboard/src/app/(auth)/layout.tsx`
+- `apps/dashboard/src/app/(auth)/login/page.tsx`
+- `apps/dashboard/src/app/(auth)/register/page.tsx`
+- `apps/dashboard/src/components/auth/LoginForm.tsx`
+- `apps/dashboard/src/components/auth/RegisterForm.tsx`
+- `apps/dashboard/src/lib/api.ts`
+- `apps/dashboard/src/hooks/useAuth.ts`
+
 
 ---
 
