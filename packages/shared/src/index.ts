@@ -13,11 +13,14 @@ export {
   CreateProjectSchema,
   UpdateProjectSchema,
   ProjectListQuerySchema,
+  ConnectRepoSchema,
 } from "./schemas/projects.js";
 export type {
   CreateProjectInput,
   UpdateProjectInput,
   ProjectListQuery,
+  ConnectRepoInput,
+  GitMetadata,
 } from "./schemas/projects.js";
 
 export type {

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { GitSettings } from "@/components/projects/GitSettings";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -299,6 +300,13 @@ export default function ProjectDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Git settings — full interactive panel */}
+      <GitSettings
+        projectId={project.id}
+        initialGitUrl={project.gitUrl}
+        initialBranch={project.branch}
+      />
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
