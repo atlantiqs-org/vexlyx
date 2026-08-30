@@ -11,7 +11,6 @@ import {
   Container,
   Terminal,
   Loader2,
-  RefreshCw,
   Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,11 +26,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import {
-  useContainerAction,
-  useContainerStatus,
-  useContainerLogs,
-} from "@/hooks/useDeploy";
+import { LogViewer } from "@/components/projects/LogViewer";
+import { useRuntimeLogs } from "@/hooks/useLogs";
+import { useContainerAction, useContainerStatus } from "@/hooks/useDeploy";
 import type { Project } from "@vexlyx/shared";
 
 interface ContainerControlsProps {
@@ -46,11 +43,13 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
     Boolean(project.containerId),
   );
   const [showLogs, setShowLogs] = useState(false);
-  const { logs, isLoading: isLogsLoading, refetch: refetchLogs } = useContainerLogs(
+
+  // Real-time runtime logs via Socket.io
+  const { lines: runtimeLines, isConnected: logsConnected, clear: clearLogs } = useRuntimeLogs(
     project.id,
     showLogs,
-    200,
   );
+
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
   const containerStatus = status?.containerStatus ?? project.containerStatus ?? "not_deployed";
@@ -249,33 +248,15 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
 
         {/* Runtime logs panel */}
         {showLogs && (
-          <div className="mt-4 overflow-hidden rounded-md border border-slate-700">
-            <div className="flex items-center justify-between bg-slate-900 px-3 py-1.5">
-              <span className="flex items-center gap-2 font-mono text-xs text-slate-400">
-                <Activity className="h-3 w-3 text-emerald-400" />
-                Container Runtime Logs
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-slate-400 hover:text-white"
-                onClick={() => void refetchLogs()}
-                disabled={isLogsLoading}
-              >
-                <RefreshCw className={cn("h-3 w-3", isLogsLoading && "animate-spin")} />
-              </Button>
-            </div>
-            <pre
-              className="max-h-72 overflow-y-auto bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-300 whitespace-pre-wrap break-all"
-              role="log"
-            >
-              {isLogsLoading && !logs ? (
-                <span className="text-slate-500">Loading runtime logs…</span>
-              ) : (
-                logs?.trim() || "No container logs available."
-              )}
-            </pre>
-          </div>
+          <LogViewer
+            lines={runtimeLines}
+            title="Container Runtime Logs"
+            isLive
+            isConnected={logsConnected}
+            maxHeightClass="max-h-72"
+            className="mt-4"
+            onClear={clearLogs}
+          />
         )}
       </CardContent>
 

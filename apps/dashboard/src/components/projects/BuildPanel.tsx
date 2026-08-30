@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Rocket,
@@ -19,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { LogViewer } from "@/components/projects/LogViewer";
+import { useBuildLogs } from "@/hooks/useLogs";
 import {
   useTriggerBuild,
   useDeploymentPolling,
@@ -104,56 +106,16 @@ function DeploymentBadge({ status }: { status: DeploymentStatus }) {
 }
 
 // ---------------------------------------------------------------------------
-// LogViewer — terminal-style log output
-// Always dark background regardless of theme (per design system rules)
-// ---------------------------------------------------------------------------
-
-interface LogViewerProps {
-  logs: string | null;
-  isExpanded: boolean;
-}
-
-function LogViewer({ logs, isExpanded }: LogViewerProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isExpanded && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs, isExpanded]);
-
-  if (!isExpanded) return null;
-
-  return (
-    <div
-      className="mt-3 overflow-hidden rounded-md border border-slate-700"
-      aria-label="Build logs"
-    >
-      <div className="flex items-center justify-between bg-slate-900 px-3 py-1.5">
-        <span className="font-mono text-xs text-slate-400">Build Output</span>
-      </div>
-      <pre
-        className="max-h-80 overflow-y-auto bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-300 whitespace-pre-wrap break-all"
-        role="log"
-        aria-live="polite"
-      >
-        {logs?.trim() || "Waiting for logs…"}
-        <div ref={bottomRef} />
-      </pre>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // DeploymentRow — single row in the history list
 // ---------------------------------------------------------------------------
 
 interface DeploymentRowProps {
+  projectId: string;
   deployment: Deployment;
   isActive: boolean;
 }
 
-function DeploymentRow({ deployment, isActive }: DeploymentRowProps) {
+function DeploymentRow({ projectId, deployment, isActive }: DeploymentRowProps) {
   const [expanded, setExpanded] = useState(isActive);
 
   const { deployment: polled } = useDeploymentPolling(
@@ -162,6 +124,13 @@ function DeploymentRow({ deployment, isActive }: DeploymentRowProps) {
   );
 
   const displayDeployment = polled ?? deployment;
+
+  // Real-time build logs via Socket.io
+  const { lines, isConnected } = useBuildLogs(
+    projectId,
+    expanded ? deployment.id : null,
+    displayDeployment.buildLogs,
+  );
 
   return (
     <div className="border-b border-border last:border-0">
@@ -200,7 +169,16 @@ function DeploymentRow({ deployment, isActive }: DeploymentRowProps) {
         </div>
       </div>
 
-      <LogViewer logs={displayDeployment.buildLogs} isExpanded={expanded} />
+      {expanded && (
+        <LogViewer
+          lines={lines}
+          title="Build Output"
+          isLive={isActive}
+          isConnected={isConnected}
+          maxHeightClass="max-h-80"
+          className="mt-0 mb-3"
+        />
+      )}
     </div>
   );
 }
@@ -334,6 +312,7 @@ export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: Bui
             {deployments.map((d) => (
               <DeploymentRow
                 key={d.id}
+                projectId={projectId}
                 deployment={d}
                 isActive={d.id === activePollId || ACTIVE_STATUSES.includes(d.status)}
               />
