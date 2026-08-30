@@ -6,6 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { FastifyBaseLogger } from "fastify";
 import type { Deployment } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
+import { runDockerDeploy } from "../deploy/service.js";
 import type { BuildJobData, DeploymentListQuery, TriggerBuildBody } from "./schema.js";
 
 // ---------------------------------------------------------------------------
@@ -223,7 +224,7 @@ export function createBuildProcessor(
   logger: FastifyBaseLogger,
 ) {
   return async (job: { id?: string; name: string; data: BuildJobData }): Promise<void> => {
-    const { deploymentId, projectDir, imageName, buildCmd } = job.data;
+    const { deploymentId, projectId, projectDir, imageName, buildCmd } = job.data;
     const startedAt = Date.now();
 
     const appendLog = async (line: string) => {
@@ -273,17 +274,65 @@ export function createBuildProcessor(
       // Phase 2 — build Docker image
       await appendLog("[vexlyx] Building Docker image…");
       await runBuildImage(projectDir, imageName, effectiveBuildCmd, appendLog);
-
       await appendLog("[vexlyx] Build complete ✓");
 
+      // Phase 3 — Deploy container via Docker Compose
+      await appendLog("[vexlyx] Deploying container via Docker Compose…");
+      await prisma.deployment.update({
+        where: { id: deploymentId },
+        data: { status: "DEPLOYING" },
+      });
+
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { name: true, type: true, port: true },
+      });
+
+      if (!project) {
+        throw new Error("Project not found during deployment phase");
+      }
+
+      const deployResult = await runDockerDeploy(
+        {
+          projectId,
+          projectName: project.name,
+          projectDir,
+          imageName,
+          projectType: project.type,
+          baseDomain: env.BASE_DOMAIN,
+          memoryLimit: env.DEPLOY_MEMORY_LIMIT,
+          portRangeStart: env.DEPLOY_PORT_RANGE_START,
+          portRangeEnd: env.DEPLOY_PORT_RANGE_END,
+          hostPort: project.port,
+        },
+        appendLog,
+      );
+
+      await appendLog(
+        `[vexlyx] Container running on port ${deployResult.hostPort} (${deployResult.hostname}) ✓`,
+      );
+
       const duration = Math.round((Date.now() - startedAt) / 1000);
+
+      // Update project with container details
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          containerId: deployResult.containerId,
+          containerStatus: "running",
+          internalPort: deployResult.hostPort,
+          deployedDomain: deployResult.hostname,
+          deployedAt: new Date(),
+          status: "ACTIVE",
+        },
+      });
 
       await prisma.deployment.update({
         where: { id: deploymentId },
         data: { status: "RUNNING", duration },
       });
 
-      logger.info({ deploymentId, duration }, "Build job completed");
+      logger.info({ deploymentId, duration, hostPort: deployResult.hostPort }, "Build and deploy job completed");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
 

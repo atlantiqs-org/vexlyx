@@ -31,6 +31,11 @@ const PROJECT_SELECT = {
   startCmd: true,
   port: true,
   userId: true,
+  containerId: true,
+  containerStatus: true,
+  internalPort: true,
+  deployedDomain: true,
+  deployedAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;

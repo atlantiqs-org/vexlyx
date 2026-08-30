@@ -13,6 +13,7 @@ import { authRoutes } from "./modules/auth/routes.js";
 import { projectRoutes } from "./modules/projects/routes.js";
 import { gitRoutes } from "./modules/git/routes.js";
 import { buildRoutes } from "./modules/build/routes.js";
+import { deployRoutes } from "./modules/deploy/routes.js";
 
 /**
  * Creates and configures the Fastify application instance.
@@ -56,6 +57,7 @@ async function buildApp() {
   await app.register(projectRoutes, { prefix: "/api/projects" });
   await app.register(gitRoutes, { prefix: "/api/projects" });
   await app.register(buildRoutes, { prefix: "/api/projects" });
+  await app.register(deployRoutes, { prefix: "/api/projects" });
 
   return app;
 }

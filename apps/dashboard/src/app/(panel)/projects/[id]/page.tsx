@@ -30,6 +30,7 @@ import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { GitSettings } from "@/components/projects/GitSettings";
 import { BuildPanel } from "@/components/projects/BuildPanel";
+import { ContainerControls } from "@/components/projects/ContainerControls";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -309,11 +310,18 @@ export default function ProjectDetailPage() {
         initialBranch={project.branch}
       />
 
+      {/* Live container controls */}
+      <ContainerControls
+        project={project}
+        onProjectUpdate={fetchProject}
+      />
+
       {/* Build & deployment panel */}
       <BuildPanel
         projectId={project.id}
         buildCmd={project.buildCmd}
         gitUrl={project.gitUrl}
+        onDeploySuccess={fetchProject}
       />
 
       {/* Delete confirmation dialog */}

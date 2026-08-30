@@ -16,6 +16,8 @@ export {
   ConnectRepoSchema,
   TriggerBuildSchema,
   DeploymentStatusSchema,
+  DeployBodySchema,
+  ContainerActionSchema,
 } from "./schemas/projects.js";
 export type {
   CreateProjectInput,
@@ -24,6 +26,8 @@ export type {
   ConnectRepoInput,
   GitMetadata,
   TriggerBuildInput,
+  DeployBody,
+  ContainerAction,
 } from "./schemas/projects.js";
 
 export type {
