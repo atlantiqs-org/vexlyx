@@ -70,6 +70,8 @@ interface BuildManagerLine {
 interface PlanResult {
   framework: string;
   buildCmd: string | null;
+  startCmd: string | null;
+  detectedType: string | null;
 }
 
 function runBuildPlan(projectDir: string): Promise<PlanResult> {
@@ -97,9 +99,9 @@ function runBuildPlan(projectDir: string): Promise<PlanResult> {
         return;
       }
 
-      let parsed: BuildManagerLine;
+      let parsed: BuildManagerLine & { startCmd?: string; detectedType?: string };
       try {
-        parsed = JSON.parse(raw) as BuildManagerLine;
+        parsed = JSON.parse(raw);
       } catch {
         rejectP(new BuildError(
           `build_manager.py (plan) returned invalid JSON: ${raw}`,
@@ -116,6 +118,8 @@ function runBuildPlan(projectDir: string): Promise<PlanResult> {
       resolveP({
         framework: parsed.framework ?? "unknown",
         buildCmd: parsed.buildCmd ?? null,
+        startCmd: parsed.startCmd ?? null,
+        detectedType: parsed.detectedType ?? null,
       });
     });
 
@@ -131,19 +135,29 @@ function runBuildPlan(projectDir: string): Promise<PlanResult> {
   });
 }
 
+interface BuildImageOptions {
+  projectDir: string;
+  imageName: string;
+  buildCmd: string | null;
+  startCmd?: string | null;
+  cacheKey?: string | null;
+  envVars?: Record<string, string>;
+}
+
 function runBuildImage(
-  projectDir: string,
-  imageName: string,
-  buildCmd: string | null,
+  options: BuildImageOptions,
   onLog: (line: string) => Promise<void>,
 ): Promise<void> {
   return new Promise((resolveP, rejectP) => {
     const scriptPath = getBuildManagerScriptPath();
     const payload = JSON.stringify({
       command: "build",
-      projectDir,
-      imageName,
-      buildCmd,
+      projectDir: options.projectDir,
+      imageName: options.imageName,
+      buildCmd: options.buildCmd,
+      startCmd: options.startCmd,
+      cacheKey: options.cacheKey,
+      envVars: options.envVars,
     });
 
     const child = spawn("python", [scriptPath], {
@@ -229,20 +243,38 @@ export function createBuildProcessor(
     const { deploymentId, projectId, projectDir, imageName, buildCmd } = job.data;
     const startedAt = Date.now();
 
+    // Maintain an in-memory log accumulator to prevent async race conditions
+    let accumulatedLogs = "";
+    let isPersisting = false;
+    let pendingPersist = false;
+    let saveTimeout: NodeJS.Timeout | null = null;
+
+    const flushLogsToDb = async () => {
+      if (isPersisting) {
+        pendingPersist = true;
+        return;
+      }
+      isPersisting = true;
+      try {
+        await prisma.deployment.update({
+          where: { id: deploymentId },
+          data: { buildLogs: accumulatedLogs },
+        });
+      } catch (err) {
+        logger.error({ deploymentId, err }, "Failed to update buildLogs in DB");
+      } finally {
+        isPersisting = false;
+        if (pendingPersist) {
+          pendingPersist = false;
+          void flushLogsToDb();
+        }
+      }
+    };
+
     const appendLog = async (line: string) => {
-      const current = await prisma.deployment.findUnique({
-        where: { id: deploymentId },
-        select: { buildLogs: true },
-      });
+      accumulatedLogs += line + "\n";
 
-      const newLogs = (current?.buildLogs ?? "") + line + "\n";
-
-      await prisma.deployment.update({
-        where: { id: deploymentId },
-        data: { buildLogs: newLogs },
-      });
-
-      // Emit the new line to all sockets subscribed to this deployment room
+      // Emit real-time log immediately via Socket.io
       try {
         getIO()
           .to(`deployment:${deploymentId}`)
@@ -250,6 +282,12 @@ export function createBuildProcessor(
       } catch {
         // Socket.io may not be initialised in test environments — safe to ignore
       }
+
+      // Debounced persist to avoid DB write thrashing during rapid build output
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        void flushLogsToDb();
+      }, 200);
     };
 
     try {
@@ -263,6 +301,16 @@ export function createBuildProcessor(
       await appendLog(`[vexlyx] Project directory: ${projectDir}`);
       await appendLog(`[vexlyx] Image name: ${imageName}`);
 
+      // Fetch project details
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { name: true, type: true, port: true, startCmd: true },
+      });
+
+      if (!project) {
+        throw new Error("Project not found during build phase");
+      }
+
       // Phase 1 — detect framework
       await appendLog("[vexlyx] Detecting framework with nixpacks plan…");
       let planResult: PlanResult;
@@ -274,7 +322,27 @@ export function createBuildProcessor(
         throw err;
       }
 
-      await appendLog(`[vexlyx] Detected framework: ${planResult.framework}`);
+      const displayFramework =
+        planResult.framework === "nextjs"
+          ? "Next.js"
+          : planResult.framework.charAt(0).toUpperCase() + planResult.framework.slice(1);
+      await appendLog(`[vexlyx] Detected framework: ${displayFramework}`);
+
+      // Auto-align project type if framework is detected and differs from current setting
+      let effectiveProjectType = project.type;
+      if (
+        planResult.detectedType &&
+        project.type !== planResult.detectedType
+      ) {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { type: planResult.detectedType as any },
+        });
+        effectiveProjectType = planResult.detectedType as any;
+        await appendLog(
+          `[vexlyx] Project type auto-aligned from ${project.type} to ${displayFramework} (${planResult.detectedType})`,
+        );
+      }
 
       // Use provided buildCmd override, then plan's detected cmd, then null
       const effectiveBuildCmd = buildCmd ?? planResult.buildCmd;
@@ -282,9 +350,23 @@ export function createBuildProcessor(
         await appendLog(`[vexlyx] Build command: ${effectiveBuildCmd}`);
       }
 
-      // Phase 2 — build Docker image
-      await appendLog("[vexlyx] Building Docker image…");
-      await runBuildImage(projectDir, imageName, effectiveBuildCmd, appendLog);
+      // Fetch and decrypt project environment variables
+      const envService = new EnvService(prisma);
+      const envVars = await envService.getDecryptedMap(projectId);
+
+      // Phase 2 — build Docker image with caching and build-time env vars
+      await appendLog("[vexlyx] Building Docker image with Nixpacks…");
+      await runBuildImage(
+        {
+          projectDir,
+          imageName,
+          buildCmd: effectiveBuildCmd,
+          startCmd: project.startCmd ?? planResult.startCmd,
+          cacheKey: `vexlyx-${projectId}`,
+          envVars,
+        },
+        appendLog,
+      );
       await appendLog("[vexlyx] Build complete ✓");
 
       // Phase 3 — Deploy container via Docker Compose
@@ -294,26 +376,13 @@ export function createBuildProcessor(
         data: { status: "DEPLOYING" },
       });
 
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-        select: { name: true, type: true, port: true },
-      });
-
-      if (!project) {
-        throw new Error("Project not found during deployment phase");
-      }
-
-      // Fetch and decrypt project environment variables
-      const envService = new EnvService(prisma);
-      const envVars = await envService.getDecryptedMap(projectId);
-
       const deployResult = await runDockerDeploy(
         {
           projectId,
           projectName: project.name,
           projectDir,
           imageName,
-          projectType: project.type,
+          projectType: effectiveProjectType,
           baseDomain: env.BASE_DOMAIN,
           memoryLimit: env.DEPLOY_MEMORY_LIMIT,
           portRangeStart: env.DEPLOY_PORT_RANGE_START,
@@ -327,6 +396,9 @@ export function createBuildProcessor(
       await appendLog(
         `[vexlyx] Container running on port ${deployResult.hostPort} (${deployResult.hostname}) ✓`,
       );
+
+      // Ensure all logs are flushed
+      if (saveTimeout) clearTimeout(saveTimeout);
 
       const duration = Math.round((Date.now() - startedAt) / 1000);
 
@@ -345,24 +417,27 @@ export function createBuildProcessor(
 
       await prisma.deployment.update({
         where: { id: deploymentId },
-        data: { status: "RUNNING", duration },
+        data: {
+          status: "RUNNING",
+          duration,
+          buildLogs: accumulatedLogs,
+        },
       });
 
       logger.info({ deploymentId, duration, hostPort: deployResult.hostPort }, "Build and deploy job completed");
     } catch (err) {
+      if (saveTimeout) clearTimeout(saveTimeout);
       const msg = err instanceof Error ? err.message : String(err);
 
+      accumulatedLogs += `[vexlyx:error] ${msg}\n`;
+
       try {
-        const current = await prisma.deployment.findUnique({
-          where: { id: deploymentId },
-          select: { buildLogs: true },
-        });
         await prisma.deployment.update({
           where: { id: deploymentId },
           data: {
             status: "FAILED",
             duration: Math.round((Date.now() - startedAt) / 1000),
-            buildLogs: (current?.buildLogs ?? "") + `[vexlyx:error] ${msg}\n`,
+            buildLogs: accumulatedLogs,
           },
         });
       } catch (updateErr) {
