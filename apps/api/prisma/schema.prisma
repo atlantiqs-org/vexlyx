@@ -130,6 +130,16 @@ model Project {
   /// Used by git_manager.py at clone/pull time via GIT_SSH_COMMAND.
   sshPrivateKeyPath  String?       @map("ssh_private_key_path")
   userId             String        @map("user_id")
+  /// Docker container ID of the currently running container (short or full hash).
+  containerId        String?       @map("container_id")
+  /// Last known container status reported by Docker (running, exited, etc.).
+  containerStatus    String?       @map("container_status")
+  /// Host port dynamically allocated for this container (8100–8999).
+  internalPort       Int?          @map("internal_port")
+  /// Traefik-resolved hostname for this project (e.g. myapp.vexlyx.local).
+  deployedDomain     String?       @map("deployed_domain")
+  /// Timestamp of the most recent successful deployment.
+  deployedAt         DateTime?     @map("deployed_at")
   deletedAt          DateTime?     @map("deleted_at")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")

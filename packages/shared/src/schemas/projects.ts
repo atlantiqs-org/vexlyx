@@ -144,3 +144,19 @@ export const DeploymentStatusSchema = z.enum([
 
 export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
 
+// ---------------------------------------------------------------------------
+// Deploy integration (F1.5)
+// ---------------------------------------------------------------------------
+
+export const DeployBodySchema = z.object({
+  domain: z.string().max(253).optional(),
+});
+
+export type DeployBody = z.infer<typeof DeployBodySchema>;
+
+export const ContainerActionSchema = z.object({
+  action: z.enum(["start", "stop", "restart", "remove"]),
+});
+
+export type ContainerAction = z.infer<typeof ContainerActionSchema>;
+

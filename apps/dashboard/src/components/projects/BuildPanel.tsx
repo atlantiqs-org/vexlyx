@@ -213,9 +213,10 @@ interface BuildPanelProps {
   projectId: string;
   buildCmd: string | null | undefined;
   gitUrl: string | null | undefined;
+  onDeploySuccess?: () => void;
 }
 
-export function BuildPanel({ projectId, buildCmd, gitUrl }: BuildPanelProps) {
+export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: BuildPanelProps) {
   const { triggerBuild, isTriggering } = useTriggerBuild(projectId);
   const { deployments, isLoading, refetch } = useDeployments(projectId);
 
@@ -223,6 +224,18 @@ export function BuildPanel({ projectId, buildCmd, gitUrl }: BuildPanelProps) {
     // On mount, start polling if the latest deployment is still active
     return null;
   });
+
+  const { deployment: activeDeployment } = useDeploymentPolling(
+    projectId,
+    activePollId,
+  );
+
+  // When active deployment reaches RUNNING, notify parent to refresh project container state
+  useEffect(() => {
+    if (activeDeployment?.status === "RUNNING") {
+      if (onDeploySuccess) onDeploySuccess();
+    }
+  }, [activeDeployment?.status, onDeploySuccess]);
 
   // When deployments load, check if the latest is still in-progress
   useEffect(() => {

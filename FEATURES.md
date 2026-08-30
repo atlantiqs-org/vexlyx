@@ -27,14 +27,14 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
-| Phase 1: Project Deployment | 🟡 IN PROGRESS | 57% (4/7) |
+| Phase 1: Project Deployment | 🟡 IN PROGRESS | 71% (5/7) |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
 | Phase 4: Email Server | 🔴 NOT STARTED | 0% |
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 23% (11/48 features)
+**Overall Completion:** 25% (12/48 features)
 
 ---
 
@@ -469,19 +469,19 @@ Integrate Nixpacks for zero-configuration builds. Auto-detect framework from sou
 ---
 
 ### F1.5 — Docker Deployment Engine
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Generate and manage Docker Compose files per project. Deploy containers, manage networks, and integrate with Traefik for routing.
 
 **Acceptance Criteria:**
-- [ ] Docker Compose template generation per project type
-- [ ] Container lifecycle management (start, stop, restart, remove)
-- [ ] Traefik labels auto-generated for routing
-- [ ] Environment variables injected into containers
-- [ ] Health checks configured
-- [ ] Container logs accessible via API
-- [ ] Resource limits (CPU, memory) per container
+- [x] Docker Compose template generation per project type
+- [x] Container lifecycle management (start, stop, restart, remove)
+- [x] Traefik labels auto-generated for routing
+- [x] Environment variables injected into containers
+- [x] Health checks configured
+- [x] Container logs accessible via API
+- [x] Resource limits (CPU, memory) per container
 
 **Test Plan:**
 1. Deploy Node.js app → container starts, accessible via domain
@@ -494,13 +494,31 @@ Generate and manage Docker Compose files per project. Deploy containers, manage 
 **Developer Docs:**
 - **Location:** `docs/dev/deployment-engine.md`
 
-**Files to Create:**
+**Files Created:**
 - `apps/api/src/modules/deploy/service.ts`
 - `apps/api/src/modules/deploy/routes.ts`
+- `apps/api/src/modules/deploy/schema.ts`
 - `system/python/docker_manager.py`
 - `system/templates/docker-compose/node.yml`
 - `system/templates/docker-compose/static.yml`
 - `system/templates/docker-compose/python.yml`
+- `apps/dashboard/src/hooks/useDeploy.ts`
+- `apps/dashboard/src/components/projects/ContainerControls.tsx`
+- `docs/dev/deployment-engine.md`
+- `apps/api/prisma/migrations/20260830083857_add_container_fields_to_project/migration.sql`
+
+**Files Modified:**
+- `apps/api/prisma/schema.prisma` (added container fields to Project)
+- `apps/api/src/config/env.ts` (added `BASE_DOMAIN`, `DEPLOY_MEMORY_LIMIT`, and port range)
+- `apps/api/.env.example` (documented new deploy env vars)
+- `apps/api/src/index.ts` (registered `deployRoutes` at `/api/projects`)
+- `apps/api/src/modules/build/service.ts` (chained container deploy to build worker)
+- `apps/api/src/modules/projects/service.ts` (included container fields in `PROJECT_SELECT`)
+- `packages/shared/src/schemas/projects.ts` (added `DeployBodySchema`, `ContainerActionSchema`)
+- `packages/shared/src/types/index.ts` (added container fields to `Project` type)
+- `packages/shared/src/index.ts` (exported new schemas and types)
+- `apps/dashboard/src/components/projects/BuildPanel.tsx` (added `onDeploySuccess` callback)
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx` (integrated `ContainerControls`)
 
 ---
 

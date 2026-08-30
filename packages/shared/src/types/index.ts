@@ -58,6 +58,16 @@ export type Project = {
   startCmd: string | null;
   port: number | null;
   userId: string;
+  /** Short Docker container ID of the running container, or null if not deployed */
+  containerId: string | null;
+  /** Last known Docker container status (e.g. "running", "exited") */
+  containerStatus: string | null;
+  /** Host-side port allocated for this container */
+  internalPort: number | null;
+  /** Traefik-resolved public hostname for this project */
+  deployedDomain: string | null;
+  /** Timestamp of the most recent successful deployment */
+  deployedAt: Date | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
