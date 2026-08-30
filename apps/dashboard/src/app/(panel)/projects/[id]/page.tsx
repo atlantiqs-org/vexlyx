@@ -29,6 +29,7 @@ import {
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { GitSettings } from "@/components/projects/GitSettings";
+import { BuildPanel } from "@/components/projects/BuildPanel";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -306,6 +307,13 @@ export default function ProjectDetailPage() {
         projectId={project.id}
         initialGitUrl={project.gitUrl}
         initialBranch={project.branch}
+      />
+
+      {/* Build & deployment panel */}
+      <BuildPanel
+        projectId={project.id}
+        buildCmd={project.buildCmd}
+        gitUrl={project.gitUrl}
       />
 
       {/* Delete confirmation dialog */}
