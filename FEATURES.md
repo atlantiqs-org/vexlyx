@@ -555,19 +555,19 @@ Stream build and runtime logs from Docker containers to the frontend dashboard i
 ---
 
 ### F1.7 — Environment Variables Management
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Allow users to set environment variables per project. Variables are encrypted at rest and injected into containers at runtime.
 
 **Acceptance Criteria:**
-- [ ] `POST /api/projects/:id/env` — add/update env vars
-- [ ] `GET /api/projects/:id/env` — list env vars (values masked)
-- [ ] `DELETE /api/projects/:id/env/:key` — remove env var
-- [ ] Values encrypted with AES-256-GCM
-- [ ] Injected into Docker containers on deployment
-- [ ] Frontend UI with key-value editor
-- [ ] Support for `.env` file import
+- [x] `POST /api/projects/:id/env` — add/update env vars
+- [x] `GET /api/projects/:id/env` — list env vars (values masked)
+- [x] `DELETE /api/projects/:id/env/:key` — remove env var
+- [x] Values encrypted with AES-256-GCM
+- [x] Injected into Docker containers on deployment
+- [x] Frontend UI with key-value editor
+- [x] Support for `.env` file import
 
 **Test Plan:**
 1. Add env var → stored encrypted in database
@@ -579,10 +579,25 @@ Allow users to set environment variables per project. Variables are encrypted at
 **Developer Docs:**
 - **Location:** `docs/dev/environment-variables.md`
 
-**Files to Create:**
-- `apps/api/src/modules/env/routes.ts`
+**Files Created:**
+- `packages/shared/src/schemas/env.ts`
+- `apps/api/src/utils/encryption.ts`
+- `apps/api/src/modules/env/schema.ts`
 - `apps/api/src/modules/env/service.ts`
-- `apps/dashboard/components/projects/EnvVarEditor.tsx`
+- `apps/api/src/modules/env/routes.ts`
+- `apps/dashboard/src/hooks/useEnvVars.ts`
+- `apps/dashboard/src/components/projects/EnvVarEditor.tsx`
+- `docs/dev/environment-variables.md`
+
+**Files Modified:**
+- `packages/shared/src/types/index.ts`
+- `packages/shared/src/index.ts`
+- `apps/api/src/config/env.ts`
+- `apps/api/.env.example`
+- `apps/api/src/index.ts`
+- `apps/api/src/modules/deploy/service.ts`
+- `apps/api/src/modules/build/service.ts`
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
 
 ---
 

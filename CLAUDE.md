@@ -579,6 +579,7 @@ Record important architectural decisions here as they happen:
 - **Breadcrumbs:** On deep pages (project detail, domain settings)
 - **Keyboard shortcuts:** Cmd+K command palette for power users
 - **Terminal/Logs:** Dark background always (even in light mode), syntax highlighting
+- **Refresh buttons:** Always provide a dedicated `isRefreshing` state with smooth `animate-spin` on the `RefreshCw`/`RotateCw` icon (500-600ms) so users get immediate tactile feedback when refreshing cards or lists.
 
 ### NEVER Do
 - ❌ Gradient backgrounds

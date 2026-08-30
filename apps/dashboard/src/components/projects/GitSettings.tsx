@@ -111,6 +111,17 @@ export function GitSettings({
   const [errors, setErrors] = useState<FormErrors>({});
   const [isConnecting, setIsConnecting] = useState(false);
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchMetadata();
+      toast.success("Git settings refreshed");
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
 
   // Fetch git metadata on mount so SSH key + webhook URL are populated.
   useEffect(() => {
@@ -169,10 +180,29 @@ export function GitSettings({
       {/* ── Section A: Repository connection ── */}
       <Card className="border border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <GitBranch className="h-3.5 w-3.5" />
-            Repository
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <GitBranch className="h-3.5 w-3.5" />
+              Repository
+            </CardTitle>
+            <Button
+              id={`refresh-git-${projectId}`}
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label="Refresh repository metadata"
+              title="Refresh repository metadata"
+              onClick={() => void handleRefresh()}
+              disabled={isRefreshing || state.isLoading}
+            >
+              <RefreshCw
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-500",
+                  (isRefreshing || state.isLoading) && "animate-spin text-indigo-500",
+                )}
+              />
+            </Button>
+          </div>
           <CardDescription className="text-xs">
             Connect a GitHub, GitLab, or Bitbucket repository to this project.
           </CardDescription>
