@@ -72,3 +72,36 @@ export type PaginatedProjects = {
     totalPages: number;
   };
 };
+
+/** Status of a single deployment attempt — mirrors the Prisma DeploymentStatus enum */
+export type DeploymentStatus =
+  | "QUEUED"
+  | "BUILDING"
+  | "DEPLOYING"
+  | "RUNNING"
+  | "FAILED"
+  | "CANCELLED";
+
+/** A single deployment attempt for a project (build + deploy lifecycle) */
+export type Deployment = {
+  id: string;
+  status: DeploymentStatus;
+  commitHash: string | null;
+  commitMsg: string | null;
+  buildLogs: string | null;
+  duration: number | null;
+  projectId: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+/** Paginated list response wrapper for deployments */
+export type PaginatedDeployments = {
+  deployments: Deployment[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};

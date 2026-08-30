@@ -1,33 +1,42 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
-import { Queue, Worker } from "bullmq";
+import { Queue, Worker, type Processor } from "bullmq";
 import { env } from "./env.js";
 
 declare module "fastify" {
   interface FastifyInstance {
     queues: Map<string, Queue>;
+    registerQueue: (queue: Queue, worker?: Worker) => void;
   }
 }
 
-function createQueue(name: string): Queue {
-  return new Queue(name, {
-    connection: {
-      host: new URL(env.REDIS_URL).hostname,
-      port: Number(new URL(env.REDIS_URL).port) || 6379,
-    },
-  });
+// ---------------------------------------------------------------------------
+// Connection config — derived from REDIS_URL once
+// ---------------------------------------------------------------------------
+
+function redisConnection() {
+  const url = new URL(env.REDIS_URL);
+  return {
+    host: url.hostname,
+    port: Number(url.port) || 6379,
+  };
 }
 
-function createWorker(
+// ---------------------------------------------------------------------------
+// Exported helpers — used by feature modules to register their own queues
+// ---------------------------------------------------------------------------
+
+export function createQueue(name: string): Queue {
+  return new Queue(name, { connection: redisConnection() });
+}
+
+export function createWorker<T>(
   name: string,
-  processor: (job: { id?: string; name: string; data: unknown }) => Promise<void>,
+  processor: (job: { id?: string; name: string; data: T }) => Promise<void>,
   app: FastifyInstance,
 ): Worker {
-  const worker = new Worker(name, processor, {
-    connection: {
-      host: new URL(env.REDIS_URL).hostname,
-      port: Number(new URL(env.REDIS_URL).port) || 6379,
-    },
+  const worker = new Worker(name, processor as unknown as Processor, {
+    connection: redisConnection(),
   });
 
   worker.on("completed", (job) => {
@@ -41,25 +50,28 @@ function createWorker(
   return worker;
 }
 
+// ---------------------------------------------------------------------------
+// Fastify plugin — registers queue infrastructure on app startup
+// Feature modules (build, etc.) call registerQueue() to add their queues.
+// ---------------------------------------------------------------------------
+
 async function queuePlugin(app: FastifyInstance) {
   const queues = new Map<string, Queue>();
   const workers: Worker[] = [];
 
-  const testQueue = createQueue("test-ping");
-  queues.set("test-ping", testQueue);
-
-  const testWorker = createWorker(
-    "test-ping",
-    async (job) => {
-      app.log.info({ jobId: job.id, data: job.data }, "test-ping job processed");
-    },
-    app,
-  );
-  workers.push(testWorker);
-
   app.decorate("queues", queues);
 
-  app.log.info("BullMQ queue infrastructure ready (test-ping worker active)");
+  // Allow feature modules to register queues + workers that get shut down
+  // cleanly with the server.
+  app.decorate(
+    "registerQueue",
+    (queue: Queue, worker?: Worker) => {
+      queues.set(queue.name, queue);
+      if (worker) workers.push(worker);
+    },
+  );
+
+  app.log.info("BullMQ queue infrastructure ready");
 
   app.addHook("onClose", async () => {
     for (const worker of workers) {

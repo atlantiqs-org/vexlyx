@@ -1,0 +1,465 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { PrismaClient } from "@prisma/client";
+import type { FastifyBaseLogger } from "fastify";
+import type { Deployment } from "@vexlyx/shared";
+import { env } from "../../config/env.js";
+import type { BuildJobData, DeploymentListQuery, TriggerBuildBody } from "./schema.js";
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+export class BuildError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public statusCode: number,
+  ) {
+    super(message);
+    this.name = "BuildError";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Queue name constant
+// ---------------------------------------------------------------------------
+
+export const BUILD_QUEUE_NAME = "build-queue";
+
+// ---------------------------------------------------------------------------
+// Helper — locate build_manager.py, same strategy as git_manager.py
+// ---------------------------------------------------------------------------
+
+function getBuildManagerScriptPath(): string {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(currentDir, "../../../../../system/python/build_manager.py"),
+    resolve(currentDir, "../../../../system/python/build_manager.py"),
+    resolve(process.cwd(), "../../system/python/build_manager.py"),
+    resolve(process.cwd(), "system/python/build_manager.py"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return candidates[0] ?? resolve(process.cwd(), "system/python/build_manager.py");
+}
+
+// ---------------------------------------------------------------------------
+// Helper — run build_manager.py for a single command (plan / build)
+// Streams stdout line-by-line so log lines can be appended progressively.
+// ---------------------------------------------------------------------------
+
+interface BuildManagerLine {
+  log?: string;
+  done?: boolean;
+  imageName?: string;
+  framework?: string;
+  buildCmd?: string;
+  error?: string;
+  code?: string;
+}
+
+interface PlanResult {
+  framework: string;
+  buildCmd: string | null;
+}
+
+function runBuildPlan(projectDir: string): Promise<PlanResult> {
+  return new Promise((resolveP, rejectP) => {
+    const scriptPath = getBuildManagerScriptPath();
+    const payload = JSON.stringify({ command: "plan", projectDir });
+
+    const child = spawn("python", [scriptPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    child.on("close", () => {
+      const raw = stdout.trim();
+      if (!raw) {
+        rejectP(new BuildError(
+          `build_manager.py (plan) produced no output (stderr: ${stderr.trim()})`,
+          "BUILD_MANAGER_NO_OUTPUT", 500,
+        ));
+        return;
+      }
+
+      let parsed: BuildManagerLine;
+      try {
+        parsed = JSON.parse(raw) as BuildManagerLine;
+      } catch {
+        rejectP(new BuildError(
+          `build_manager.py (plan) returned invalid JSON: ${raw}`,
+          "BUILD_MANAGER_INVALID_JSON", 500,
+        ));
+        return;
+      }
+
+      if (parsed.error) {
+        rejectP(new BuildError(parsed.error, parsed.code ?? "BUILD_PLAN_ERROR", 422));
+        return;
+      }
+
+      resolveP({
+        framework: parsed.framework ?? "unknown",
+        buildCmd: parsed.buildCmd ?? null,
+      });
+    });
+
+    child.on("error", (err) => {
+      rejectP(new BuildError(
+        `Failed to spawn build_manager.py: ${err.message}`,
+        "BUILD_MANAGER_SPAWN_ERROR", 500,
+      ));
+    });
+
+    child.stdin.write(payload);
+    child.stdin.end();
+  });
+}
+
+function runBuildImage(
+  projectDir: string,
+  imageName: string,
+  buildCmd: string | null,
+  onLog: (line: string) => Promise<void>,
+): Promise<void> {
+  return new Promise((resolveP, rejectP) => {
+    const scriptPath = getBuildManagerScriptPath();
+    const payload = JSON.stringify({
+      command: "build",
+      projectDir,
+      imageName,
+      buildCmd,
+    });
+
+    const child = spawn("python", [scriptPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let buffer = "";
+    let stderrBuffer = "";
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBuffer += chunk.toString();
+    });
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      // Keep last incomplete line in buffer
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        let parsed: BuildManagerLine;
+        try {
+          parsed = JSON.parse(trimmed) as BuildManagerLine;
+        } catch {
+          // Treat non-JSON output as plain log line
+          void onLog(trimmed);
+          continue;
+        }
+
+        if (parsed.error) {
+          rejectP(new BuildError(parsed.error, parsed.code ?? "BUILD_ERROR", 422));
+          return;
+        }
+
+        if (parsed.log) {
+          void onLog(parsed.log);
+        }
+
+        if (parsed.done) {
+          resolveP();
+        }
+      }
+    });
+
+    child.on("close", (code) => {
+      // Flush remaining buffer
+      if (buffer.trim()) void onLog(buffer.trim());
+      if (code !== 0) {
+        const errDetails = stderrBuffer.trim() ? `:\n${stderrBuffer.trim()}` : "";
+        rejectP(new BuildError(
+          `build_manager.py (build) exited with code ${code}${errDetails}`,
+          "BUILD_NONZERO_EXIT", 422,
+        ));
+      } else {
+        resolveP();
+      }
+    });
+
+    child.on("error", (err) => {
+      rejectP(new BuildError(
+        `Failed to spawn build_manager.py: ${err.message}`,
+        "BUILD_MANAGER_SPAWN_ERROR", 500,
+      ));
+    });
+
+    child.stdin.write(payload);
+    child.stdin.end();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// BullMQ job processor — runs the actual build
+// ---------------------------------------------------------------------------
+
+export function createBuildProcessor(
+  prisma: PrismaClient,
+  logger: FastifyBaseLogger,
+) {
+  return async (job: { id?: string; name: string; data: BuildJobData }): Promise<void> => {
+    const { deploymentId, projectDir, imageName, buildCmd } = job.data;
+    const startedAt = Date.now();
+
+    const appendLog = async (line: string) => {
+      const current = await prisma.deployment.findUnique({
+        where: { id: deploymentId },
+        select: { buildLogs: true },
+      });
+
+      const newLogs = (current?.buildLogs ?? "") + line + "\n";
+
+      await prisma.deployment.update({
+        where: { id: deploymentId },
+        data: { buildLogs: newLogs },
+      });
+    };
+
+    try {
+      // Mark as BUILDING
+      await prisma.deployment.update({
+        where: { id: deploymentId },
+        data: { status: "BUILDING" },
+      });
+
+      await appendLog("[vexlyx] Starting build…");
+      await appendLog(`[vexlyx] Project directory: ${projectDir}`);
+      await appendLog(`[vexlyx] Image name: ${imageName}`);
+
+      // Phase 1 — detect framework
+      await appendLog("[vexlyx] Detecting framework with nixpacks plan…");
+      let planResult: PlanResult;
+      try {
+        planResult = await runBuildPlan(projectDir);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await appendLog(`[vexlyx:error] Framework detection failed: ${msg}`);
+        throw err;
+      }
+
+      await appendLog(`[vexlyx] Detected framework: ${planResult.framework}`);
+
+      // Use provided buildCmd override, then plan's detected cmd, then null
+      const effectiveBuildCmd = buildCmd ?? planResult.buildCmd;
+      if (effectiveBuildCmd) {
+        await appendLog(`[vexlyx] Build command: ${effectiveBuildCmd}`);
+      }
+
+      // Phase 2 — build Docker image
+      await appendLog("[vexlyx] Building Docker image…");
+      await runBuildImage(projectDir, imageName, effectiveBuildCmd, appendLog);
+
+      await appendLog("[vexlyx] Build complete ✓");
+
+      const duration = Math.round((Date.now() - startedAt) / 1000);
+
+      await prisma.deployment.update({
+        where: { id: deploymentId },
+        data: { status: "RUNNING", duration },
+      });
+
+      logger.info({ deploymentId, duration }, "Build job completed");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+
+      try {
+        const current = await prisma.deployment.findUnique({
+          where: { id: deploymentId },
+          select: { buildLogs: true },
+        });
+        await prisma.deployment.update({
+          where: { id: deploymentId },
+          data: {
+            status: "FAILED",
+            duration: Math.round((Date.now() - startedAt) / 1000),
+            buildLogs: (current?.buildLogs ?? "") + `[vexlyx:error] ${msg}\n`,
+          },
+        });
+      } catch (updateErr) {
+        logger.error({ deploymentId, updateErr }, "Failed to mark deployment as FAILED");
+      }
+
+      logger.error({ deploymentId, err }, "Build job failed");
+      throw err;
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+export class BuildService {
+  constructor(private prisma: PrismaClient) {}
+
+  async triggerBuild(
+    userId: string,
+    projectId: string,
+    body: TriggerBuildBody,
+    enqueueJob: (data: BuildJobData) => Promise<void>,
+  ): Promise<Deployment> {
+    const project = await this.findOwnedProject(userId, projectId);
+
+    if (!project.gitUrl) {
+      throw new BuildError(
+        "Project has no git repository connected. Connect a repository before building.",
+        "PROJECT_NOT_CLONED",
+        400,
+      );
+    }
+
+    const projectDir = resolve(env.PROJECTS_DIR, projectId);
+    if (!existsSync(projectDir)) {
+      throw new BuildError(
+        "Project source directory not found on disk. Run a git connect/clone first.",
+        "PROJECT_DIR_MISSING",
+        400,
+      );
+    }
+
+    const imageName = `${env.NIXPACKS_IMAGE_PREFIX}-${projectId}`;
+
+    const deployment = await this.prisma.deployment.create({
+      data: {
+        projectId,
+        status: "QUEUED",
+      },
+    });
+
+    const effectiveBuildCmd = body.buildCmd ?? project.buildCmd ?? null;
+
+    await enqueueJob({
+      deploymentId: deployment.id,
+      projectId,
+      userId,
+      projectDir,
+      imageName,
+      buildCmd: effectiveBuildCmd,
+    });
+
+    return this.toDeploymentShape(deployment);
+  }
+
+  async getDeployment(
+    userId: string,
+    projectId: string,
+    deploymentId: string,
+  ): Promise<Deployment> {
+    await this.findOwnedProject(userId, projectId);
+
+    const deployment = await this.prisma.deployment.findUnique({
+      where: { id: deploymentId },
+    });
+
+    if (!deployment || deployment.projectId !== projectId) {
+      throw new BuildError("Deployment not found", "DEPLOYMENT_NOT_FOUND", 404);
+    }
+
+    return this.toDeploymentShape(deployment);
+  }
+
+  async listDeployments(
+    userId: string,
+    projectId: string,
+    query: DeploymentListQuery,
+  ): Promise<{ deployments: Deployment[]; total: number }> {
+    await this.findOwnedProject(userId, projectId);
+
+    const skip = (query.page - 1) * query.limit;
+
+    const [deployments, total] = await this.prisma.$transaction([
+      this.prisma.deployment.findMany({
+        where: { projectId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: query.limit,
+      }),
+      this.prisma.deployment.count({ where: { projectId } }),
+    ]);
+
+    return {
+      deployments: deployments.map((d) => this.toDeploymentShape(d)),
+      total,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private toDeploymentShape(d: {
+    id: string;
+    status: string;
+    commitHash: string | null;
+    commitMsg: string | null;
+    buildLogs: string | null;
+    duration: number | null;
+    projectId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Deployment {
+    return {
+      id: d.id,
+      status: d.status as Deployment["status"],
+      commitHash: d.commitHash,
+      commitMsg: d.commitMsg,
+      buildLogs: d.buildLogs,
+      duration: d.duration,
+      projectId: d.projectId,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    };
+  }
+
+  private async findOwnedProject(userId: string, projectId: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        userId: true,
+        gitUrl: true,
+        buildCmd: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!project || project.deletedAt !== null) {
+      throw new BuildError("Project not found", "PROJECT_NOT_FOUND", 404);
+    }
+
+    if (project.userId !== userId) {
+      throw new BuildError(
+        "You do not have access to this project",
+        "FORBIDDEN",
+        403,
+      );
+    }
+
+    return project;
+  }
+}

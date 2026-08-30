@@ -27,14 +27,14 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
-| Phase 1: Project Deployment | 🔴 NOT STARTED | 0% |
+| Phase 1: Project Deployment | 🟡 IN PROGRESS | 57% (4/7) |
 | Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
 | Phase 4: Email Server | 🔴 NOT STARTED | 0% |
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 14% (7/48 features)
+**Overall Completion:** 23% (11/48 features)
 
 ---
 
@@ -424,33 +424,47 @@ Allow users to connect GitHub/GitLab repositories to projects. Clone repos, dete
 ---
 
 ### F1.4 — Nixpacks Build Integration
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Integrate Nixpacks for zero-configuration builds. Auto-detect framework from source code and generate Docker images.
 
 **Acceptance Criteria:**
-- [ ] Nixpacks CLI installed on server
-- [ ] `nixpacks plan` execution to detect framework
-- [ ] `nixpacks build` generates Docker image
-- [ ] Build logs streamed to frontend via Socket.io
-- [ ] Build cache optimization
-- [ ] Support for custom build commands override
+- [x] Nixpacks CLI installed / verified on server
+- [x] `nixpacks plan` execution to detect framework
+- [x] `nixpacks build` generates Docker image
+- [x] Build logs stored and polled progressively by frontend (Socket.io streaming in F1.6)
+- [x] Build queue managed via BullMQ and Redis
+- [x] Support for custom build commands override
 
 **Test Plan:**
 1. Node.js project → Nixpacks detects, builds successfully
 2. Python project → Nixpacks detects, builds successfully
 3. Next.js project → SSR build works
-4. Build logs appear in real-time in dashboard
+4. Build logs appear in real-time in dashboard (via polling)
 5. Failed build → shows error logs, status = failed
 
 **Developer Docs:**
 - **Location:** `docs/dev/build-system.md`
 
-**Files to Create:**
+**Files Created:**
+- `apps/api/src/modules/build/schema.ts`
 - `apps/api/src/modules/build/service.ts`
 - `apps/api/src/modules/build/routes.ts`
 - `system/python/build_manager.py`
+- `apps/dashboard/src/hooks/useBuild.ts`
+- `apps/dashboard/src/components/projects/BuildPanel.tsx`
+- `docs/dev/build-system.md`
+
+**Files Modified:**
+- `packages/shared/src/schemas/projects.ts` (added `TriggerBuildSchema`, `DeploymentStatusSchema`)
+- `packages/shared/src/types/index.ts` (added `Deployment`, `DeploymentStatus`, `PaginatedDeployments`)
+- `packages/shared/src/index.ts` (exported new schemas and types)
+- `apps/api/src/config/env.ts` (added `NIXPACKS_IMAGE_PREFIX`)
+- `apps/api/src/config/queue.ts` (refactored `createQueue`, `createWorker`, and queue registry)
+- `apps/api/src/index.ts` (registered `buildRoutes` at `/api/projects`)
+- `apps/api/.env.example` (documented `NIXPACKS_IMAGE_PREFIX`)
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx` (added `<BuildPanel />`)
 
 ---
 

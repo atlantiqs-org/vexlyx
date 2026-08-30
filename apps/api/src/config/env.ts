@@ -22,6 +22,8 @@ const envSchema = z.object({
   PROJECTS_DIR: z.string().min(1).default("./workspaces/projects"),
   SSH_KEYS_DIR: z.string().min(1).default("./workspaces/keys"),
   API_BASE_URL: z.string().url().default("http://localhost:5000"),
+  // Build integration (F1.4)
+  NIXPACKS_IMAGE_PREFIX: z.string().min(1).default("vexlyx"),
 });
 
 /**

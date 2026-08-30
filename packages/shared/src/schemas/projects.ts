@@ -123,3 +123,24 @@ export interface GitMetadata {
   isPrivate: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Build integration (F1.4)
+// ---------------------------------------------------------------------------
+
+export const TriggerBuildSchema = z.object({
+  buildCmd: z.string().max(500).optional(),
+});
+
+export type TriggerBuildInput = z.infer<typeof TriggerBuildSchema>;
+
+export const DeploymentStatusSchema = z.enum([
+  "QUEUED",
+  "BUILDING",
+  "DEPLOYING",
+  "RUNNING",
+  "FAILED",
+  "CANCELLED",
+]);
+
+export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
+

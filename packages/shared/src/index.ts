@@ -14,6 +14,8 @@ export {
   UpdateProjectSchema,
   ProjectListQuerySchema,
   ConnectRepoSchema,
+  TriggerBuildSchema,
+  DeploymentStatusSchema,
 } from "./schemas/projects.js";
 export type {
   CreateProjectInput,
@@ -21,6 +23,7 @@ export type {
   ProjectListQuery,
   ConnectRepoInput,
   GitMetadata,
+  TriggerBuildInput,
 } from "./schemas/projects.js";
 
 export type {
@@ -31,4 +34,7 @@ export type {
   ProjectType,
   ProjectStatus,
   PaginatedProjects,
+  Deployment,
+  DeploymentStatus,
+  PaginatedDeployments,
 } from "./types/index.js";

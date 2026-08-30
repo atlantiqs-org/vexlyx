@@ -42,5 +42,10 @@ docker/data/
 workspaces/
 apps/api/workspaces/
 
-# Windows Python launcher local cache/installs
-**/Python/
+# Python virtual environments & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+apps/api/Python/
