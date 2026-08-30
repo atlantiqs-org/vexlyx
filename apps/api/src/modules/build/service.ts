@@ -7,6 +7,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Deployment } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
 import { runDockerDeploy } from "../deploy/service.js";
+import { getIO } from "../../plugins/socket.js";
 import type { BuildJobData, DeploymentListQuery, TriggerBuildBody } from "./schema.js";
 
 // ---------------------------------------------------------------------------
@@ -239,6 +240,15 @@ export function createBuildProcessor(
         where: { id: deploymentId },
         data: { buildLogs: newLogs },
       });
+
+      // Emit the new line to all sockets subscribed to this deployment room
+      try {
+        getIO()
+          .to(`deployment:${deploymentId}`)
+          .emit("log:build", { line, ts: Date.now() });
+      } catch {
+        // Socket.io may not be initialised in test environments — safe to ignore
+      }
     };
 
     try {

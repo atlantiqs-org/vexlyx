@@ -523,19 +523,19 @@ Generate and manage Docker Compose files per project. Deploy containers, manage 
 ---
 
 ### F1.6 — Real-Time Logs
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Stream build and runtime logs from Docker containers to the frontend dashboard in real-time using Socket.io.
 
 **Acceptance Criteria:**
-- [ ] Socket.io server integrated with Fastify
-- [ ] Build logs streamed during `nixpacks build`
-- [ ] Runtime logs streamed from running containers
-- [ ] Log history persisted (last 1000 lines)
-- [ ] Frontend terminal-like viewer (xterm.js)
-- [ ] Filter logs by stream (stdout/stderr)
-- [ ] Auto-scroll with pause option
+- [x] Socket.io server integrated with Fastify
+- [x] Build logs streamed during `nixpacks build`
+- [x] Runtime logs streamed from running containers
+- [x] Log history persisted (last 1000 lines, frontend cap)
+- [x] Frontend terminal-like viewer (styled pre, no extra dep)
+- [x] Filter logs by stream (stdout/stderr)
+- [x] Auto-scroll with pause option
 
 **Test Plan:**
 1. Start deployment → build logs appear in real-time

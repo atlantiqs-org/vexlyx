@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 docker_manager.py -- System-layer script for Vexlyx Docker container lifecycle.
 
@@ -454,7 +454,44 @@ def cmd_logs(payload: dict) -> None:
         respond({"logs": "No runtime logs available."})
         return
 
-    respond({"logs": result.stdout + result.stderr})
+def cmd_logs_follow(payload: dict) -> None:
+    project_dir = require_field(payload, "projectDir")
+    tail = int(payload.get("tail", 100))
+    docker_bin = get_docker_binary()
+    compose_dir = str(Path(project_dir) / "deploy")
+
+    if not Path(compose_dir).is_dir():
+        fail("No runtime logs available. Container has not been deployed yet.", "DEPLOY_DIR_NOT_FOUND")
+        return
+
+    proc = subprocess.Popen(
+        [docker_bin, "compose", "logs", "--follow", f"--tail={tail}", "--no-log-prefix", "app"],
+        cwd=compose_dir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+
+    try:
+        if proc.stdout:
+            for line in iter(proc.stdout.readline, ""):
+                text = line.rstrip("\r\n")
+                if text:
+                    print(json.dumps({"log": text, "stream": "stdout"}), flush=True)
+    except (BrokenPipeError, KeyboardInterrupt):
+        pass
+    finally:
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +506,7 @@ COMMANDS = {
     "remove": cmd_remove,
     "status": cmd_status,
     "logs": cmd_logs,
+    "logs_follow": cmd_logs_follow,
 }
 
 

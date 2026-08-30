@@ -8,12 +8,14 @@ import { redisClientPlugin } from "./config/redis.js";
 import { queuePlugin_ } from "./config/queue.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { authSessionPlugin } from "./plugins/auth.js";
+import { socketPlugin } from "./plugins/socket.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { projectRoutes } from "./modules/projects/routes.js";
 import { gitRoutes } from "./modules/git/routes.js";
 import { buildRoutes } from "./modules/build/routes.js";
 import { deployRoutes } from "./modules/deploy/routes.js";
+import { logRoutes } from "./modules/logs/routes.js";
 
 /**
  * Creates and configures the Fastify application instance.
@@ -50,6 +52,7 @@ async function buildApp() {
   await app.register(queuePlugin_);
   await app.register(errorHandlerPlugin);
   await app.register(authSessionPlugin);
+  await app.register(socketPlugin);
 
   await app.register(healthRoutes, { prefix: "/api/health" });
 
@@ -58,6 +61,7 @@ async function buildApp() {
   await app.register(gitRoutes, { prefix: "/api/projects" });
   await app.register(buildRoutes, { prefix: "/api/projects" });
   await app.register(deployRoutes, { prefix: "/api/projects" });
+  await app.register(logRoutes, { prefix: "/api/projects" });
 
   return app;
 }

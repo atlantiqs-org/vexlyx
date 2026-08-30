@@ -62,4 +62,4 @@ volumes:
 networks:
   default:
   traefik-net:
-    name: traefik-net
+    external: true
