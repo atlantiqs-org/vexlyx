@@ -7,6 +7,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Deployment } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
 import { runDockerDeploy } from "../deploy/service.js";
+import { EnvService } from "../env/service.js";
 import { getIO } from "../../plugins/socket.js";
 import type { BuildJobData, DeploymentListQuery, TriggerBuildBody } from "./schema.js";
 
@@ -302,6 +303,10 @@ export function createBuildProcessor(
         throw new Error("Project not found during deployment phase");
       }
 
+      // Fetch and decrypt project environment variables
+      const envService = new EnvService(prisma);
+      const envVars = await envService.getDecryptedMap(projectId);
+
       const deployResult = await runDockerDeploy(
         {
           projectId,
@@ -314,6 +319,7 @@ export function createBuildProcessor(
           portRangeStart: env.DEPLOY_PORT_RANGE_START,
           portRangeEnd: env.DEPLOY_PORT_RANGE_END,
           hostPort: project.port,
+          envVars,
         },
         appendLog,
       );

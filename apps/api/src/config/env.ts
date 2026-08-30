@@ -14,6 +14,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   SESSION_SECRET: z.string().min(32),
+  ENCRYPTION_KEY: z.string().min(32).optional(),
   ALLOW_REGISTRATION: z
     .enum(["true", "false"])
     .default("true")

@@ -115,3 +115,27 @@ export type PaginatedDeployments = {
     totalPages: number;
   };
 };
+
+/**
+ * Public environment variable item returned by list endpoint.
+ * Values are masked (e.g. ••••••••) for security.
+ */
+export type EnvVar = {
+  id: string;
+  key: string;
+  maskedValue: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+/**
+ * Decrypted environment variable item used when specifically revealing a single variable.
+ */
+export type DecryptedEnvVar = {
+  id: string;
+  key: string;
+  value: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+

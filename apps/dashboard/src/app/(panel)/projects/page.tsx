@@ -6,10 +6,21 @@ import { Button } from "@/components/ui/button";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { useProjects } from "@/hooks/useProjects";
+import { cn } from "@/lib/utils";
 
 export default function ProjectsPage() {
   const { projects, isLoading, error, createProject, refetch } = useProjects();
   const [modalOpen, setModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -26,11 +37,17 @@ export default function ProjectsPage() {
             id="refresh-projects"
             variant="outline"
             size="icon"
-            onClick={() => void refetch()}
-            disabled={isLoading}
+            onClick={() => void handleRefresh()}
+            disabled={isLoading || isRefreshing}
             aria-label="Refresh projects"
+            title="Refresh projects"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw
+              className={cn(
+                "h-4 w-4 transition-transform duration-500",
+                (isLoading || isRefreshing) && "animate-spin text-indigo-500",
+              )}
+            />
           </Button>
           <Button
             id="new-project-btn"

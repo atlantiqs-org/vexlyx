@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { GitSettings } from "@/components/projects/GitSettings";
 import { BuildPanel } from "@/components/projects/BuildPanel";
 import { ContainerControls } from "@/components/projects/ContainerControls";
+import { EnvVarEditor } from "@/components/projects/EnvVarEditor";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -314,6 +315,12 @@ export default function ProjectDetailPage() {
       <ContainerControls
         project={project}
         onProjectUpdate={fetchProject}
+      />
+
+      {/* Environment variables editor */}
+      <EnvVarEditor
+        projectId={project.id}
+        onDeployTrigger={fetchProject}
       />
 
       {/* Build & deployment panel */}

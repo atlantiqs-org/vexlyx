@@ -6,12 +6,12 @@ import {
   Play,
   Square,
   RotateCw,
+  RefreshCw,
   Trash2,
   ExternalLink,
   Container,
   Terminal,
   Loader2,
-  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +42,18 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
     project.id,
     Boolean(project.containerId),
   );
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+
+  const handleRefreshStatus = async () => {
+    setIsRefreshingStatus(true);
+    try {
+      await refetchStatus();
+      toast.success("Container status refreshed");
+    } finally {
+      setTimeout(() => setIsRefreshingStatus(false), 600);
+    }
+  };
 
   // Real-time runtime logs via Socket.io
   const { lines: runtimeLines, isConnected: logsConnected, clear: clearLogs } = useRuntimeLogs(
@@ -115,6 +126,25 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
               Live Container
             </span>
             {statusBadge()}
+            {hasContainer && (
+              <Button
+                id="refresh-container-status-btn"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 ml-0.5 text-muted-foreground hover:text-foreground"
+                aria-label="Refresh container status"
+                title="Refresh container status"
+                onClick={() => void handleRefreshStatus()}
+                disabled={isRefreshingStatus}
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-3 w-3 transition-transform duration-500",
+                    isRefreshingStatus && "animate-spin text-indigo-500",
+                  )}
+                />
+              </Button>
+            )}
           </div>
 
           {/* Action buttons */}

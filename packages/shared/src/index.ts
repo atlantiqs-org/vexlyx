@@ -30,6 +30,19 @@ export type {
   ContainerAction,
 } from "./schemas/projects.js";
 
+export {
+  EnvVarKeySchema,
+  EnvVarValueSchema,
+  SetEnvVarSchema,
+  BulkSetEnvVarsSchema,
+  ImportEnvFileSchema,
+} from "./schemas/env.js";
+export type {
+  SetEnvVarInput,
+  BulkSetEnvVarsInput,
+  ImportEnvFileInput,
+} from "./schemas/env.js";
+
 export type {
   User,
   Role,
@@ -41,4 +54,7 @@ export type {
   Deployment,
   DeploymentStatus,
   PaginatedDeployments,
+  EnvVar,
+  DecryptedEnvVar,
 } from "./types/index.js";
+

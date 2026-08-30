@@ -1,9 +1,10 @@
-﻿import { spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
+import { EnvService } from "../env/service.js";
 import type { DeployBody } from "./schema.js";
 
 // ---------------------------------------------------------------------------
@@ -441,6 +442,10 @@ export class DeployService {
       data: { status: "CREATING" },
     });
 
+    // Fetch and decrypt project environment variables
+    const envService = new EnvService(this.prisma);
+    const envVars = await envService.getDecryptedMap(projectId);
+
     const result = await runDockerDeploy({
       projectId,
       projectName: project.name,
@@ -453,6 +458,7 @@ export class DeployService {
       portRangeEnd: env.DEPLOY_PORT_RANGE_END,
       hostPort: project.port,
       domain: body.domain,
+      envVars,
     });
 
     // Update Project database record

@@ -197,6 +197,17 @@ interface BuildPanelProps {
 export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: BuildPanelProps) {
   const { triggerBuild, isTriggering } = useTriggerBuild(projectId);
   const { deployments, isLoading, refetch } = useDeployments(projectId);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+      toast.success("Deployments refreshed");
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
 
   const [activePollId, setActivePollId] = useState<string | null>(() => {
     // On mount, start polling if the latest deployment is still active
@@ -262,10 +273,16 @@ export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: Bui
               size="icon"
               className="h-7 w-7"
               aria-label="Refresh deployments"
-              onClick={() => void refetch()}
-              disabled={isLoading}
+              title="Refresh deployments"
+              onClick={() => void handleRefresh()}
+              disabled={isLoading || isRefreshing}
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+              <RefreshCw
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-500",
+                  (isLoading || isRefreshing) && "animate-spin text-indigo-500",
+                )}
+              />
             </Button>
 
             <Button
