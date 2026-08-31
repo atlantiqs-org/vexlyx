@@ -673,17 +673,17 @@ Support deploying Python web applications. Auto-detect framework and configure a
 ---
 
 ### F2.3 — React (Vite) Static Deployment
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Support deploying React applications built with Vite as static sites.
 
 **Acceptance Criteria:**
-- [ ] Auto-detection via `vite.config.*`
-- [ ] Build command: `npm run build`
-- [ ] Output served from `dist/` folder via Nginx
-- [ ] SPA routing support (fallback to index.html)
-- [ ] Environment variable injection at build time
+- [x] Auto-detection via `vite.config.*`
+- [x] Build command: `npm run build`
+- [x] Output served from `dist/` folder via Nginx / Caddy static web server
+- [x] SPA routing support (fallback to index.html)
+- [x] Environment variable injection at build time
 
 **Test Plan:**
 1. Deploy Vite React app → loads correctly
@@ -692,6 +692,15 @@ Support deploying React applications built with Vite as static sites.
 
 **Developer Docs:**
 - **Location:** `docs/dev/runtimes/react-vite.md`
+
+**Files Created:**
+- `tests/test_react_runtime.py`
+- `docs/dev/runtimes/react-vite.md`
+
+**Files Modified:**
+- `system/python/build_manager.py`
+- `system/templates/docker-compose/static.yml`
+- `apps/api/src/modules/build/service.ts`
 
 ---
 

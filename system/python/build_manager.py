@@ -98,6 +98,174 @@ def get_nixpacks_binary() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Node.js & React / Vite Framework Helpers (F2.3)
+# ---------------------------------------------------------------------------
+
+def detect_node_version(project_dir: Path, env_vars: dict | None = None) -> str | None:
+    """
+    Detect Node.js version requested by project (e.g. '18', '20', '22').
+    Checks:
+    1. env_vars['NIXPACKS_NODE_VERSION'] or env_vars['NODE_VERSION']
+    2. .nvmrc file
+    3. .node-version file
+    4. package.json -> engines.node
+    """
+    if env_vars:
+        if env_vars.get("NIXPACKS_NODE_VERSION"):
+            return str(env_vars["NIXPACKS_NODE_VERSION"]).strip()
+        if env_vars.get("NODE_VERSION"):
+            return str(env_vars["NODE_VERSION"]).strip()
+
+    # 1. .nvmrc
+    nvmrc = project_dir / ".nvmrc"
+    if nvmrc.is_file():
+        try:
+            content = nvmrc.read_text(encoding="utf-8").strip()
+            m = re.search(r"v?(\d+(?:\.\d+)?)", content)
+            if m:
+                return m.group(1)
+        except Exception:
+            pass
+
+    # 2. .node-version
+    node_ver_file = project_dir / ".node-version"
+    if node_ver_file.is_file():
+        try:
+            content = node_ver_file.read_text(encoding="utf-8").strip()
+            m = re.search(r"v?(\d+(?:\.\d+)?)", content)
+            if m:
+                return m.group(1)
+        except Exception:
+            pass
+
+    # 3. package.json engines.node
+    pkg_json = project_dir / "package.json"
+    if pkg_json.is_file():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            engines = data.get("engines", {})
+            node_engine = engines.get("node")
+            if node_engine:
+                m = re.search(r"(\d+(?:\.\d+)?)", str(node_engine))
+                if m:
+                    return m.group(1)
+        except Exception:
+            pass
+
+    return None
+
+
+def detect_vite_project(project_dir: Path, plan: dict) -> tuple[str, str | None, str | None, str] | None:
+    """
+    Detect Vite-based projects (React, Vue, Svelte, or Vanilla/Static Vite).
+    Resolves build command and appropriate static start command (npx --yes serve -s dist -l 80).
+    """
+    vite_config_candidates = [
+        "vite.config.js",
+        "vite.config.ts",
+        "vite.config.mjs",
+        "vite.config.cjs",
+        "vite.config.mts",
+        "vite.config.cts",
+    ]
+    has_vite_config = any((project_dir / cfg).is_file() for cfg in vite_config_candidates)
+
+    has_vite_dep = False
+    has_react_dep = False
+    has_vue_dep = False
+    has_svelte_dep = False
+    has_start_script = False
+
+    pkg_json_path = project_dir / "package.json"
+    if pkg_json_path.is_file():
+        try:
+            pkg = json.loads(pkg_json_path.read_text(encoding="utf-8"))
+            deps = pkg.get("dependencies", {})
+            dev_deps = pkg.get("devDependencies", {})
+            scripts = pkg.get("scripts", {})
+            all_deps = {**deps, **dev_deps}
+
+            if "vite" in all_deps or "@vitejs/plugin-react" in all_deps or "@vitejs/plugin-react-swc" in all_deps or "@vitejs/plugin-vue" in all_deps:
+                has_vite_dep = True
+            if "react" in all_deps or "react-dom" in all_deps or "@vitejs/plugin-react" in all_deps or "@vitejs/plugin-react-swc" in all_deps:
+                has_react_dep = True
+            if "vue" in all_deps or "@vitejs/plugin-vue" in all_deps or "@vitejs/plugin-vue-jsx" in all_deps:
+                has_vue_dep = True
+            if "svelte" in all_deps or "@sveltejs/vite-plugin-svelte" in all_deps:
+                has_svelte_dep = True
+            if "start" in scripts:
+                has_start_script = True
+        except Exception:
+            pass
+
+    if has_vite_config or has_vite_dep:
+        # Resolve package manager for build command
+        pkg_mgr = "npm"
+        if (project_dir / "pnpm-lock.yaml").is_file():
+            pkg_mgr = "pnpm"
+        elif (project_dir / "yarn.lock").is_file():
+            pkg_mgr = "yarn"
+        elif (project_dir / "bun.lockb").is_file() or (project_dir / "bun.lock").is_file():
+            pkg_mgr = "bun"
+
+        default_build = "yarn build" if pkg_mgr == "yarn" else f"{pkg_mgr} run build"
+
+        phases = plan.get("phases", {})
+        build_phase = phases.get("build", {})
+        build_cmd = None
+        if isinstance(build_phase, dict):
+            cmds = build_phase.get("cmds", [])
+            if cmds:
+                build_cmd = " && ".join(cmds)
+        if not build_cmd:
+            build_cmd = default_build
+
+        # Resolve start command:
+        # 1. If nixpacks plan already resolved a start command (e.g. Caddy), use it
+        # 2. If package.json has a "start" script, use package manager start command
+        # 3. For static/Vite sites, use "npx --yes serve -s dist -l 80" so container serves built static files on port 80
+        start_section = plan.get("start", {})
+        start_cmd = start_section.get("cmd") if isinstance(start_section, dict) else None
+
+        if not start_cmd:
+            if has_start_script:
+                start_cmd = "yarn start" if pkg_mgr == "yarn" else f"{pkg_mgr} run start"
+            else:
+                start_cmd = "npx --yes serve -s dist -l 80"
+
+        # Determine exact framework and project type
+        if has_react_dep:
+            framework = "react"
+            project_type = "REACT"
+        elif has_vue_dep:
+            framework = "vue"
+            project_type = "STATIC"
+        elif has_svelte_dep:
+            framework = "svelte"
+            project_type = "STATIC"
+        else:
+            framework = "vite"
+            project_type = "STATIC"
+
+        return (framework, build_cmd, start_cmd, project_type)
+
+    return None
+
+
+def detect_static_project(project_dir: Path, plan: dict) -> tuple[str, str | None, str | None, str] | None:
+    """
+    Detect plain static HTML/CSS/JS websites without frameworks.
+    """
+    if (project_dir / "index.html").is_file() and not (project_dir / "package.json").is_file():
+        start_section = plan.get("start", {})
+        start_cmd = start_section.get("cmd") if isinstance(start_section, dict) else None
+        if not start_cmd:
+            start_cmd = "npx --yes serve -s . -l 80"
+        return ("static", None, start_cmd, "STATIC")
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Python Framework & Version Helpers (F2.2)
 # ---------------------------------------------------------------------------
 
@@ -366,13 +534,25 @@ def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, s
 
         return ("nextjs", build_cmd, start_cmd, "NEXTJS")
 
-    # 2. Python (Django / Flask / FastAPI / Python) check
+    # 2. Direct Vite / React / Vue / Static heuristic check (F2.3)
+    vite_result = detect_vite_project(project_dir, plan)
+    if vite_result:
+        v_framework, v_build_cmd, v_start_cmd, v_type = vite_result
+        return (v_framework, v_build_cmd, v_start_cmd, v_type)
+
+    # 3. Python (Django / Flask / FastAPI / Python) check (F2.2)
     py_result = detect_python_project(project_dir, plan)
     if py_result:
         py_framework, py_build_cmd, py_start_cmd, py_type = py_result
         return (py_framework, py_build_cmd, py_start_cmd, py_type)
 
-    # 3. Other frameworks / Nixpacks fallback
+    # 4. Plain Static HTML/CSS/JS check
+    static_result = detect_static_project(project_dir, plan)
+    if static_result:
+        s_framework, s_build_cmd, s_start_cmd, s_type = static_result
+        return (s_framework, s_build_cmd, s_start_cmd, s_type)
+
+    # 5. Generic Node / Frontend build tools (Gulp, Webpack, etc.) & Nixpacks fallback
     providers = plan.get("providers") or []
     provider_name = providers[0] if len(providers) > 0 else None
     variables = plan.get("variables") or {}
@@ -399,17 +579,57 @@ def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, s
     start_section = plan.get("start", {})
     start_cmd = start_section.get("cmd") if isinstance(start_section, dict) else None
 
+    # Check Gulp / Webpack / generic frontend build manifests
+    has_gulp = (project_dir / "gulpfile.js").is_file() or (project_dir / "gulpfile.ts").is_file()
+    has_webpack = (project_dir / "webpack.config.js").is_file() or (project_dir / "webpack.config.ts").is_file()
+    if has_gulp:
+        framework = "gulp"
+    elif has_webpack:
+        framework = "webpack"
+
     # Map detected framework to standard ProjectType if possible
     fw_lower = str(framework).lower()
     detected_type = None
     if "next" in fw_lower:
         detected_type = "NEXTJS"
+    elif "react" in fw_lower or "vite" in fw_lower:
+        detected_type = "REACT"
+    elif "gulp" in fw_lower or "webpack" in fw_lower or "static" in fw_lower or "html" in fw_lower:
+        detected_type = "STATIC"
     elif "node" in fw_lower or "javascript" in fw_lower or "typescript" in fw_lower:
         detected_type = "NODEJS"
     elif "python" in fw_lower or "django" in fw_lower or "flask" in fw_lower or "fastapi" in fw_lower:
         detected_type = "PYTHON"
-    elif "react" in fw_lower or "vite" in fw_lower:
-        detected_type = "REACT"
+
+    # For Node/JS/TS/Static projects, resolve start_cmd and align static builds
+    pkg_json_path = project_dir / "package.json"
+    if pkg_json_path.is_file():
+        try:
+            pkg = json.loads(pkg_json_path.read_text(encoding="utf-8"))
+            scripts = pkg.get("scripts", {})
+            has_start_script = "start" in scripts
+            has_build_script = "build" in scripts
+
+            if not build_cmd and has_build_script:
+                build_cmd = default_build
+
+            if not start_cmd:
+                if has_start_script:
+                    start_cmd = default_start
+                elif has_build_script or has_gulp or has_webpack:
+                    # Frontend/static build tool with no server start script
+                    start_cmd = 'if [ -d dist ]; then npx --yes serve -s dist -l 80; elif [ -d build ]; then npx --yes serve -s build -l 80; elif [ -d out ]; then npx --yes serve -s out -l 80; elif [ -d public ]; then npx --yes serve -s public -l 80; else npx --yes serve -s . -l 80; fi'
+                    detected_type = "STATIC"
+                elif (project_dir / "server.js").is_file():
+                    start_cmd = "node server.js"
+                elif (project_dir / "app.js").is_file():
+                    start_cmd = "node app.js"
+                elif (project_dir / "index.js").is_file():
+                    start_cmd = "node index.js"
+                elif pkg.get("main"):
+                    start_cmd = f"node {pkg['main']}"
+        except Exception:
+            pass
 
     return (str(framework), build_cmd, start_cmd, detected_type)
 
@@ -443,9 +663,17 @@ def cmd_plan(payload: dict) -> None:
     if py_ver:
         cmd += ["--env", f"NIXPACKS_PYTHON_VERSION={py_ver}"]
 
+    # Detect node version and propagate to nixpacks plan
+    node_ver = detect_node_version(project_path, env_vars if isinstance(env_vars, dict) else None)
+    if not node_ver and ((project_path / "vite.config.js").is_file() or (project_path / "vite.config.ts").is_file() or (project_path / "next.config.js").is_file() or (project_path / "next.config.mjs").is_file() or (project_path / "next.config.ts").is_file()):
+        node_ver = "20"
+
+    if node_ver:
+        cmd += ["--env", f"NIXPACKS_NODE_VERSION={node_ver}"]
+
     if isinstance(env_vars, dict):
         for k, v in env_vars.items():
-            if k and v is not None and k != "NIXPACKS_PYTHON_VERSION":
+            if k and v is not None and k not in ("NIXPACKS_PYTHON_VERSION", "NIXPACKS_NODE_VERSION"):
                 cmd += ["--env", f"{k}={v}"]
 
     result = subprocess.run(
@@ -525,6 +753,13 @@ def cmd_build(payload: dict) -> None:
             install_cmd = "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install 'setuptools<70' && pip install -r requirements.txt"
         elif (project_path / "pyproject.toml").is_file():
             install_cmd = "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install 'setuptools<70' && pip install ."
+    elif not install_cmd:
+        if (project_path / "bun.lockb").is_file() or (project_path / "bun.lock").is_file():
+            install_cmd = "bun install"
+        elif (project_path / "pnpm-lock.yaml").is_file():
+            install_cmd = "pnpm install"
+        elif (project_path / "yarn.lock").is_file():
+            install_cmd = "yarn install"
 
     cmd = [nixpacks_bin, "build", project_dir, "--name", image_name]
 
@@ -540,11 +775,17 @@ def cmd_build(payload: dict) -> None:
     if start_cmd:
         cmd += ["--start-cmd", start_cmd]
 
-    # Detect python version and ensure it's passed
+    # Detect python and node versions and ensure they are passed
     py_ver = detect_python_version(Path(project_dir), env_vars if isinstance(env_vars, dict) else None)
+    node_ver = detect_node_version(Path(project_dir), env_vars if isinstance(env_vars, dict) else None)
+    if not node_ver and (detected_type in ("REACT", "NEXTJS") or detected_fw in ("vite", "react")):
+        node_ver = "20"
+
     merged_env_vars = dict(env_vars) if isinstance(env_vars, dict) else {}
     if py_ver and "NIXPACKS_PYTHON_VERSION" not in merged_env_vars:
         merged_env_vars["NIXPACKS_PYTHON_VERSION"] = py_ver
+    if node_ver and "NIXPACKS_NODE_VERSION" not in merged_env_vars:
+        merged_env_vars["NIXPACKS_NODE_VERSION"] = node_ver
 
     for k, v in merged_env_vars.items():
         if k and v is not None:

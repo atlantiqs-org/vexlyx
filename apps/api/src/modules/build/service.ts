@@ -340,6 +340,20 @@ export function createBuildProcessor(
           ? "FastAPI"
           : planResult.framework === "python"
           ? "Python"
+          : planResult.framework === "react" || planResult.framework === "react-vite"
+          ? "React (Vite)"
+          : planResult.framework === "vue"
+          ? "Vue (Vite)"
+          : planResult.framework === "svelte"
+          ? "Svelte (Vite)"
+          : planResult.framework === "vite"
+          ? "Vite (Static)"
+          : planResult.framework === "gulp"
+          ? "Gulp (Static)"
+          : planResult.framework === "webpack"
+          ? "Webpack (Static)"
+          : planResult.framework === "static"
+          ? "Static Site"
           : planResult.framework.charAt(0).toUpperCase() + planResult.framework.slice(1);
       await appendLog(`[vexlyx] Detected framework: ${displayFramework}`);
 

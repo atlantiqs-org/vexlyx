@@ -25,6 +25,7 @@ const envSchema = z.object({
   API_BASE_URL: z.string().url().default("http://localhost:5000"),
   // Build integration (F1.4)
   NIXPACKS_IMAGE_PREFIX: z.string().min(1).default("vexlyx"),
+  BUILD_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(5),
   // Deploy integration (F1.5)
   // Base domain used to generate per-project Traefik hostnames: {name}.{BASE_DOMAIN}
   BASE_DOMAIN: z.string().min(1).default("vexlyx.localhost"),
