@@ -74,10 +74,13 @@ interface PlanResult {
   detectedType: string | null;
 }
 
-function runBuildPlan(projectDir: string): Promise<PlanResult> {
+function runBuildPlan(
+  projectDir: string,
+  envVars?: Record<string, string>,
+): Promise<PlanResult> {
   return new Promise((resolveP, rejectP) => {
     const scriptPath = getBuildManagerScriptPath();
-    const payload = JSON.stringify({ command: "plan", projectDir });
+    const payload = JSON.stringify({ command: "plan", projectDir, envVars });
 
     const child = spawn("python", [scriptPath], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -311,11 +314,15 @@ export function createBuildProcessor(
         throw new Error("Project not found during build phase");
       }
 
+      // Fetch and decrypt project environment variables early
+      const envService = new EnvService(prisma);
+      const envVars = await envService.getDecryptedMap(projectId);
+
       // Phase 1 — detect framework
       await appendLog("[vexlyx] Detecting framework with nixpacks plan…");
       let planResult: PlanResult;
       try {
-        planResult = await runBuildPlan(projectDir);
+        planResult = await runBuildPlan(projectDir, envVars);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await appendLog(`[vexlyx:error] Framework detection failed: ${msg}`);
@@ -325,6 +332,14 @@ export function createBuildProcessor(
       const displayFramework =
         planResult.framework === "nextjs"
           ? "Next.js"
+          : planResult.framework === "django"
+          ? "Django"
+          : planResult.framework === "flask"
+          ? "Flask"
+          : planResult.framework === "fastapi"
+          ? "FastAPI"
+          : planResult.framework === "python"
+          ? "Python"
           : planResult.framework.charAt(0).toUpperCase() + planResult.framework.slice(1);
       await appendLog(`[vexlyx] Detected framework: ${displayFramework}`);
 
@@ -349,10 +364,6 @@ export function createBuildProcessor(
       if (effectiveBuildCmd) {
         await appendLog(`[vexlyx] Build command: ${effectiveBuildCmd}`);
       }
-
-      // Fetch and decrypt project environment variables
-      const envService = new EnvService(prisma);
-      const envVars = await envService.getDecryptedMap(projectId);
 
       // Phase 2 — build Docker image with caching and build-time env vars
       await appendLog("[vexlyx] Building Docker image with Nixpacks…");

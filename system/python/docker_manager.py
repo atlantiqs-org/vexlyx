@@ -193,7 +193,7 @@ def pick_template(project_type: str) -> str:
     """Return the template filename for a given project type."""
     mapping = {
         "NODEJS": "node.yml",
-        "NEXTJS": "node.yml",
+        "NEXTJS": "next.yml",
         "PYTHON": "python.yml",
         "REACT": "static.yml",
         "STATIC": "static.yml",

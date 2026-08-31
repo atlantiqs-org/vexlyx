@@ -19,6 +19,7 @@ Requires `nixpacks` to be installed and available in PATH.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -97,52 +98,281 @@ def get_nixpacks_binary() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Python Framework & Version Helpers (F2.2)
+# ---------------------------------------------------------------------------
+
+def detect_python_version(project_dir: Path, env_vars: dict | None = None) -> str | None:
+    """
+    Detect Python version requested by project (e.g. '3.10', '3.11', '3.12').
+    Checks:
+    1. env_vars['NIXPACKS_PYTHON_VERSION'] or env_vars['PYTHON_VERSION']
+    2. .python-version file
+    3. runtime.txt file
+    4. pyproject.toml
+    """
+    if env_vars:
+        if env_vars.get("NIXPACKS_PYTHON_VERSION"):
+            return str(env_vars["NIXPACKS_PYTHON_VERSION"]).strip()
+        if env_vars.get("PYTHON_VERSION"):
+            return str(env_vars["PYTHON_VERSION"]).strip()
+
+    # 1. .python-version
+    py_version_file = project_dir / ".python-version"
+    if py_version_file.is_file():
+        try:
+            content = py_version_file.read_text(encoding="utf-8").strip()
+            m = re.search(r"(\d+\.\d+(?:\.\d+)?)", content)
+            if m:
+                ver = m.group(1)
+                parts = ver.split(".")
+                return f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else ver
+        except Exception:
+            pass
+
+    # 2. runtime.txt
+    runtime_file = project_dir / "runtime.txt"
+    if runtime_file.is_file():
+        try:
+            content = runtime_file.read_text(encoding="utf-8").strip()
+            m = re.search(r"(\d+\.\d+(?:\.\d+)?)", content)
+            if m:
+                ver = m.group(1)
+                parts = ver.split(".")
+                return f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else ver
+        except Exception:
+            pass
+
+    # 3. pyproject.toml
+    pyproject_file = project_dir / "pyproject.toml"
+    if pyproject_file.is_file():
+        try:
+            content = pyproject_file.read_text(encoding="utf-8")
+            m = re.search(r'(?:python|requires-python)\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
+            if m:
+                raw_ver = m.group(1)
+                vm = re.search(r"(\d+\.\d+)", raw_ver)
+                if vm:
+                    return vm.group(1)
+        except Exception:
+            pass
+
+    return None
+
+
+def find_django_wsgi_module(project_dir: Path) -> str:
+    """Find the Django wsgi module name (e.g. 'mysite.wsgi' or 'config.wsgi')."""
+    # Check if manage.py specifies DJANGO_SETTINGS_MODULE
+    manage_py = project_dir / "manage.py"
+    if manage_py.is_file():
+        try:
+            content = manage_py.read_text(encoding="utf-8")
+            m = re.search(r"DJANGO_SETTINGS_MODULE['\"]\s*,\s*['\"]([^'\"]+)\.settings['\"]", content)
+            if m:
+                pkg_name = m.group(1).strip()
+                if (project_dir / pkg_name / "wsgi.py").is_file():
+                    return f"{pkg_name}.wsgi"
+        except Exception:
+            pass
+
+    # Search subdirectories for wsgi.py
+    ignore_dirs = {".git", ".venv", "venv", "env", "__pycache__", "node_modules", "static", "staticfiles", "media"}
+    for child in project_dir.iterdir():
+        if child.is_dir() and child.name not in ignore_dirs and not child.name.startswith("."):
+            if (child / "wsgi.py").is_file():
+                return f"{child.name}.wsgi"
+
+    if (project_dir / "wsgi.py").is_file():
+        return "wsgi"
+
+    return "wsgi"
+
+
+def find_flask_entrypoint(project_dir: Path) -> str:
+    """Auto-detect Flask app entrypoint (e.g. 'app:app', 'main:app', 'wsgi:app')."""
+    candidates = [
+        ("app.py", "app:app"),
+        ("main.py", "main:app"),
+        ("wsgi.py", "wsgi:app"),
+        ("application.py", "application:app"),
+        ("src/app.py", "src.app:app"),
+        ("src/main.py", "src.main:app"),
+        ("api/index.py", "api.index:app"),
+        ("api/app.py", "api.app:app"),
+    ]
+    for rel_path, entry in candidates:
+        if (project_dir / rel_path).is_file():
+            return entry
+
+    return "app:app"
+
+
+def find_fastapi_entrypoint(project_dir: Path) -> str:
+    """Auto-detect FastAPI app entrypoint (e.g. 'main:app', 'app.main:app', 'app:app')."""
+    candidates = [
+        ("main.py", "main:app"),
+        ("app/main.py", "app.main:app"),
+        ("app.py", "app:app"),
+        ("src/main.py", "src.main:app"),
+        ("src/app.py", "src.app:app"),
+        ("api/index.py", "api.index:app"),
+        ("api/main.py", "api.main:app"),
+    ]
+    for rel_path, entry in candidates:
+        if (project_dir / rel_path).is_file():
+            return entry
+
+    return "main:app"
+
+
+def detect_python_project(project_dir: Path, plan: dict) -> tuple[str, str | None, str | None, str] | None:
+    """
+    Detect Python framework (Django, Flask, FastAPI, generic Python),
+    suggested build command, start command, and 'PYTHON' project type.
+    """
+    deps_text = ""
+    req_file = project_dir / "requirements.txt"
+    if req_file.is_file():
+        try:
+            deps_text += "\n" + req_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+
+    pyproject_file = project_dir / "pyproject.toml"
+    if pyproject_file.is_file():
+        try:
+            deps_text += "\n" + pyproject_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+
+    pipfile = project_dir / "Pipfile"
+    if pipfile.is_file():
+        try:
+            deps_text += "\n" + pipfile.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+
+    setup_py = project_dir / "setup.py"
+    if setup_py.is_file():
+        try:
+            deps_text += "\n" + setup_py.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+
+    deps_lower = deps_text.lower()
+
+    has_manage_py = (project_dir / "manage.py").is_file()
+    has_django_dep = bool(re.search(r"\bdjango\b", deps_lower))
+    has_fastapi_dep = bool(re.search(r"\bfastapi\b", deps_lower))
+    has_flask_dep = bool(re.search(r"\bflask\b", deps_lower))
+
+    providers = plan.get("providers") or []
+    plan_is_python = any("python" in str(p).lower() for p in providers) or "python" in str(plan.get("language", "")).lower()
+
+    # 1. Django
+    if has_manage_py or has_django_dep:
+        wsgi_module = find_django_wsgi_module(project_dir)
+        build_cmd = "python manage.py collectstatic --noinput" if has_manage_py else None
+        start_cmd = f"gunicorn {wsgi_module}:application --bind 0.0.0.0:${{PORT:-8000}} --workers 2"
+        return ("django", build_cmd, start_cmd, "PYTHON")
+
+    # 2. FastAPI
+    if has_fastapi_dep:
+        entrypoint = find_fastapi_entrypoint(project_dir)
+        start_cmd = f"uvicorn {entrypoint} --host 0.0.0.0 --port ${{PORT:-8000}} --workers 2"
+        return ("fastapi", None, start_cmd, "PYTHON")
+
+    # 3. Flask
+    if has_flask_dep:
+        entrypoint = find_flask_entrypoint(project_dir)
+        start_cmd = f"gunicorn -w 2 -b 0.0.0.0:${{PORT:-8000}} {entrypoint}"
+        return ("flask", None, start_cmd, "PYTHON")
+
+    # 4. Generic Python
+    has_py_files = bool(list(project_dir.glob("*.py"))) or req_file.is_file() or pyproject_file.is_file() or (project_dir / "runtime.txt").is_file() or (project_dir / ".python-version").is_file()
+
+    if plan_is_python or has_py_files:
+        start_cmd = None
+        if (project_dir / "main.py").is_file():
+            start_cmd = "python main.py"
+        elif (project_dir / "app.py").is_file():
+            start_cmd = "python app.py"
+        elif (project_dir / "wsgi.py").is_file():
+            start_cmd = "gunicorn wsgi:application"
+        return ("python", None, start_cmd, "PYTHON")
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
-def cmd_plan(payload: dict) -> None:
+def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, str | null, str | null, str | null]:
     """
-    Detect the framework and proposed build command for a project directory.
-
-    Payload fields:
-      projectDir — absolute path to the cloned project source
-
-    Returns a single JSON object:
-      { framework: string, buildCmd: string | null }
+    Detect the project framework, suggested build command, start command,
+    and normalized project type based on file heuristics and Nixpacks plan.
     """
-    project_dir = require_field(payload, "projectDir")
-    nixpacks_bin = get_nixpacks_binary()
+    # Detect package manager for Node/JS projects
+    pkg_mgr = "npm"
+    if (project_dir / "pnpm-lock.yaml").is_file():
+        pkg_mgr = "pnpm"
+    elif (project_dir / "yarn.lock").is_file():
+        pkg_mgr = "yarn"
+    elif (project_dir / "bun.lockb").is_file() or (project_dir / "bun.lock").is_file():
+        pkg_mgr = "bun"
 
-    if not Path(project_dir).is_dir():
-        fail(
-            f"Project directory does not exist: {project_dir}",
-            "PROJECT_DIR_NOT_FOUND",
-        )
+    default_build = "yarn build" if pkg_mgr == "yarn" else f"{pkg_mgr} run build"
+    default_start = "yarn start" if pkg_mgr == "yarn" else f"{pkg_mgr} run start"
 
-    result = subprocess.run(
-        [nixpacks_bin, "plan", project_dir, "--format", "json"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    # 1. Direct Next.js heuristic check
+    is_nextjs = False
+    next_config_candidates = [
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
+        "next.config.cjs",
+    ]
+    for cfg in next_config_candidates:
+        if (project_dir / cfg).is_file():
+            is_nextjs = True
+            break
 
-    if result.returncode != 0:
-        error_output = (result.stderr or result.stdout or "").strip()
-        fail(f"nixpacks plan failed:\n{error_output}", "NIXPACKS_PLAN_FAILED")
+    pkg_json_path = project_dir / "package.json"
+    if not is_nextjs and pkg_json_path.is_file():
+        try:
+            pkg = json.loads(pkg_json_path.read_text(encoding="utf-8"))
+            deps = pkg.get("dependencies", {})
+            dev_deps = pkg.get("devDependencies", {})
+            if "next" in deps or "next" in dev_deps:
+                is_nextjs = True
+        except Exception:
+            pass
 
-    raw_output = result.stdout.strip()
-    if not raw_output:
-        fail("nixpacks plan produced no output", "NIXPACKS_PLAN_NO_OUTPUT")
+    if is_nextjs:
+        phases = plan.get("phases", {})
+        build_phase = phases.get("build", {})
+        build_cmd = None
+        if isinstance(build_phase, dict):
+            cmds = build_phase.get("cmds", [])
+            if cmds:
+                build_cmd = " && ".join(cmds)
+        if not build_cmd:
+            build_cmd = default_build
 
-    try:
-        plan = json.loads(raw_output)
-    except json.JSONDecodeError:
-        # nixpacks plan output is not always clean JSON; treat as unknown
-        plan = {}
+        start_section = plan.get("start", {})
+        start_cmd = start_section.get("cmd") if isinstance(start_section, dict) else None
+        if not start_cmd:
+            start_cmd = default_start
 
-    # Extract framework name — nixpacks returns it under different keys
-    # depending on version (providers, variables.NIXPACKS_METADATA, language, etc.)
+        return ("nextjs", build_cmd, start_cmd, "NEXTJS")
+
+    # 2. Python (Django / Flask / FastAPI / Python) check
+    py_result = detect_python_project(project_dir, plan)
+    if py_result:
+        py_framework, py_build_cmd, py_start_cmd, py_type = py_result
+        return (py_framework, py_build_cmd, py_start_cmd, py_type)
+
+    # 3. Other frameworks / Nixpacks fallback
     providers = plan.get("providers") or []
     provider_name = providers[0] if len(providers) > 0 else None
     variables = plan.get("variables") or {}
@@ -166,7 +396,89 @@ def cmd_plan(payload: dict) -> None:
         if cmds:
             build_cmd = " && ".join(cmds)
 
-    respond({"framework": str(framework), "buildCmd": build_cmd})
+    start_section = plan.get("start", {})
+    start_cmd = start_section.get("cmd") if isinstance(start_section, dict) else None
+
+    # Map detected framework to standard ProjectType if possible
+    fw_lower = str(framework).lower()
+    detected_type = None
+    if "next" in fw_lower:
+        detected_type = "NEXTJS"
+    elif "node" in fw_lower or "javascript" in fw_lower or "typescript" in fw_lower:
+        detected_type = "NODEJS"
+    elif "python" in fw_lower or "django" in fw_lower or "flask" in fw_lower or "fastapi" in fw_lower:
+        detected_type = "PYTHON"
+    elif "react" in fw_lower or "vite" in fw_lower:
+        detected_type = "REACT"
+
+    return (str(framework), build_cmd, start_cmd, detected_type)
+
+
+def cmd_plan(payload: dict) -> None:
+    """
+    Detect the framework and proposed build command for a project directory.
+
+    Payload fields:
+      projectDir — absolute path to the cloned project source
+      envVars    — optional dict of environment variables
+
+    Returns a single JSON object:
+      { framework: string, buildCmd: string | null, startCmd: string | null, detectedType: string | null }
+    """
+    project_dir = require_field(payload, "projectDir")
+    env_vars = payload.get("envVars")
+    nixpacks_bin = get_nixpacks_binary()
+    project_path = Path(project_dir)
+
+    if not project_path.is_dir():
+        fail(
+            f"Project directory does not exist: {project_dir}",
+            "PROJECT_DIR_NOT_FOUND",
+        )
+
+    cmd = [nixpacks_bin, "plan", project_dir, "--format", "json"]
+
+    # Detect python version and propagate to nixpacks plan
+    py_ver = detect_python_version(project_path, env_vars if isinstance(env_vars, dict) else None)
+    if py_ver:
+        cmd += ["--env", f"NIXPACKS_PYTHON_VERSION={py_ver}"]
+
+    if isinstance(env_vars, dict):
+        for k, v in env_vars.items():
+            if k and v is not None and k != "NIXPACKS_PYTHON_VERSION":
+                cmd += ["--env", f"{k}={v}"]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    plan = {}
+    if result.returncode == 0:
+        raw_output = result.stdout.strip()
+        if raw_output:
+            try:
+                plan = json.loads(raw_output)
+            except json.JSONDecodeError:
+                plan = {}
+
+    framework, build_cmd, start_cmd, detected_type = detect_framework_and_commands(
+        project_path, plan
+    )
+
+    if result.returncode != 0 and framework == "unknown":
+        error_output = (result.stderr or result.stdout or "").strip()
+        fail(f"nixpacks plan failed:\n{error_output}", "NIXPACKS_PLAN_FAILED")
+
+    respond({
+        "framework": framework,
+        "buildCmd": build_cmd,
+        "startCmd": start_cmd,
+        "detectedType": detected_type,
+    })
 
 
 def cmd_build(payload: dict) -> None:
@@ -177,25 +489,66 @@ def cmd_build(payload: dict) -> None:
       projectDir — absolute path to the cloned project source
       imageName  — Docker image name/tag (e.g. vexlyx-<projectId>)
       buildCmd   — optional build command override (passed via --build-cmd)
+      startCmd   — optional start command override (passed via --start-cmd)
+      cacheKey   — optional cache key for incremental builds (passed via --cache-key)
+      envVars    — optional dict of environment variables to pass to build phase
 
     Streams log lines as: { "log": "<line>" }
     Ends with:            { "done": true, "imageName": "<imageName>" }
     """
     project_dir = require_field(payload, "projectDir")
     image_name = require_field(payload, "imageName")
+    install_cmd = payload.get("installCmd")
     build_cmd = payload.get("buildCmd")
+    start_cmd = payload.get("startCmd")
+    cache_key = payload.get("cacheKey")
+    env_vars = payload.get("envVars")
     nixpacks_bin = get_nixpacks_binary()
 
-    if not Path(project_dir).is_dir():
+    project_path = Path(project_dir)
+    if not project_path.is_dir():
         fail(
             f"Project directory does not exist: {project_dir}",
             "PROJECT_DIR_NOT_FOUND",
         )
 
+    # Auto-resolve start_cmd, build_cmd, and install_cmd if not provided
+    detected_fw, detected_build, detected_start, detected_type = detect_framework_and_commands(project_path, {})
+    if not start_cmd and detected_start:
+        start_cmd = detected_start
+    if not build_cmd and detected_build:
+        build_cmd = detected_build
+
+    # For Python projects, ensure setuptools<70 (which provides pkg_resources) is installed into venv for gunicorn/wsgi on Python 3.12
+    if detected_type == "PYTHON" and not install_cmd:
+        if (project_path / "requirements.txt").is_file():
+            install_cmd = "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install 'setuptools<70' && pip install -r requirements.txt"
+        elif (project_path / "pyproject.toml").is_file():
+            install_cmd = "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install 'setuptools<70' && pip install ."
+
     cmd = [nixpacks_bin, "build", project_dir, "--name", image_name]
+
+    if cache_key:
+        cmd += ["--cache-key", str(cache_key)]
+
+    if install_cmd:
+        cmd += ["--install-cmd", install_cmd]
 
     if build_cmd:
         cmd += ["--build-cmd", build_cmd]
+
+    if start_cmd:
+        cmd += ["--start-cmd", start_cmd]
+
+    # Detect python version and ensure it's passed
+    py_ver = detect_python_version(Path(project_dir), env_vars if isinstance(env_vars, dict) else None)
+    merged_env_vars = dict(env_vars) if isinstance(env_vars, dict) else {}
+    if py_ver and "NIXPACKS_PYTHON_VERSION" not in merged_env_vars:
+        merged_env_vars["NIXPACKS_PYTHON_VERSION"] = py_ver
+
+    for k, v in merged_env_vars.items():
+        if k and v is not None:
+            cmd += ["--env", f"{k}={v}"]
 
     log_line(f"Running: {' '.join(cmd)}")
 
@@ -209,12 +562,13 @@ def cmd_build(payload: dict) -> None:
         bufsize=1,  # line-buffered
     )
 
-    # Stream combined output line by line
+    # Stream combined output line by line, splitting both \r and \n from progress lines
     if proc.stdout:
-        for line in proc.stdout:
-            stripped = line.rstrip("\r\n")
-            if stripped:
-                log_line(stripped)
+        for raw_line in proc.stdout:
+            parts = [p.strip() for p in raw_line.replace("\r", "\n").split("\n")]
+            for part in parts:
+                if part:
+                    log_line(part)
 
     proc.wait()
 
