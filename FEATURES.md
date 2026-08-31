@@ -604,19 +604,19 @@ Allow users to set environment variables per project. Variables are encrypted at
 ## Phase 2: Multi-Runtime Support
 
 ### F2.1 — Next.js Deployment
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Support deploying Next.js applications with SSR, API routes, and static generation.
 
 **Acceptance Criteria:**
-- [ ] Auto-detection via `next.config.*` or `package.json` dependency
-- [ ] Build command: `npm run build`
-- [ ] Start command: `npm run start`
-- [ ] SSR works (not just static export)
-- [ ] API routes functional
-- [ ] Image optimization via Next.js Image component
-- [ ] Build output cached for faster redeploys
+- [x] Auto-detection via `next.config.*` or `package.json` dependency
+- [x] Build command: `npm run build`
+- [x] Start command: `npm run start`
+- [x] SSR works (not just static export)
+- [x] API routes functional
+- [x] Image optimization via Next.js Image component
+- [x] Build output cached for faster redeploys
 
 **Test Plan:**
 1. Deploy Next.js app with SSR → pages render server-side
@@ -627,21 +627,31 @@ Support deploying Next.js applications with SSR, API routes, and static generati
 **Developer Docs:**
 - **Location:** `docs/dev/runtimes/nextjs.md`
 
+**Files Created:**
+- `system/templates/docker-compose/next.yml`
+- `tests/test_nextjs_runtime.py`
+- `docs/dev/runtimes/nextjs.md`
+
+**Files Modified:**
+- `system/python/docker_manager.py`
+- `system/python/build_manager.py`
+- `apps/api/src/modules/build/service.ts`
+
 ---
 
 ### F2.2 — Python (Django/Flask/FastAPI) Deployment
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Support deploying Python web applications. Auto-detect framework and configure appropriate WSGI/ASGI server.
 
 **Acceptance Criteria:**
-- [ ] Auto-detection via `requirements.txt` or `pyproject.toml`
-- [ ] Django: `gunicorn` + `manage.py collectstatic`
-- [ ] Flask: `gunicorn` with auto-detected entry point
-- [ ] FastAPI: `uvicorn` with auto-detected app instance
-- [ ] Static files served via Nginx sidecar
-- [ ] Python version selection (3.10, 3.11, 3.12)
+- [x] Auto-detection via `requirements.txt` or `pyproject.toml`
+- [x] Django: `gunicorn` + `manage.py collectstatic`
+- [x] Flask: `gunicorn` with auto-detected entry point
+- [x] FastAPI: `uvicorn` with auto-detected app instance
+- [x] Static files served via Nginx sidecar
+- [x] Python version selection (3.10, 3.11, 3.12)
 
 **Test Plan:**
 1. Deploy Django app → admin panel accessible
@@ -651,6 +661,14 @@ Support deploying Python web applications. Auto-detect framework and configure a
 
 **Developer Docs:**
 - **Location:** `docs/dev/runtimes/python.md`
+
+**Files Created:**
+- `tests/test_python_runtime.py`
+- `docs/dev/runtimes/python.md`
+
+**Files Modified:**
+- `system/python/build_manager.py`
+- `apps/api/src/modules/build/service.ts`
 
 ---
 
