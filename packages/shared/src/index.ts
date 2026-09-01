@@ -43,6 +43,13 @@ export type {
   ImportEnvFileInput,
 } from "./schemas/env.js";
 
+export { SaveDockerfileSchema } from "./schemas/dockerfile.js";
+export type {
+  SaveDockerfileInput,
+  DockerfileTemplate,
+  DockerfileStatus,
+} from "./schemas/dockerfile.js";
+
 export type {
   User,
   Role,
@@ -57,4 +64,5 @@ export type {
   EnvVar,
   DecryptedEnvVar,
 } from "./types/index.js";
+
 

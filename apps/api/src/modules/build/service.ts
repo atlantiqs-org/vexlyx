@@ -330,7 +330,9 @@ export function createBuildProcessor(
       }
 
       const displayFramework =
-        planResult.framework === "nextjs"
+        planResult.framework === "dockerfile" || planResult.framework === "docker"
+          ? "Custom Dockerfile"
+          : planResult.framework === "nextjs"
           ? "Next.js"
           : planResult.framework === "django"
           ? "Django"
@@ -420,7 +422,7 @@ export function createBuildProcessor(
           memoryLimit: env.DEPLOY_MEMORY_LIMIT,
           portRangeStart: env.DEPLOY_PORT_RANGE_START,
           portRangeEnd: env.DEPLOY_PORT_RANGE_END,
-          hostPort: project.port,
+          containerPort: project.port,
           envVars,
         },
         appendLog,
@@ -502,7 +504,7 @@ export class BuildService {
 
     if (!project.gitUrl && !hasLocalFiles) {
       throw new BuildError(
-        "Project has no connected git repository or local source files. Connect a repository or install WordPress first.",
+        "Project has no connected git repository or local source files. Connect a repository, add a Dockerfile, or install WordPress first.",
         "PROJECT_NOT_CLONED",
         400,
       );
@@ -510,7 +512,7 @@ export class BuildService {
 
     if (!existsSync(projectDir)) {
       throw new BuildError(
-        "Project source directory not found on disk. Connect a repository or install WordPress first.",
+        "Project source directory not found on disk. Connect a repository, add a Dockerfile, or install WordPress first.",
         "PROJECT_DIR_MISSING",
         400,
       );
