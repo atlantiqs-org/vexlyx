@@ -90,6 +90,8 @@ interface GitSettingsProps {
   initialGitUrl?: string | null;
   /** Initial branch from the parent project record */
   initialBranch?: string;
+  /** Callback to refresh parent project data when repository is connected */
+  onProjectUpdate?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +102,7 @@ export function GitSettings({
   projectId,
   initialGitUrl,
   initialBranch = "main",
+  onProjectUpdate,
 }: GitSettingsProps) {
   const { state, fetchMetadata, connectRepo, generateSshKey } =
     useGitSettings(projectId);
@@ -154,6 +157,7 @@ export function GitSettings({
         isPrivate: state.data?.isPrivate ?? false,
       });
       toast.success("Repository connected successfully");
+      if (onProjectUpdate) onProjectUpdate();
     } catch {
       toast.error("Failed to connect repository");
     } finally {

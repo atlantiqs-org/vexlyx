@@ -95,11 +95,124 @@ def get_nixpacks_binary() -> str:
     else:
         install_cmd = "curl -sSL https://nixpacks.com/install.sh | sh"
 
-    fail(
-        f"nixpacks is not installed or not found in PATH. Install it with: {install_cmd}",
-        "NIXPACKS_NOT_FOUND",
-    )
-    return "nixpacks"  # unreachable — fail() exits
+def get_docker_binary() -> str:
+    """Find docker binary in PATH or common install directories."""
+    binary = shutil.which("docker")
+    if binary:
+        return binary
+
+    # Check common locations
+    candidates = [
+        Path("/usr/bin/docker"),
+        Path("/usr/local/bin/docker"),
+        Path("C:/Program Files/Docker/Docker/resources/bin/docker.exe"),
+        Path("C:/Program Files/Docker/Docker/resources/docker.exe"),
+    ]
+    for c in candidates:
+        if c.is_file():
+            return str(c.resolve())
+
+    fail("Docker CLI not found in PATH. Install Docker Engine or Docker Desktop.", "DOCKER_NOT_FOUND")
+    return "docker"
+
+
+def find_dockerfile(project_dir: Path) -> Path | None:
+    """Find Dockerfile in project directory (case-insensitive on Linux/Windows)."""
+    candidates = ["Dockerfile", "dockerfile", "Dockerfile.prod", "Dockerfile.app"]
+    for candidate in candidates:
+        p = project_dir / candidate
+        if p.is_file():
+            return p
+    return None
+
+
+def parse_dockerfile_info(dockerfile_path: Path | None) -> dict:
+    """
+    Parse Dockerfile directives:
+    - exposedPorts: list of integers
+    - healthCheck: string
+    - baseImage: string
+    - entrypoint: string
+    - cmd: string
+    - envKeys: list of strings
+    """
+    if not dockerfile_path or not dockerfile_path.is_file():
+        return {
+            "hasDockerfile": False,
+            "baseImage": None,
+            "exposedPorts": [],
+            "healthCheck": None,
+            "entrypoint": None,
+            "cmd": None,
+            "envKeys": [],
+        }
+
+    try:
+        content = dockerfile_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        content = ""
+
+    base_image = None
+    exposed_ports: list[int] = []
+    health_check = None
+    entrypoint = None
+    cmd = None
+    env_keys: list[str] = []
+
+    for line in content.splitlines():
+        line_clean = line.strip()
+        if not line_clean or line_clean.startswith("#"):
+            continue
+
+        # FROM <image>
+        if line_clean.upper().startswith("FROM "):
+            parts = line_clean.split(None, 2)
+            if len(parts) >= 2 and not base_image:
+                base_image = parts[1]
+
+        # EXPOSE <port> [<port> ...]
+        if line_clean.upper().startswith("EXPOSE "):
+            ports_part = line_clean[7:].strip()
+            for token in ports_part.split():
+                token_clean = token.split("/")[0].strip()
+                if token_clean.isdigit():
+                    port_num = int(token_clean)
+                    if port_num not in exposed_ports:
+                        exposed_ports.append(port_num)
+
+        # HEALTHCHECK
+        if line_clean.upper().startswith("HEALTHCHECK "):
+            health_check = line_clean[12:].strip()
+
+        # ENTRYPOINT
+        if line_clean.upper().startswith("ENTRYPOINT "):
+            entrypoint = line_clean[11:].strip()
+
+        # CMD
+        if line_clean.upper().startswith("CMD "):
+            cmd = line_clean[4:].strip()
+
+        # ENV
+        if line_clean.upper().startswith("ENV "):
+            env_part = line_clean[4:].strip()
+            if "=" in env_part:
+                k = env_part.split("=")[0].strip()
+                if k and k not in env_keys:
+                    env_keys.append(k)
+            else:
+                k = env_part.split(None, 1)[0].strip()
+                if k and k not in env_keys:
+                    env_keys.append(k)
+
+    return {
+        "hasDockerfile": True,
+        "baseImage": base_image,
+        "exposedPorts": exposed_ports,
+        "healthCheck": health_check,
+        "entrypoint": entrypoint,
+        "cmd": cmd,
+        "envKeys": env_keys,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -782,6 +895,11 @@ def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, s
     default_build = "yarn build" if pkg_mgr == "yarn" else f"{pkg_mgr} run build"
     default_start = "yarn start" if pkg_mgr == "yarn" else f"{pkg_mgr} run start"
 
+    # 0. Custom Dockerfile check (F2.5 - Highest priority)
+    dockerfile_p = find_dockerfile(project_dir)
+    if dockerfile_p:
+        return ("dockerfile", None, None, "DOCKER")
+
     # 1. Direct Next.js heuristic check
     is_nextjs = False
     next_config_candidates = [
@@ -956,6 +1074,24 @@ def cmd_plan(payload: dict) -> None:
             "PROJECT_DIR_NOT_FOUND",
         )
 
+    # If project contains a Dockerfile, handle plan directly without invoking nixpacks
+    dockerfile_p = find_dockerfile(project_path)
+    if dockerfile_p:
+        df_info = parse_dockerfile_info(dockerfile_p)
+        respond({
+            "framework": "dockerfile",
+            "buildCmd": None,
+            "startCmd": None,
+            "detectedType": "DOCKER",
+            "isDockerfile": True,
+            "exposedPorts": df_info.get("exposedPorts", []),
+            "healthCheck": df_info.get("healthCheck"),
+            "baseImage": df_info.get("baseImage"),
+            "entrypoint": df_info.get("entrypoint"),
+            "cmd": df_info.get("cmd"),
+        })
+        return
+
     cmd = [nixpacks_bin, "plan", project_dir, "--format", "json"]
 
     # Detect python version and propagate to nixpacks plan
@@ -1044,6 +1180,63 @@ def cmd_build(payload: dict) -> None:
             f"Project directory does not exist: {project_dir}",
             "PROJECT_DIR_NOT_FOUND",
         )
+
+    # 1. Custom Dockerfile build (F2.5)
+    dockerfile_p = find_dockerfile(project_path)
+    if dockerfile_p:
+        docker_bin = get_docker_binary()
+        log_line(f"[vexlyx] Building Docker image from custom Dockerfile: {dockerfile_p.name}")
+        log_line(f"[vexlyx] Build context: {project_dir}")
+
+        docker_build_args = [
+            docker_bin,
+            "build",
+            "--progress=plain",
+            "-t",
+            image_name,
+            "-f",
+            str(dockerfile_p.resolve()),
+        ]
+
+        if isinstance(env_vars, dict):
+            for k, v in env_vars.items():
+                if k and v is not None:
+                    docker_build_args += ["--build-arg", f"{k}={v}"]
+
+        docker_build_args.append(str(project_path.resolve()))
+
+        log_line(f"Running: {' '.join(docker_build_args)}")
+
+        proc = subprocess.Popen(
+            docker_build_args,
+            cwd=str(project_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+
+        if proc.stdout:
+            for raw_line in proc.stdout:
+                parts = [p.strip() for p in raw_line.replace("\r", "\n").split("\n")]
+                for part in parts:
+                    if part:
+                        log_line(part)
+
+        proc.wait()
+
+        if proc.returncode != 0:
+            fail(
+                f"docker build failed with exit code {proc.returncode}",
+                "DOCKER_BUILD_FAILED",
+            )
+
+        print(json.dumps({"done": True, "imageName": image_name}), flush=True)
+        return
+
+    nixpacks_bin = get_nixpacks_binary()
 
     # Auto-resolve start_cmd, build_cmd, and install_cmd if not provided
     detected_fw, detected_build, detected_start, detected_type = detect_framework_and_commands(project_path, {})
@@ -1284,6 +1477,86 @@ def cmd_wordpress_status(payload: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Custom Dockerfile Management Commands (F2.5)
+# ---------------------------------------------------------------------------
+
+def cmd_dockerfile_get(payload: dict) -> None:
+    """
+    Read Dockerfile and .dockerignore content, parsed exposed ports,
+    and health check details from a project directory.
+    """
+    project_dir = require_field(payload, "projectDir")
+    target_path = Path(project_dir)
+    dockerfile_p = find_dockerfile(target_path)
+    dockerignore_p = target_path / ".dockerignore"
+
+    df_content = ""
+    if dockerfile_p and dockerfile_p.is_file():
+        try:
+            df_content = dockerfile_p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+    di_content = ""
+    if dockerignore_p.is_file():
+        try:
+            di_content = dockerignore_p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+    df_info = parse_dockerfile_info(dockerfile_p) if dockerfile_p else {}
+
+    respond({
+        "success": True,
+        "hasDockerfile": bool(dockerfile_p and dockerfile_p.is_file()),
+        "hasDockerignore": dockerignore_p.is_file(),
+        "dockerfile": df_content,
+        "dockerignore": di_content,
+        "filename": dockerfile_p.name if dockerfile_p else "Dockerfile",
+        "exposedPorts": df_info.get("exposedPorts", []),
+        "healthCheck": df_info.get("healthCheck"),
+        "baseImage": df_info.get("baseImage"),
+        "entrypoint": df_info.get("entrypoint"),
+        "cmd": df_info.get("cmd"),
+    })
+
+
+def cmd_dockerfile_save(payload: dict) -> None:
+    """
+    Safely write or update Dockerfile and .dockerignore in project directory,
+    and parse the updated directives.
+    """
+    project_dir = require_field(payload, "projectDir")
+    target_path = Path(project_dir)
+    target_path.mkdir(parents=True, exist_ok=True)
+
+    dockerfile_content = payload.get("dockerfile")
+    dockerignore_content = payload.get("dockerignore")
+
+    dockerfile_p = target_path / "Dockerfile"
+    dockerignore_p = target_path / ".dockerignore"
+
+    if dockerfile_content is not None:
+        dockerfile_p.write_text(dockerfile_content, encoding="utf-8")
+
+    if dockerignore_content is not None:
+        dockerignore_p.write_text(dockerignore_content, encoding="utf-8")
+
+    df_info = parse_dockerfile_info(dockerfile_p)
+
+    respond({
+        "success": True,
+        "hasDockerfile": dockerfile_p.is_file(),
+        "hasDockerignore": dockerignore_p.is_file(),
+        "exposedPorts": df_info.get("exposedPorts", []),
+        "healthCheck": df_info.get("healthCheck"),
+        "baseImage": df_info.get("baseImage"),
+        "entrypoint": df_info.get("entrypoint"),
+        "cmd": df_info.get("cmd"),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1293,6 +1566,8 @@ COMMANDS = {
     "wordpress-install": cmd_wordpress_install,
     "wordpress-upload": cmd_wordpress_upload,
     "wordpress-status": cmd_wordpress_status,
+    "dockerfile-get": cmd_dockerfile_get,
+    "dockerfile-save": cmd_dockerfile_save,
 }
 
 
@@ -1320,3 +1595,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

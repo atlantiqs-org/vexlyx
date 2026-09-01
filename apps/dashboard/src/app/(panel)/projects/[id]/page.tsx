@@ -33,6 +33,7 @@ import { BuildPanel } from "@/components/projects/BuildPanel";
 import { ContainerControls } from "@/components/projects/ContainerControls";
 import { EnvVarEditor } from "@/components/projects/EnvVarEditor";
 import { WordPressPanel } from "@/components/projects/WordPressPanel";
+import { DockerfilePanel } from "@/components/projects/DockerfilePanel";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,7 @@ export default function ProjectDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deployTriggerCount, setDeployTriggerCount] = useState(0);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -310,6 +312,7 @@ export default function ProjectDetailPage() {
         projectId={project.id}
         initialGitUrl={project.gitUrl}
         initialBranch={project.branch}
+        onProjectUpdate={fetchProject}
       />
 
       {/* Live container controls */}
@@ -321,7 +324,10 @@ export default function ProjectDetailPage() {
       {/* Environment variables editor */}
       <EnvVarEditor
         projectId={project.id}
-        onDeployTrigger={fetchProject}
+        onDeployTrigger={() => {
+          setDeployTriggerCount((c) => c + 1);
+          void fetchProject();
+        }}
       />
 
       {/* WordPress Management Panel */}
@@ -332,6 +338,18 @@ export default function ProjectDetailPage() {
         />
       )}
 
+      {/* Custom Dockerfile Management Panel (F2.5) */}
+      {(project.type === "DOCKER" || !project.gitUrl) && (
+        <DockerfilePanel
+          project={project}
+          onProjectUpdate={fetchProject}
+          onDeployTrigger={() => {
+            setDeployTriggerCount((c) => c + 1);
+            void fetchProject();
+          }}
+        />
+      )}
+
       {/* Build & deployment panel */}
       <BuildPanel
         projectId={project.id}
@@ -339,6 +357,7 @@ export default function ProjectDetailPage() {
         gitUrl={project.gitUrl}
         projectType={project.type}
         onDeploySuccess={fetchProject}
+        refreshTrigger={deployTriggerCount}
       />
 
       {/* Delete confirmation dialog */}

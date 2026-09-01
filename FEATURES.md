@@ -28,13 +28,13 @@ This document is the **single source of truth** for all Vexlyx features.
 |-------|--------|----------|
 | Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
 | Phase 1: Project Deployment | 🟡 IN PROGRESS | 71% (5/7) |
-| Phase 2: Multi-Runtime Support | 🔴 NOT STARTED | 0% |
+| Phase 2: Multi-Runtime Support | 🟡 IN PROGRESS | 71% (5/7) |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
 | Phase 4: Email Server | 🔴 NOT STARTED | 0% |
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 25% (12/48 features)
+**Overall Completion:** 35% (17/48 features)
 
 ---
 
@@ -749,18 +749,18 @@ Support deploying modern & traditional PHP applications (Laravel, Symfony, gener
 ---
 
 ### F2.5 — Custom Dockerfile Deployment
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Allow users to provide their own Dockerfile for maximum flexibility.
+Allow users to provide their own Dockerfile for maximum flexibility. Includes interactive Dockerfile and .dockerignore code editor, 1-click starter presets (Node.js, Python, Go, Rust, Static Nginx, Bun, PHP 8.3), native `docker build` execution with real-time log streaming, build argument injection, automatic `EXPOSE` port detection, custom health checks, and Traefik load balancer orchestration.
 
 **Acceptance Criteria:**
-- [ ] Dockerfile upload or inline editor
-- [ ] `docker build` from provided Dockerfile
-- [ ] `.dockerignore` support
-- [ ] Build context from project files
-- [ ] Health check configuration
-- [ ] Exposed port auto-detection or manual specification
+- [x] Dockerfile upload or inline editor
+- [x] `docker build` from provided Dockerfile
+- [x] `.dockerignore` support
+- [x] Build context from project files
+- [x] Health check configuration
+- [x] Exposed port auto-detection or manual specification
 
 **Test Plan:**
 1. Upload custom Dockerfile → builds successfully
@@ -769,6 +769,26 @@ Allow users to provide their own Dockerfile for maximum flexibility.
 
 **Developer Docs:**
 - **Location:** `docs/dev/runtimes/custom-dockerfile.md`
+
+**Files Created:**
+- `system/templates/docker-compose/docker.yml`
+- `packages/shared/src/schemas/dockerfile.ts`
+- `apps/api/src/modules/dockerfile/schema.ts`
+- `apps/api/src/modules/dockerfile/service.ts`
+- `apps/api/src/modules/dockerfile/routes.ts`
+- `apps/dashboard/src/components/projects/DockerfilePanel.tsx`
+- `tests/test_dockerfile_runtime.py`
+- `docs/dev/runtimes/custom-dockerfile.md`
+
+**Files Modified:**
+- `system/python/build_manager.py`
+- `system/python/docker_manager.py`
+- `packages/shared/src/index.ts`
+- `apps/api/src/modules/build/service.ts`
+- `apps/api/src/index.ts`
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
+- `tests/test_multi_project_isolation.py`
+
 
 ---
 

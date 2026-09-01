@@ -107,6 +107,7 @@ export function useDeployments(projectId: string) {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchDeployments = useCallback(async () => {
     try {
@@ -126,5 +127,23 @@ export function useDeployments(projectId: string) {
     void fetchDeployments();
   }, [fetchDeployments]);
 
+  // If any deployment is actively queued/building/deploying, auto-poll every 3s
+  useEffect(() => {
+    const hasActive = deployments.some((d) =>
+      ["QUEUED", "BUILDING", "DEPLOYING"].includes(d.status),
+    );
+
+    if (hasActive) {
+      pollTimerRef.current = setTimeout(() => {
+        void fetchDeployments();
+      }, 3000);
+    }
+
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, [deployments, fetchDeployments]);
+
   return { deployments, isLoading, error, refetch: fetchDeployments };
 }
+

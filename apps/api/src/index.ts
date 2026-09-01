@@ -18,6 +18,7 @@ import { deployRoutes } from "./modules/deploy/routes.js";
 import { logRoutes } from "./modules/logs/routes.js";
 import { envRoutes } from "./modules/env/routes.js";
 import { wordpressRoutes } from "./modules/wordpress/routes.js";
+import { dockerfileRoutes } from "./modules/dockerfile/routes.js";
 
 /**
  * Creates and configures the Fastify application instance.
@@ -66,6 +67,7 @@ async function buildApp() {
   await app.register(logRoutes, { prefix: "/api/projects" });
   await app.register(envRoutes, { prefix: "/api/projects" });
   await app.register(wordpressRoutes, { prefix: "/api/projects" });
+  await app.register(dockerfileRoutes, { prefix: "/api/projects" });
 
   return app;
 }

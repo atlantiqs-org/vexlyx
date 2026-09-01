@@ -193,9 +193,17 @@ interface BuildPanelProps {
   gitUrl: string | null | undefined;
   projectType?: ProjectType;
   onDeploySuccess?: () => void;
+  refreshTrigger?: number;
 }
 
-export function BuildPanel({ projectId, buildCmd, gitUrl, projectType, onDeploySuccess }: BuildPanelProps) {
+export function BuildPanel({
+  projectId,
+  buildCmd,
+  gitUrl,
+  projectType,
+  onDeploySuccess,
+  refreshTrigger,
+}: BuildPanelProps) {
   const { triggerBuild, isTriggering } = useTriggerBuild(projectId);
   const { deployments, isLoading, refetch } = useDeployments(projectId);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -210,34 +218,45 @@ export function BuildPanel({ projectId, buildCmd, gitUrl, projectType, onDeployS
     }
   };
 
-  const [activePollId, setActivePollId] = useState<string | null>(() => {
-    // On mount, start polling if the latest deployment is still active
-    return null;
-  });
+  // Re-fetch when external triggers occur (e.g. Save & Deploy in DockerfilePanel)
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      void refetch();
+    }
+  }, [refreshTrigger, refetch]);
+
+  const [activePollId, setActivePollId] = useState<string | null>(null);
 
   const { deployment: activeDeployment } = useDeploymentPolling(
     projectId,
     activePollId,
   );
 
-  // When active deployment reaches RUNNING, notify parent to refresh project container state
+  // When active deployment finishes, refresh deployment list and notify parent
   useEffect(() => {
-    if (activeDeployment?.status === "RUNNING") {
-      if (onDeploySuccess) onDeploySuccess();
-    }
-  }, [activeDeployment?.status, onDeploySuccess]);
+    if (!activeDeployment) return;
 
-  // When deployments load, check if the latest is still in-progress
+    if (activeDeployment.status === "RUNNING") {
+      void refetch();
+      if (onDeploySuccess) onDeploySuccess();
+    } else if (activeDeployment.status === "FAILED" || activeDeployment.status === "CANCELLED") {
+      void refetch();
+    }
+  }, [activeDeployment?.status, onDeploySuccess, refetch]);
+
+  // When deployments load or change, sync activePollId with the latest in-progress deployment
   useEffect(() => {
     const latest = deployments[0];
     if (latest && ACTIVE_STATUSES.includes(latest.status)) {
       setActivePollId(latest.id);
+    } else if (latest && !ACTIVE_STATUSES.includes(latest.status) && activePollId === latest.id) {
+      setActivePollId(null);
     }
-  }, [deployments]);
+  }, [deployments, activePollId]);
 
   const handleDeploy = async () => {
-    if (!gitUrl && projectType !== "WORDPRESS") {
-      toast.error("Connect a git repository or install WordPress before deploying.");
+    if (!gitUrl && projectType !== "WORDPRESS" && projectType !== "DOCKER") {
+      toast.error("Connect a git repository, install WordPress, or configure a Dockerfile before deploying.");
       return;
     }
     try {
@@ -252,11 +271,10 @@ export function BuildPanel({ projectId, buildCmd, gitUrl, projectType, onDeployS
     }
   };
 
+  const currentStatus = activeDeployment?.status ?? deployments[0]?.status;
   const isDeploying =
     isTriggering ||
-    deployments.some(
-      (d) => d.id === activePollId && ACTIVE_STATUSES.includes(d.status),
-    );
+    (currentStatus ? ACTIVE_STATUSES.includes(currentStatus) : false);
 
   return (
     <Card className="border border-border" id="build-panel">

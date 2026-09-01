@@ -456,7 +456,7 @@ export class DeployService {
       memoryLimit: env.DEPLOY_MEMORY_LIMIT,
       portRangeStart: env.DEPLOY_PORT_RANGE_START,
       portRangeEnd: env.DEPLOY_PORT_RANGE_END,
-      hostPort: project.port,
+      containerPort: project.port,
       domain: body.domain,
       envVars,
     });
