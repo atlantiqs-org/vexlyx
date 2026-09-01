@@ -35,7 +35,7 @@ import docker_manager
 
 def test_compose_templates_have_project_name():
     print("Testing that all Docker Compose templates have top-level project name...")
-    templates = ["node.yml", "next.yml", "python.yml", "static.yml"]
+    templates = ["node.yml", "next.yml", "python.yml", "static.yml", "php.yml", "wordpress.yml"]
     for tmpl in templates:
         tmpl_path = TEMPLATES_DIR / tmpl
         assert tmpl_path.is_file(), f"Template {tmpl} does not exist"

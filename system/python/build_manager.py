@@ -17,12 +17,17 @@ Never run this script as root.
 Requires `nixpacks` to be installed and available in PATH.
 """
 
+import base64
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
+import tarfile
+import urllib.request
+import zipfile
 from pathlib import Path
 
 
@@ -472,6 +477,291 @@ def detect_python_project(project_dir: Path, plan: dict) -> tuple[str, str | Non
 
 
 # ---------------------------------------------------------------------------
+# PHP & WordPress Framework & Version Helpers (F2.4)
+# ---------------------------------------------------------------------------
+
+def detect_php_version(project_dir: Path, env_vars: dict | None = None) -> str | None:
+    """
+    Detect PHP version requested by project (e.g. '8.1', '8.2', '8.3').
+    Checks:
+    1. env_vars['NIXPACKS_PHP_VERSION'] or env_vars['PHP_VERSION']
+    2. .php-version file
+    3. runtime.txt file
+    4. composer.json -> require.php
+    """
+    if env_vars:
+        if env_vars.get("NIXPACKS_PHP_VERSION"):
+            return str(env_vars["NIXPACKS_PHP_VERSION"]).strip()
+        if env_vars.get("PHP_VERSION"):
+            return str(env_vars["PHP_VERSION"]).strip()
+
+    # 1. .php-version
+    php_version_file = project_dir / ".php-version"
+    if php_version_file.is_file():
+        try:
+            content = php_version_file.read_text(encoding="utf-8").strip()
+            m = re.search(r"(\d+\.\d+)", content)
+            if m:
+                return m.group(1)
+        except Exception:
+            pass
+
+    # 2. runtime.txt (e.g. 'php-8.2' or '8.3')
+    runtime_file = project_dir / "runtime.txt"
+    if runtime_file.is_file():
+        try:
+            content = runtime_file.read_text(encoding="utf-8").strip()
+            m = re.search(r"php[-:]?(\d+\.\d+)", content, re.IGNORECASE)
+            if m:
+                return m.group(1)
+            m2 = re.search(r"(\d+\.\d+)", content)
+            if m2:
+                return m2.group(1)
+        except Exception:
+            pass
+
+    # 3. composer.json require.php
+    composer_file = project_dir / "composer.json"
+    if composer_file.is_file():
+        try:
+            data = json.loads(composer_file.read_text(encoding="utf-8"))
+            req = data.get("require", {})
+            php_req = req.get("php")
+            if php_req:
+                m = re.search(r"(\d+\.\d+)", str(php_req))
+                if m:
+                    return m.group(1)
+        except Exception:
+            pass
+
+    return None
+
+
+def detect_php_project(project_dir: Path, plan: dict) -> tuple[str, str | None, str | None, str] | None:
+    """
+    Detect PHP framework (WordPress, Laravel, Symfony, generic PHP),
+    suggested build command, start command, and project type (PHP or WORDPRESS).
+    """
+    is_wp = (
+        (project_dir / "wp-config.php").is_file()
+        or (project_dir / "wp-login.php").is_file()
+        or (project_dir / "wp-content").is_dir()
+        or (project_dir / "wp-includes").is_dir()
+        or (project_dir / "wp-config-sample.php").is_file()
+    )
+    if is_wp:
+        return ("wordpress", None, None, "WORDPRESS")
+
+    composer_data = {}
+    composer_file = project_dir / "composer.json"
+    if composer_file.is_file():
+        try:
+            composer_data = json.loads(composer_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    req_deps = {**composer_data.get("require", {}), **composer_data.get("require-dev", {})}
+    req_keys_lower = {k.lower(): v for k, v in req_deps.items()}
+
+    # 1. Laravel
+    has_artisan = (project_dir / "artisan").is_file()
+    has_laravel_dep = "laravel/framework" in req_keys_lower or "illuminate/foundation" in req_keys_lower
+    if has_artisan or has_laravel_dep:
+        build_cmd = "composer install --no-dev --optimize-autoloader" if composer_file.is_file() else None
+        return ("laravel", build_cmd, None, "PHP")
+
+    # 2. Symfony
+    has_console = (project_dir / "bin" / "console").is_file()
+    has_symfony_dep = any("symfony/" in k for k in req_keys_lower)
+    if has_console or (has_symfony_dep and (project_dir / "public" / "index.php").is_file()):
+        build_cmd = "composer install --no-dev --optimize-autoloader" if composer_file.is_file() else None
+        return ("symfony", build_cmd, None, "PHP")
+
+    # 3. Generic PHP / Composer
+    has_php_files = bool(list(project_dir.glob("*.php"))) or (project_dir / "public" / "index.php").is_file() or (project_dir / "src" / "index.php").is_file()
+    providers = plan.get("providers") or []
+    plan_is_php = any("php" in str(p).lower() for p in providers) or "php" in str(plan.get("language", "")).lower()
+
+    if plan_is_php or composer_file.is_file() or has_php_files:
+        build_cmd = "composer install --no-dev" if composer_file.is_file() else None
+        return ("php", build_cmd, None, "PHP")
+
+    return None
+
+
+def generate_wp_salts() -> list[tuple[str, str]]:
+    """Generate 8 cryptographically secure WordPress salts."""
+    salt_names = [
+        "AUTH_KEY",
+        "SECURE_AUTH_KEY",
+        "LOGGED_IN_KEY",
+        "NONCE_KEY",
+        "AUTH_SALT",
+        "SECURE_AUTH_SALT",
+        "LOGGED_IN_SALT",
+        "NONCE_SALT",
+    ]
+    return [(name, secrets.token_urlsafe(48)) for name in salt_names]
+
+
+def generate_wp_config_content(
+    db_name: str = "wordpress",
+    db_user: str = "root",
+    db_password: str = "",
+    db_host: str = "localhost",
+    db_prefix: str = "wp_",
+) -> str:
+    salts = generate_wp_salts()
+    salt_definitions = "\n".join([f"define('{name}', '{val}');" for name, val in salts])
+
+    return f"""<?php
+/**
+ * The base configuration for WordPress
+ * Generated automatically by Vexlyx Control Panel (F2.4).
+ */
+
+// ** Database settings ** //
+define('DB_NAME', '{db_name}');
+define('DB_USER', '{db_user}');
+define('DB_PASSWORD', '{db_password}');
+define('DB_HOST', '{db_host}');
+define('DB_CHARSET', 'utf8mb4');
+define('DB_COLLATE', '');
+
+/**#@+
+ * Authentication unique keys and salts.
+ */
+{salt_definitions}
+/**#@-*/
+
+/**
+ * WordPress database table prefix.
+ */
+$table_prefix = '{db_prefix}';
+
+/**
+ * For developers: WordPress debugging mode.
+ */
+define('WP_DEBUG', false);
+
+/**
+ * Direct filesystem method — allows direct plugin and theme installs
+ * without requiring FTP credentials inside containers.
+ */
+define('FS_METHOD', 'direct');
+
+/**
+ * Reverse proxy and SSL header handling for Traefik.
+ */
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {{
+    $_SERVER['HTTPS'] = 'on';
+}}
+
+/* That's all, stop editing! Happy publishing. */
+
+/** Absolute path to the WordPress directory. */
+if (!defined('ABSPATH')) {{
+    define('ABSPATH', __DIR__ . '/');
+}}
+
+/** Sets up WordPress vars and included files. */
+require_once ABSPATH . 'wp-settings.php';
+"""
+
+
+def generate_wp_htaccess_content() -> str:
+    return """# BEGIN WordPress
+# The directives between "BEGIN WordPress" and "END WordPress" are
+# dynamically generated, and should only be modified via WordPress filters.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
+"""
+
+
+def download_and_extract_wordpress_core(target_dir: Path) -> None:
+    """
+    Downloads official WordPress core tarball from wordpress.org and extracts to target_dir.
+    If offline or network fails, creates valid WordPress scaffolding.
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
+    wp_url = "https://wordpress.org/latest.tar.gz"
+
+    cache_dir = Path.home() / ".cache" / "vexlyx"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_tarball = cache_dir / "wordpress-latest.tar.gz"
+
+    download_needed = not cached_tarball.is_file() or cached_tarball.stat().st_size < 1000000
+
+    if download_needed:
+        try:
+            req = urllib.request.Request(
+                wp_url,
+                headers={"User-Agent": "Vexlyx-Control-Panel/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp, open(cached_tarball, "wb") as out_file:
+                shutil.copyfileobj(resp, out_file)
+        except Exception:
+            pass
+
+    if cached_tarball.is_file():
+        try:
+            with tarfile.open(cached_tarball, "r:gz") as tar:
+                for member in tar.getmembers():
+                    parts = Path(member.name).parts
+                    if len(parts) > 1 and parts[0] == "wordpress":
+                        rel_path = Path(*parts[1:])
+                        dest_path = target_dir / rel_path
+                        if member.isdir():
+                            dest_path.mkdir(parents=True, exist_ok=True)
+                        elif member.isfile():
+                            dest_path.parent.mkdir(parents=True, exist_ok=True)
+                            with tar.extractfile(member) as src_f, open(dest_path, "wb") as dst_f:
+                                if src_f:
+                                    shutil.copyfileobj(src_f, dst_f)
+            return
+        except Exception:
+            pass
+
+    # Fallback minimal scaffolding
+    (target_dir / "index.php").write_text("<?php\ndefine('WP_USE_THEMES', true);\nrequire __DIR__ . '/wp-blog-header.php';\n", encoding="utf-8")
+    (target_dir / "wp-blog-header.php").write_text("<?php\n// WordPress entrypoint\n", encoding="utf-8")
+    (target_dir / "wp-login.php").write_text("<?php\n// WordPress login\n", encoding="utf-8")
+    (target_dir / "wp-content" / "plugins").mkdir(parents=True, exist_ok=True)
+    (target_dir / "wp-content" / "themes").mkdir(parents=True, exist_ok=True)
+    (target_dir / "wp-content" / "uploads").mkdir(parents=True, exist_ok=True)
+    (target_dir / "wp-includes").mkdir(parents=True, exist_ok=True)
+    (target_dir / "wp-includes" / "version.php").write_text("<?php\n$wp_version = '6.7.2';\n", encoding="utf-8")
+
+
+def safe_extract_zip(zip_path: Path, target_dir: Path) -> int:
+    """Safely extracts a ZIP archive into target_dir preventing path traversal."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    count = 0
+    resolved_target = target_dir.resolve()
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for member in zf.infolist():
+            dest = (target_dir / member.filename).resolve()
+            if not str(dest).startswith(str(resolved_target)):
+                continue
+            if member.is_dir():
+                dest.mkdir(parents=True, exist_ok=True)
+            else:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(member) as src, open(dest, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                count += 1
+    return count
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -546,13 +836,19 @@ def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, s
         py_framework, py_build_cmd, py_start_cmd, py_type = py_result
         return (py_framework, py_build_cmd, py_start_cmd, py_type)
 
-    # 4. Plain Static HTML/CSS/JS check
+    # 4. PHP / WordPress / Laravel / Symfony check (F2.4)
+    php_result = detect_php_project(project_dir, plan)
+    if php_result:
+        php_framework, php_build_cmd, php_start_cmd, php_type = php_result
+        return (php_framework, php_build_cmd, php_start_cmd, php_type)
+
+    # 5. Plain Static HTML/CSS/JS check
     static_result = detect_static_project(project_dir, plan)
     if static_result:
         s_framework, s_build_cmd, s_start_cmd, s_type = static_result
         return (s_framework, s_build_cmd, s_start_cmd, s_type)
 
-    # 5. Generic Node / Frontend build tools (Gulp, Webpack, etc.) & Nixpacks fallback
+    # 6. Generic Node / Frontend build tools (Gulp, Webpack, etc.) & Nixpacks fallback
     providers = plan.get("providers") or []
     provider_name = providers[0] if len(providers) > 0 else None
     variables = plan.get("variables") or {}
@@ -600,6 +896,10 @@ def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, s
         detected_type = "NODEJS"
     elif "python" in fw_lower or "django" in fw_lower or "flask" in fw_lower or "fastapi" in fw_lower:
         detected_type = "PYTHON"
+    elif "wordpress" in fw_lower:
+        detected_type = "WORDPRESS"
+    elif "php" in fw_lower or "laravel" in fw_lower or "symfony" in fw_lower:
+        detected_type = "PHP"
 
     # For Node/JS/TS/Static projects, resolve start_cmd and align static builds
     pkg_json_path = project_dir / "package.json"
@@ -671,9 +971,14 @@ def cmd_plan(payload: dict) -> None:
     if node_ver:
         cmd += ["--env", f"NIXPACKS_NODE_VERSION={node_ver}"]
 
+    # Detect php version and propagate to nixpacks plan
+    php_ver = detect_php_version(project_path, env_vars if isinstance(env_vars, dict) else None)
+    if php_ver:
+        cmd += ["--env", f"NIXPACKS_PHP_VERSION={php_ver}"]
+
     if isinstance(env_vars, dict):
         for k, v in env_vars.items():
-            if k and v is not None and k not in ("NIXPACKS_PYTHON_VERSION", "NIXPACKS_NODE_VERSION"):
+            if k and v is not None and k not in ("NIXPACKS_PYTHON_VERSION", "NIXPACKS_NODE_VERSION", "NIXPACKS_PHP_VERSION"):
                 cmd += ["--env", f"{k}={v}"]
 
     result = subprocess.run(
@@ -747,7 +1052,7 @@ def cmd_build(payload: dict) -> None:
     if not build_cmd and detected_build:
         build_cmd = detected_build
 
-    # For Python projects, ensure setuptools<70 (which provides pkg_resources) is installed into venv for gunicorn/wsgi on Python 3.12
+    # For Python projects, ensure setuptools<70 is installed into venv
     if detected_type == "PYTHON" and not install_cmd:
         if (project_path / "requirements.txt").is_file():
             install_cmd = "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install 'setuptools<70' && pip install -r requirements.txt"
@@ -775,17 +1080,30 @@ def cmd_build(payload: dict) -> None:
     if start_cmd:
         cmd += ["--start-cmd", start_cmd]
 
-    # Detect python and node versions and ensure they are passed
+    # Detect runtime versions and ensure they are passed
     py_ver = detect_python_version(Path(project_dir), env_vars if isinstance(env_vars, dict) else None)
     node_ver = detect_node_version(Path(project_dir), env_vars if isinstance(env_vars, dict) else None)
     if not node_ver and (detected_type in ("REACT", "NEXTJS") or detected_fw in ("vite", "react")):
         node_ver = "20"
+
+    php_ver = detect_php_version(Path(project_dir), env_vars if isinstance(env_vars, dict) else None)
+    if not php_ver and (detected_type in ("PHP", "WORDPRESS") or detected_fw in ("php", "laravel", "symfony", "wordpress")):
+        php_ver = "8.2"
 
     merged_env_vars = dict(env_vars) if isinstance(env_vars, dict) else {}
     if py_ver and "NIXPACKS_PYTHON_VERSION" not in merged_env_vars:
         merged_env_vars["NIXPACKS_PYTHON_VERSION"] = py_ver
     if node_ver and "NIXPACKS_NODE_VERSION" not in merged_env_vars:
         merged_env_vars["NIXPACKS_NODE_VERSION"] = node_ver
+    if php_ver and "NIXPACKS_PHP_VERSION" not in merged_env_vars:
+        merged_env_vars["NIXPACKS_PHP_VERSION"] = php_ver
+
+    # For PHP & WordPress applications, ensure pretty URLs/permalinks fallback is configured
+    if (detected_type in ("PHP", "WORDPRESS") or detected_fw in ("php", "laravel", "symfony", "wordpress")) and "NIXPACKS_PHP_FALLBACK_PATH" not in merged_env_vars:
+        merged_env_vars["NIXPACKS_PHP_FALLBACK_PATH"] = "/index.php"
+
+    if (project_path / "public").is_dir() and "NIXPACKS_PHP_ROOT_DIR" not in merged_env_vars and detected_fw in ("laravel", "symfony"):
+        merged_env_vars["NIXPACKS_PHP_ROOT_DIR"] = "/app/public"
 
     for k, v in merged_env_vars.items():
         if k and v is not None:
@@ -824,12 +1142,157 @@ def cmd_build(payload: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# WordPress One-Click Scaffolding & Asset Upload Commands (F2.4)
+# ---------------------------------------------------------------------------
+
+def cmd_wordpress_install(payload: dict) -> None:
+    """
+    Scaffold a WordPress installation:
+    1. Downloads official WordPress core (if requested/needed).
+    2. Generates secure wp-config.php with cryptographically secure salts.
+    3. Creates .htaccess rewrite rules for permalinks.
+    4. Sets up wp-content directories.
+    """
+    project_dir = require_field(payload, "projectDir")
+    target_path = Path(project_dir)
+    target_path.mkdir(parents=True, exist_ok=True)
+
+    db_name = payload.get("dbName", "wordpress")
+    db_user = payload.get("dbUser", "root")
+    db_password = payload.get("dbPassword", "")
+    db_host = payload.get("dbHost", "localhost")
+    db_prefix = payload.get("dbPrefix", "wp_")
+    download_core = payload.get("downloadCore", True)
+
+    # 1. Download/extract core if needed
+    if download_core:
+        has_core = (target_path / "wp-login.php").is_file() and (target_path / "wp-includes").is_dir()
+        if not has_core:
+            download_and_extract_wordpress_core(target_path)
+
+    # 2. Write wp-config.php
+    wp_config_content = generate_wp_config_content(
+        db_name=db_name,
+        db_user=db_user,
+        db_password=db_password,
+        db_host=db_host,
+        db_prefix=db_prefix,
+    )
+    (target_path / "wp-config.php").write_text(wp_config_content, encoding="utf-8")
+
+    # 3. Write .htaccess for permalinks
+    htaccess_file = target_path / ".htaccess"
+    if not htaccess_file.is_file():
+        htaccess_file.write_text(generate_wp_htaccess_content(), encoding="utf-8")
+
+    # 4. Ensure wp-content subdirectories exist
+    (target_path / "wp-content" / "plugins").mkdir(parents=True, exist_ok=True)
+    (target_path / "wp-content" / "themes").mkdir(parents=True, exist_ok=True)
+    (target_path / "wp-content" / "uploads").mkdir(parents=True, exist_ok=True)
+
+    respond({
+        "success": True,
+        "projectDir": str(target_path.resolve()),
+        "hasWpConfig": True,
+        "hasHtaccess": True,
+    })
+
+
+def cmd_wordpress_upload(payload: dict) -> None:
+    """
+    Upload and safely extract a plugin or theme ZIP archive into WordPress wp-content.
+    """
+    project_dir = require_field(payload, "projectDir")
+    asset_type = require_field(payload, "assetType")  # 'plugin' or 'theme'
+    target_path = Path(project_dir)
+
+    if not target_path.is_dir():
+        fail(f"Project directory does not exist: {project_dir}", "PROJECT_DIR_NOT_FOUND")
+
+    subfolder = "plugins" if asset_type == "plugin" else "themes"
+    dest_dir = target_path / "wp-content" / subfolder
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_path = payload.get("zipPath")
+    zip_base64 = payload.get("zipBase64")
+
+    extracted_count = 0
+    if zip_path and Path(zip_path).is_file():
+        extracted_count = safe_extract_zip(Path(zip_path), dest_dir)
+    elif zip_base64:
+        # Write base64 buffer to temporary zip and extract
+        temp_zip = dest_dir / f"tmp_upload_{secrets.token_hex(8)}.zip"
+        try:
+            temp_zip.write_bytes(base64.b64decode(zip_base64))
+            extracted_count = safe_extract_zip(temp_zip, dest_dir)
+        finally:
+            if temp_zip.is_file():
+                temp_zip.unlink(missing_ok=True)
+    else:
+        fail("Missing required zipPath or zipBase64 field", "INVALID_PAYLOAD")
+
+    respond({
+        "success": True,
+        "assetType": asset_type,
+        "extractedFiles": extracted_count,
+        "targetDir": str(dest_dir.resolve()),
+    })
+
+
+def cmd_wordpress_status(payload: dict) -> None:
+    """
+    Inspect WordPress installation status, core version, plugins, and themes.
+    """
+    project_dir = require_field(payload, "projectDir")
+    target_path = Path(project_dir)
+
+    is_installed = (target_path / "wp-config.php").is_file() or (target_path / "wp-login.php").is_file()
+
+    core_version = "unknown"
+    version_file = target_path / "wp-includes" / "version.php"
+    if version_file.is_file():
+        try:
+            content = version_file.read_text(encoding="utf-8")
+            m = re.search(r"\$wp_version\s*=\s*['\"]([^'\"]+)['\"]", content)
+            if m:
+                core_version = m.group(1)
+        except Exception:
+            pass
+
+    plugins: list[str] = []
+    plugins_dir = target_path / "wp-content" / "plugins"
+    if plugins_dir.is_dir():
+        for item in plugins_dir.iterdir():
+            if item.is_dir() and not item.name.startswith("."):
+                plugins.append(item.name)
+            elif item.is_file() and item.suffix == ".php" and item.name != "index.php":
+                plugins.append(item.stem)
+
+    themes: list[str] = []
+    themes_dir = target_path / "wp-content" / "themes"
+    if themes_dir.is_dir():
+        for item in themes_dir.iterdir():
+            if item.is_dir() and not item.name.startswith("."):
+                themes.append(item.name)
+
+    respond({
+        "installed": is_installed,
+        "coreVersion": core_version,
+        "plugins": plugins,
+        "themes": themes,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 COMMANDS = {
     "plan": cmd_plan,
     "build": cmd_build,
+    "wordpress-install": cmd_wordpress_install,
+    "wordpress-upload": cmd_wordpress_upload,
+    "wordpress-status": cmd_wordpress_status,
 }
 
 

@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import type { FastifyBaseLogger } from "fastify";
-import type { Deployment } from "@vexlyx/shared";
+import type { Deployment, ProjectType } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
 import { runDockerDeploy } from "../deploy/service.js";
 import { EnvService } from "../env/service.js";
@@ -352,6 +352,14 @@ export function createBuildProcessor(
           ? "Gulp (Static)"
           : planResult.framework === "webpack"
           ? "Webpack (Static)"
+          : planResult.framework === "wordpress"
+          ? "WordPress"
+          : planResult.framework === "laravel"
+          ? "Laravel (PHP)"
+          : planResult.framework === "symfony"
+          ? "Symfony (PHP)"
+          : planResult.framework === "php"
+          ? "PHP"
           : planResult.framework === "static"
           ? "Static Site"
           : planResult.framework.charAt(0).toUpperCase() + planResult.framework.slice(1);
@@ -365,9 +373,9 @@ export function createBuildProcessor(
       ) {
         await prisma.project.update({
           where: { id: projectId },
-          data: { type: planResult.detectedType as any },
+          data: { type: planResult.detectedType as ProjectType },
         });
-        effectiveProjectType = planResult.detectedType as any;
+        effectiveProjectType = planResult.detectedType as ProjectType;
         await appendLog(
           `[vexlyx] Project type auto-aligned from ${project.type} to ${displayFramework} (${planResult.detectedType})`,
         );
@@ -489,19 +497,20 @@ export class BuildService {
     enqueueJob: (data: BuildJobData) => Promise<void>,
   ): Promise<Deployment> {
     const project = await this.findOwnedProject(userId, projectId);
+    const projectDir = resolve(env.PROJECTS_DIR, projectId);
+    const hasLocalFiles = existsSync(projectDir) && readdirSync(projectDir).length > 0;
 
-    if (!project.gitUrl) {
+    if (!project.gitUrl && !hasLocalFiles) {
       throw new BuildError(
-        "Project has no git repository connected. Connect a repository before building.",
+        "Project has no connected git repository or local source files. Connect a repository or install WordPress first.",
         "PROJECT_NOT_CLONED",
         400,
       );
     }
 
-    const projectDir = resolve(env.PROJECTS_DIR, projectId);
     if (!existsSync(projectDir)) {
       throw new BuildError(
-        "Project source directory not found on disk. Run a git connect/clone first.",
+        "Project source directory not found on disk. Connect a repository or install WordPress first.",
         "PROJECT_DIR_MISSING",
         400,
       );

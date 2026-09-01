@@ -32,6 +32,7 @@ import { GitSettings } from "@/components/projects/GitSettings";
 import { BuildPanel } from "@/components/projects/BuildPanel";
 import { ContainerControls } from "@/components/projects/ContainerControls";
 import { EnvVarEditor } from "@/components/projects/EnvVarEditor";
+import { WordPressPanel } from "@/components/projects/WordPressPanel";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -323,11 +324,20 @@ export default function ProjectDetailPage() {
         onDeployTrigger={fetchProject}
       />
 
+      {/* WordPress Management Panel */}
+      {project.type === "WORDPRESS" && (
+        <WordPressPanel
+          project={project}
+          onProjectUpdate={fetchProject}
+        />
+      )}
+
       {/* Build & deployment panel */}
       <BuildPanel
         projectId={project.id}
         buildCmd={project.buildCmd}
         gitUrl={project.gitUrl}
+        projectType={project.type}
         onDeploySuccess={fetchProject}
       />
 

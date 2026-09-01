@@ -197,8 +197,8 @@ def pick_template(project_type: str) -> str:
         "PYTHON": "python.yml",
         "REACT": "static.yml",
         "STATIC": "static.yml",
-        "PHP": "node.yml",       # fallback until PHP template added in F2.4
-        "WORDPRESS": "node.yml", # fallback until WP template added in F2.4
+        "PHP": "php.yml",
+        "WORDPRESS": "wordpress.yml",
         "DOCKER": "node.yml",    # fallback until custom Dockerfile added in F2.5
     }
     return mapping.get(project_type.upper(), "node.yml")

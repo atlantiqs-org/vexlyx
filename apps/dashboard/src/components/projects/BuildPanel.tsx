@@ -26,7 +26,7 @@ import {
   useDeploymentPolling,
   useDeployments,
 } from "@/hooks/useBuild";
-import type { Deployment } from "@vexlyx/shared";
+import type { Deployment, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
 // Status display config
@@ -191,10 +191,11 @@ interface BuildPanelProps {
   projectId: string;
   buildCmd: string | null | undefined;
   gitUrl: string | null | undefined;
+  projectType?: ProjectType;
   onDeploySuccess?: () => void;
 }
 
-export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: BuildPanelProps) {
+export function BuildPanel({ projectId, buildCmd, gitUrl, projectType, onDeploySuccess }: BuildPanelProps) {
   const { triggerBuild, isTriggering } = useTriggerBuild(projectId);
   const { deployments, isLoading, refetch } = useDeployments(projectId);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -235,8 +236,8 @@ export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: Bui
   }, [deployments]);
 
   const handleDeploy = async () => {
-    if (!gitUrl) {
-      toast.error("Connect a git repository before deploying.");
+    if (!gitUrl && projectType !== "WORDPRESS") {
+      toast.error("Connect a git repository or install WordPress before deploying.");
       return;
     }
     try {
@@ -247,7 +248,7 @@ export function BuildPanel({ projectId, buildCmd, gitUrl, onDeploySuccess }: Bui
         await refetch();
       }
     } catch {
-      toast.error("Failed to trigger build. Check that the project is cloned.");
+      toast.error("Failed to trigger build. Check that the project is installed or connected.");
     }
   };
 

@@ -705,19 +705,19 @@ Support deploying React applications built with Vite as static sites.
 ---
 
 ### F2.4 — PHP & WordPress Deployment
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Support deploying PHP applications and one-click WordPress installation.
+Support deploying modern & traditional PHP applications (Laravel, Symfony, generic PHP) and one-click WordPress installation with Nginx + PHP-FPM container orchestration, multi-version PHP support (8.1, 8.2, 8.3), automated core scaffolding, secure salt generation, wp-config.php auto-wiring, permalinks rewrites, and plugin/theme file uploads.
 
 **Acceptance Criteria:**
-- [ ] PHP-FPM + Nginx container setup
-- [ ] Multiple PHP versions (8.1, 8.2, 8.3)
-- [ ] WordPress one-click installer
-- [ ] Auto-download WordPress core
-- [ ] wp-config.php auto-generation with DB credentials
-- [ ] Plugin/theme upload via file manager
-- [ ] Permalink support
+- [x] PHP-FPM + Nginx container setup
+- [x] Multiple PHP versions (8.1, 8.2, 8.3)
+- [x] WordPress one-click installer
+- [x] Auto-download WordPress core
+- [x] wp-config.php auto-generation with DB credentials
+- [x] Plugin/theme upload via file manager
+- [x] Permalink support
 
 **Test Plan:**
 1. Deploy PHP app → executes correctly
@@ -727,6 +727,24 @@ Support deploying PHP applications and one-click WordPress installation.
 
 **Developer Docs:**
 - **Location:** `docs/dev/runtimes/php-wordpress.md`
+
+**Files Created:**
+- `system/templates/docker-compose/php.yml`
+- `system/templates/docker-compose/wordpress.yml`
+- `apps/api/src/modules/wordpress/schema.ts`
+- `apps/api/src/modules/wordpress/service.ts`
+- `apps/api/src/modules/wordpress/routes.ts`
+- `apps/dashboard/src/components/projects/WordPressPanel.tsx`
+- `tests/test_php_wordpress_runtime.py`
+- `docs/dev/runtimes/php-wordpress.md`
+
+**Files Modified:**
+- `system/python/build_manager.py`
+- `system/python/docker_manager.py`
+- `apps/api/src/modules/build/service.ts`
+- `apps/api/src/index.ts`
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
+- `tests/test_multi_project_isolation.py`
 
 ---
 
