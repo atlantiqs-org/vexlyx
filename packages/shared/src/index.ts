@@ -64,6 +64,20 @@ export type {
   DatabaseConnectionTestResult,
 } from "./schemas/databases.js";
 
+export {
+  GitHubCommitAuthorSchema,
+  GitHubCommitSchema,
+  GitHubRepositorySchema,
+  GitHubPushPayloadSchema,
+  GitHubPingPayloadSchema,
+} from "./schemas/webhooks.js";
+export type {
+  GitHubPushPayload,
+  GitHubPingPayload,
+  GitHubWebhookResponse,
+  RotateWebhookSecretResponse,
+} from "./schemas/webhooks.js";
+
 export type {
   User,
   Role,

@@ -83,4 +83,23 @@ export async function gitRoutes(app: FastifyInstance) {
       }
     },
   );
+
+  // -------------------------------------------------------------------------
+  // POST /api/projects/:id/git/webhook-secret/rotate
+  // Rotate / regenerate the HMAC-SHA256 webhook secret for this project.
+  // -------------------------------------------------------------------------
+  app.post(
+    "/:id/git/webhook-secret/rotate",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const result = await service.rotateWebhookSecret(request.userId!, id);
+        reply.status(200);
+        return result;
+      } catch (err) {
+        handleGitError(err, reply);
+      }
+    },
+  );
 }

@@ -7,6 +7,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Deployment, ProjectType } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
 import { runDockerDeploy } from "../deploy/service.js";
+import { runGitManager } from "../git/service.js";
 import { EnvService } from "../env/service.js";
 import { getIO } from "../../plugins/socket.js";
 import type { BuildJobData, DeploymentListQuery, TriggerBuildBody } from "./schema.js";
@@ -307,11 +308,38 @@ export function createBuildProcessor(
       // Fetch project details
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        select: { name: true, type: true, port: true, startCmd: true },
+        select: {
+          name: true,
+          type: true,
+          port: true,
+          startCmd: true,
+          gitUrl: true,
+          branch: true,
+          sshPrivateKeyPath: true,
+        },
       });
 
       if (!project) {
         throw new Error("Project not found during build phase");
+      }
+
+      // If project has a connected git repository, sync latest commits
+      if (project.gitUrl) {
+        await appendLog(`[vexlyx] Syncing latest git commits (${project.branch})…`);
+        try {
+          await runGitManager({
+            command: "clone",
+            projectId,
+            gitUrl: project.gitUrl,
+            branch: project.branch,
+            projectsDir: resolve(env.PROJECTS_DIR),
+            sshPrivateKeyPath: project.sshPrivateKeyPath ?? undefined,
+          });
+          await appendLog("[vexlyx] Git workspace up-to-date ✓");
+        } catch (gitErr) {
+          const msg = gitErr instanceof Error ? gitErr.message : String(gitErr);
+          await appendLog(`[vexlyx:warn] Git sync notice: ${msg}`);
+        }
       }
 
       // Fetch and decrypt project environment variables early

@@ -120,6 +120,7 @@ export interface GitMetadata {
   branch: string;
   sshPublicKey: string | null;
   webhookUrl: string | null;
+  webhookSecret: string | null;
   isPrivate: boolean;
 }
 

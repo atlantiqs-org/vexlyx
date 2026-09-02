@@ -19,6 +19,7 @@ interface UseGitSettings {
   fetchMetadata: () => Promise<void>;
   connectRepo: (input: ConnectRepoInput) => Promise<void>;
   generateSshKey: () => Promise<void>;
+  rotateWebhookSecret: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,5 +87,31 @@ export function useGitSettings(projectId: string): UseGitSettings {
     }
   }, [projectId]);
 
-  return { state, fetchMetadata, connectRepo, generateSshKey };
+  const rotateWebhookSecret = useCallback(async () => {
+    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    try {
+      const result = await fetchAPI<{ webhookSecret: string; webhookUrl: string }>(
+        `/api/projects/${projectId}/git/webhook-secret/rotate`,
+        { method: "POST" },
+      );
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        data: prev.data
+          ? {
+              ...prev.data,
+              webhookSecret: result.webhookSecret,
+              webhookUrl: result.webhookUrl,
+            }
+          : null,
+      }));
+    } catch (err) {
+      const message =
+        err instanceof ApiRequestError ? err.message : "Failed to rotate webhook secret";
+      setState((prev) => ({ ...prev, isLoading: false, error: message }));
+      throw err;
+    }
+  }, [projectId]);
+
+  return { state, fetchMetadata, connectRepo, generateSshKey, rotateWebhookSecret };
 }

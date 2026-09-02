@@ -68,7 +68,7 @@ function getGitManagerScriptPath(): string {
   return resolve(process.cwd(), "system/python/git_manager.py");
 }
 
-function runGitManager(payload: GitManagerPayload): Promise<GitManagerResult> {
+export function runGitManager(payload: GitManagerPayload): Promise<GitManagerResult> {
   return new Promise((resolveP, rejectP) => {
     const scriptPath = getGitManagerScriptPath();
 
@@ -161,6 +161,7 @@ export class GitService {
       webhookUrl: project.webhookSecret
         ? `${env.API_BASE_URL}/api/webhooks/github?projectId=${projectId}`
         : null,
+      webhookSecret: project.webhookSecret,
       isPrivate: project.sshPublicKey !== null,
     };
   }
@@ -207,7 +208,26 @@ export class GitService {
       branch: updated.branch,
       sshPublicKey: updated.sshPublicKey,
       webhookUrl: `${env.API_BASE_URL}/api/webhooks/github?projectId=${projectId}`,
+      webhookSecret: updated.webhookSecret,
       isPrivate: updated.sshPublicKey !== null,
+    };
+  }
+
+  async rotateWebhookSecret(
+    userId: string,
+    projectId: string,
+  ): Promise<{ webhookSecret: string; webhookUrl: string }> {
+    await this.findOwnedProject(userId, projectId);
+
+    const newSecret = randomBytes(32).toString("hex");
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { webhookSecret: newSecret },
+    });
+
+    return {
+      webhookSecret: newSecret,
+      webhookUrl: `${env.API_BASE_URL}/api/webhooks/github?projectId=${projectId}`,
     };
   }
 
