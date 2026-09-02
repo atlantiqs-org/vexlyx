@@ -11,12 +11,39 @@ services:
       POSTGRES_DB: vexlyx_dev
     volumes:
       - vexlyx_postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+      - traefik-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vexlyx -d vexlyx_dev"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  mysql:
+    image: mysql:8.0
+    container_name: vexlyx-mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: vexlyx_mysql_root
+      MYSQL_DATABASE: vexlyx_dev
+      MYSQL_USER: vexlyx
+      MYSQL_PASSWORD: vexlyx_dev
+    volumes:
+      - vexlyx_mysql_data:/var/lib/mysql
+    networks:
+      - default
+      - traefik-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pvexlyx_mysql_root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -27,12 +54,32 @@ services:
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
     volumes:
       - vexlyx_redis_data:/data
+    networks:
+      - default
+      - traefik-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  adminer:
+    image: adminer:4
+    container_name: vexlyx-adminer
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: vexlyx-postgres
+    networks:
+      - default
+      - traefik-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adminer.rule=Host(`db.vexlyx.localhost`)"
+      - "traefik.http.routers.adminer.entrypoints=web"
+      - "traefik.http.services.adminer.loadbalancer.server.port=8080"
 
   traefik:
     image: traefik:v3.4
@@ -57,6 +104,7 @@ services:
 
 volumes:
   vexlyx_postgres_data:
+  vexlyx_mysql_data:
   vexlyx_redis_data:
 
 networks:

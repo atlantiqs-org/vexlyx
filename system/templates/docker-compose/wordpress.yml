@@ -16,7 +16,7 @@ services:
     ports:
       - "{{host_port}}:{{container_port}}"
     volumes:
-      - ./wp-content:/app/wp-content
+      - ../wp-content:/app/wp-content
     deploy:
       resources:
         limits:

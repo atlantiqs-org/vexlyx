@@ -50,6 +50,20 @@ export type {
   DockerfileStatus,
 } from "./schemas/dockerfile.js";
 
+export {
+  DatabaseTypeEnum,
+  DatabaseNameSchema,
+  CreateDatabaseSchema,
+  DatabaseListQuerySchema,
+} from "./schemas/databases.js";
+export type {
+  DatabaseType,
+  CreateDatabaseInput,
+  DatabaseListQuery,
+  DatabaseDetail,
+  DatabaseConnectionTestResult,
+} from "./schemas/databases.js";
+
 export type {
   User,
   Role,
@@ -64,5 +78,6 @@ export type {
   EnvVar,
   DecryptedEnvVar,
 } from "./types/index.js";
+
 
 

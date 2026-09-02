@@ -34,6 +34,18 @@ const envSchema = z.object({
   // Dynamic host-port range used when no project.port is set
   DEPLOY_PORT_RANGE_START: z.coerce.number().int().min(1024).default(8100),
   DEPLOY_PORT_RANGE_END: z.coerce.number().int().max(65535).default(8999),
+  // Database Provisioning (F2.6)
+  POSTGRES_CONTAINER_NAME: z.string().min(1).default("vexlyx-postgres"),
+  POSTGRES_HOST: z.string().min(1).default("localhost"),
+  POSTGRES_PORT: z.coerce.number().int().default(5432),
+  POSTGRES_USER: z.string().min(1).default("vexlyx"),
+  POSTGRES_PASSWORD: z.string().min(1).default("vexlyx_dev"),
+  MYSQL_CONTAINER_NAME: z.string().min(1).default("vexlyx-mysql"),
+  MYSQL_HOST: z.string().min(1).default("localhost"),
+  MYSQL_PORT: z.coerce.number().int().default(3306),
+  MYSQL_ROOT_USER: z.string().min(1).default("root"),
+  MYSQL_ROOT_PASSWORD: z.string().min(1).default("vexlyx_mysql_root"),
+  ADMINER_URL: z.string().default("http://localhost:8088"),
 });
 
 /**
