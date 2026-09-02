@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   Hammer,
+  GitCommit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -143,6 +144,20 @@ function DeploymentRow({ projectId, deployment, isActive }: DeploymentRowProps) 
           <span className="truncate font-mono text-xs text-muted-foreground">
             {displayDeployment.id.slice(0, 8)}…
           </span>
+          {displayDeployment.commitHash && (
+            <span
+              className="hidden items-center gap-1 font-mono text-[11px] text-muted-foreground md:inline-flex bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-border"
+              title={displayDeployment.commitMsg ?? undefined}
+            >
+              <GitCommit className="h-3 w-3 text-indigo-500 shrink-0" />
+              {displayDeployment.commitHash.slice(0, 7)}
+              {displayDeployment.commitMsg && (
+                <span className="max-w-[150px] truncate text-[11px] font-sans text-muted-foreground ml-1">
+                  — {displayDeployment.commitMsg}
+                </span>
+              )}
+            </span>
+          )}
           <span className="hidden text-xs text-muted-foreground sm:block">
             {formatDate(displayDeployment.createdAt)}
           </span>

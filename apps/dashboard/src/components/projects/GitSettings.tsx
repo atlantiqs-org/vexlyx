@@ -10,6 +10,9 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,7 +107,7 @@ export function GitSettings({
   initialBranch = "main",
   onProjectUpdate,
 }: GitSettingsProps) {
-  const { state, fetchMetadata, connectRepo, generateSshKey } =
+  const { state, fetchMetadata, connectRepo, generateSshKey, rotateWebhookSecret } =
     useGitSettings(projectId);
 
   const [form, setForm] = useState<FormState>({
@@ -114,6 +117,8 @@ export function GitSettings({
   const [errors, setErrors] = useState<FormErrors>({});
   const [isConnecting, setIsConnecting] = useState(false);
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  const [isRotatingSecret, setIsRotatingSecret] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -174,6 +179,18 @@ export function GitSettings({
       toast.error("Failed to generate SSH key");
     } finally {
       setIsGeneratingKey(false);
+    }
+  };
+
+  const handleRotateSecret = async () => {
+    setIsRotatingSecret(true);
+    try {
+      await rotateWebhookSecret();
+      toast.success("Webhook secret regenerated — remember to update GitHub settings!");
+    } catch {
+      toast.error("Failed to regenerate webhook secret");
+    } finally {
+      setIsRotatingSecret(false);
     }
   };
 
@@ -330,21 +347,30 @@ export function GitSettings({
         </CardContent>
       </Card>
 
-      {/* ── Section C: Webhook URL (only once repo is connected) ── */}
+      {/* ── Section C: Webhook Auto-Deploy (only once repo is connected) ── */}
       {metadata?.webhookUrl && (
         <Card className="border border-border">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <Link2 className="h-3.5 w-3.5" />
-              Webhook URL
+              GitHub Webhook Auto-Deploy
             </CardTitle>
             <CardDescription className="text-xs">
-              Add this URL to your repository&rsquo;s Webhooks (Settings → Webhooks) to enable
-              automatic deployments on push.
+              Automatically redeploy your project whenever code is pushed to your connected repository.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
+          <CardContent className="space-y-4">
+            {/* Webhook URL */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium" htmlFor={`webhook-url-${projectId}`}>
+                  Payload URL
+                </Label>
+                <CopyButton
+                  id={`copy-webhook-url-${projectId}`}
+                  value={metadata.webhookUrl}
+                />
+              </div>
               <Input
                 id={`webhook-url-${projectId}`}
                 readOnly
@@ -352,15 +378,80 @@ export function GitSettings({
                 className="font-mono text-xs text-muted-foreground"
                 aria-label="Webhook URL"
               />
-              <CopyButton
-                id={`copy-webhook-url-${projectId}`}
-                value={metadata.webhookUrl}
-              />
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Set content type to <code className="font-mono">application/json</code> and
-              select <strong>push</strong> events only.
-            </p>
+
+            {/* Webhook Secret */}
+            {metadata.webhookSecret && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs font-medium" htmlFor={`webhook-secret-${projectId}`}>
+                      Webhook Secret (HMAC-SHA256)
+                    </Label>
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      id={`toggle-webhook-secret-${projectId}`}
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => setShowSecret((v) => !v)}
+                      aria-label={showSecret ? "Hide secret" : "Show secret"}
+                    >
+                      {showSecret ? (
+                        <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    </Button>
+                    <CopyButton
+                      id={`copy-webhook-secret-${projectId}`}
+                      value={metadata.webhookSecret}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={`webhook-secret-${projectId}`}
+                    readOnly
+                    type={showSecret ? "text" : "password"}
+                    value={metadata.webhookSecret}
+                    className="font-mono text-xs text-muted-foreground"
+                    aria-label="Webhook Secret"
+                  />
+                  <Button
+                    id={`rotate-webhook-secret-${projectId}`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    onClick={() => void handleRotateSecret()}
+                    disabled={isRotatingSecret}
+                  >
+                    {isRotatingSecret ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Regenerate
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step-by-step setup guide */}
+            <div className="rounded-md border border-border bg-slate-50 dark:bg-slate-900/50 p-3 text-xs space-y-1.5 text-muted-foreground">
+              <p className="font-medium text-foreground">GitHub Webhook Setup Instructions:</p>
+              <ol className="list-decimal list-inside space-y-1 pl-1">
+                <li>Go to your repository on GitHub → <strong>Settings</strong> → <strong>Webhooks</strong> → <strong>Add webhook</strong>.</li>
+                <li>Paste the <strong>Payload URL</strong> into the Payload URL field.</li>
+                <li>Set <strong>Content type</strong> to <code className="font-mono text-foreground font-semibold">application/json</code>.</li>
+                <li>Paste the <strong>Webhook Secret</strong> into the Secret field.</li>
+                <li>Select <strong>Just the push event</strong>, ensure <strong>Active</strong> is checked, and click <strong>Add webhook</strong>.</li>
+              </ol>
+            </div>
           </CardContent>
         </Card>
       )}

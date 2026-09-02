@@ -27,14 +27,14 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
-| Phase 1: Project Deployment | 🟡 IN PROGRESS | 71% (5/7) |
-| Phase 2: Multi-Runtime Support | 🟡 IN PROGRESS | 71% (5/7) |
+| Phase 1: Project Deployment | 🟢 COMPLETED | 100% (7/7) |
+| Phase 2: Multi-Runtime Support | 🟢 COMPLETED | 100% (7/7) |
 | Phase 3: Domain & DNS | 🔴 NOT STARTED | 0% |
 | Phase 4: Email Server | 🔴 NOT STARTED | 0% |
 | Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
 
-**Overall Completion:** 35% (17/48 features)
+**Overall Completion:** 44% (21/48 features)
 
 ---
 
@@ -838,18 +838,18 @@ Allow users to create databases per project or standalone. Manage database users
 ---
 
 ### F2.7 — GitHub Webhook Auto-Deploy
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Automatically redeploy projects when code is pushed to connected GitHub repositories.
 
 **Acceptance Criteria:**
-- [ ] Webhook endpoint `POST /api/webhooks/github`
-- [ ] Signature verification with GitHub secret
-- [ ] Filter by branch (only deploy configured branch)
-- [ ] Queue deployment via BullMQ
-- [ ] Deployment status shown in dashboard
-- [ ] Support for pull request previews (optional)
+- [x] Webhook endpoint `POST /api/webhooks/github`
+- [x] Signature verification with GitHub secret
+- [x] Filter by branch (only deploy configured branch)
+- [x] Queue deployment via BullMQ
+- [x] Deployment status shown in dashboard
+- [x] Support for pull request previews (optional)
 
 **Test Plan:**
 1. Push to main branch → webhook received, deployment queued
@@ -859,6 +859,25 @@ Automatically redeploy projects when code is pushed to connected GitHub reposito
 
 **Developer Docs:**
 - **Location:** `docs/dev/github-webhooks.md`
+
+**Files Created:**
+- `packages/shared/src/schemas/webhooks.ts`
+- `apps/api/src/modules/webhooks/schema.ts`
+- `apps/api/src/modules/webhooks/service.ts`
+- `apps/api/src/modules/webhooks/routes.ts`
+- `tests/test_github_webhooks.py`
+- `docs/dev/github-webhooks.md`
+
+**Files Modified:**
+- `packages/shared/src/schemas/projects.ts`
+- `packages/shared/src/index.ts`
+- `apps/api/src/modules/git/service.ts`
+- `apps/api/src/modules/git/routes.ts`
+- `apps/api/src/modules/build/service.ts`
+- `apps/api/src/index.ts`
+- `apps/dashboard/src/hooks/useGitSettings.ts`
+- `apps/dashboard/src/components/projects/GitSettings.tsx`
+- `apps/dashboard/src/components/projects/BuildPanel.tsx`
 
 ---
 
