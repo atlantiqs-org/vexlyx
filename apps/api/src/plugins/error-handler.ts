@@ -33,24 +33,48 @@ function buildErrorResponse(
   };
 }
 
+interface ZodIssueLike {
+  path?: (string | number)[];
+  message: string;
+}
+
+interface ZodErrorLike {
+  name?: string;
+  issues: ZodIssueLike[];
+}
+
+function isZodError(error: unknown): error is ZodErrorLike {
+  if (!error || typeof error !== "object") return false;
+  if (error instanceof ZodError) return true;
+  const e = error as Record<string, unknown>;
+  return (
+    e.name === "ZodError" ||
+    (Array.isArray(e.issues) && e.issues.length > 0 && typeof (e.issues[0] as Record<string, unknown>)?.message === "string")
+  );
+}
+
 /**
  * Transforms a ZodError into a 400 response with per-field error messages.
  * Groups multiple issues by their field path for easy frontend consumption.
  * @param error - The ZodError from failed schema validation
  * @returns Formatted error response with field-level details
  */
-function handleZodError(error: ZodError) {
+function handleZodError(error: ZodErrorLike) {
   const fieldErrors: Record<string, string[]> = {};
+  let firstMessage = "Validation failed";
 
   for (const issue of error.issues) {
-    const path = issue.path.join(".") || "_root";
+    const path = issue.path && issue.path.length > 0 ? issue.path.join(".") : "_root";
     if (!fieldErrors[path]) {
       fieldErrors[path] = [];
     }
     fieldErrors[path].push(issue.message);
+    if (firstMessage === "Validation failed" && issue.message) {
+      firstMessage = issue.message;
+    }
   }
 
-  return buildErrorResponse(400, "Validation failed", "VALIDATION_ERROR", {
+  return buildErrorResponse(400, firstMessage, "VALIDATION_ERROR", {
     fields: fieldErrors,
   });
 }
@@ -77,7 +101,7 @@ export async function errorHandlerPlugin(app: FastifyInstance) {
 
   app.setErrorHandler(
     (error: FastifyError, _request: FastifyRequest, reply: FastifyReply) => {
-      if (error instanceof ZodError) {
+      if (isZodError(error)) {
         const { statusCode, body } = handleZodError(error);
         reply.status(statusCode).send(body);
         return;

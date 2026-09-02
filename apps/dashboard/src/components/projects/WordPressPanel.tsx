@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { Project } from "@vexlyx/shared";
+import type { Project, DatabaseDetail } from "@vexlyx/shared";
 
 interface WordPressStatus {
   installed: boolean;
@@ -48,18 +48,44 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const [availableDbs, setAvailableDbs] = useState<DatabaseDetail[]>([]);
 
   // Form state for DB settings
   const [dbName, setDbName] = useState("wordpress");
   const [dbUser, setDbUser] = useState("root");
   const [dbPassword, setDbPassword] = useState("");
-  const [dbHost, setDbHost] = useState("localhost:3306");
+  const [dbHost, setDbHost] = useState("vexlyx-mysql:3306");
   const [dbPrefix, setDbPrefix] = useState("wp_");
 
   // Upload state
   const [uploadType, setUploadType] = useState<"plugin" | "theme">("plugin");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const loadDatabases = useCallback(async () => {
+    try {
+      const res = await fetchAPI<{ databases: DatabaseDetail[] }>(
+        `/api/databases?projectId=${project.id}`,
+      );
+      const mysqlDbs = (res.databases ?? []).filter((d) => d.type === "MYSQL");
+      setAvailableDbs(mysqlDbs);
+      if (mysqlDbs.length > 0 && mysqlDbs[0]) {
+        const first = mysqlDbs[0];
+        setDbName(first.name);
+        setDbUser(first.dbUser);
+        if (first.dbPassword) setDbPassword(first.dbPassword);
+        setDbHost(`${first.internalHost}:${first.port}`);
+      }
+    } catch {
+      // Ignore error if database list fails
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    if (installModalOpen) {
+      void loadDatabases();
+    }
+  }, [installModalOpen, loadDatabases]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -366,6 +392,15 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
           </DialogHeader>
 
           <div className="space-y-3.5 py-2">
+            {availableDbs.length > 0 && (
+              <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
+                <Database className="h-4 w-4 shrink-0" />
+                <span>
+                  Using provisioned MySQL database <strong>{dbName}</strong> on <code>{dbHost}</code>
+                </span>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="wp-db-name" className="text-xs">Database Name</Label>
               <Input

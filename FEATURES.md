@@ -793,28 +793,47 @@ Allow users to provide their own Dockerfile for maximum flexibility. Includes in
 ---
 
 ### F2.6 — Database Provisioning (MySQL/PostgreSQL)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Allow users to create databases per project. Manage database users, passwords, and connections.
+Allow users to create databases per project or standalone. Manage database users, passwords, connections, and live testing. Includes PostgreSQL 16 and MySQL 8.0 support, automatic strong password generation with AES-256-GCM encryption at rest, connection string generation (internal Docker and host), automatic project environment variable injection, and Adminer web GUI integration.
 
 **Acceptance Criteria:**
-- [ ] `POST /api/databases` — create database + user
-- [ ] `GET /api/databases` — list user's databases
-- [ ] `DELETE /api/databases/:id` — drop database and user
-- [ ] Auto-generated strong passwords
-- [ ] Connection string provided to user
-- [ ] Database accessible only from project containers
-- [ ] phpMyAdmin/Adminer integration for MySQL
+- [x] `POST /api/databases` — create database + user
+- [x] `GET /api/databases` — list user's databases
+- [x] `DELETE /api/databases/:id` — drop database and user
+- [x] Auto-generated strong passwords
+- [x] Connection string provided to user
+- [x] Database accessible only from project containers
+- [x] phpMyAdmin/Adminer integration for MySQL
 
 **Test Plan:**
 1. Create MySQL DB → database and user created
 2. Connect from app → connection successful
 3. Delete DB → database dropped, user removed
-4. phpMyAdmin → accessible via panel, shows correct DBs
+4. phpMyAdmin / Adminer → accessible via panel, shows correct DBs
 
 **Developer Docs:**
 - **Location:** `docs/dev/database-provisioning.md`
+
+**Files Created:**
+- `system/python/database_manager.py`
+- `packages/shared/src/schemas/databases.ts`
+- `apps/api/src/modules/databases/schema.ts`
+- `apps/api/src/modules/databases/service.ts`
+- `apps/api/src/modules/databases/routes.ts`
+- `apps/dashboard/src/app/(panel)/databases/page.tsx`
+- `apps/dashboard/src/components/projects/DatabasePanel.tsx`
+- `tests/test_database_provisioning.py`
+- `docs/dev/database-provisioning.md`
+
+**Files Modified:**
+- `docker-compose.yml`
+- `packages/shared/src/index.ts`
+- `apps/api/src/config/env.ts`
+- `apps/api/.env.example`
+- `apps/api/src/index.ts`
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
 
 ---
 
