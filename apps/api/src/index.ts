@@ -21,6 +21,7 @@ import { wordpressRoutes } from "./modules/wordpress/routes.js";
 import { dockerfileRoutes } from "./modules/dockerfile/routes.js";
 import { databaseRoutes } from "./modules/databases/routes.js";
 import { webhookRoutes } from "./modules/webhooks/routes.js";
+import { domainRoutes } from "./modules/domains/routes.js";
 
 
 /**
@@ -73,6 +74,7 @@ async function buildApp() {
   await app.register(dockerfileRoutes, { prefix: "/api/projects" });
   await app.register(databaseRoutes, { prefix: "/api/databases" });
   await app.register(webhookRoutes, { prefix: "/api/webhooks" });
+  await app.register(domainRoutes, { prefix: "/api/domains" });
 
   return app;
 }

@@ -35,6 +35,7 @@ import { EnvVarEditor } from "@/components/projects/EnvVarEditor";
 import { WordPressPanel } from "@/components/projects/WordPressPanel";
 import { DockerfilePanel } from "@/components/projects/DockerfilePanel";
 import { DatabasePanel } from "@/components/projects/DatabasePanel";
+import { DomainPanel } from "@/components/projects/DomainPanel";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -333,6 +334,12 @@ export default function ProjectDetailPage() {
 
       {/* Provisioned Databases Panel (F2.6) */}
       <DatabasePanel
+        project={project}
+        onProjectUpdate={fetchProject}
+      />
+
+      {/* Custom Domains Panel (F3.1) */}
+      <DomainPanel
         project={project}
         onProjectUpdate={fetchProject}
       />

@@ -78,6 +78,21 @@ export type {
   RotateWebhookSecretResponse,
 } from "./schemas/webhooks.js";
 
+export {
+  DomainStatusSchema,
+  HostnameSchema,
+  CreateDomainSchema,
+  DomainListQuerySchema,
+} from "./schemas/domains.js";
+export type {
+  DomainStatus,
+  CreateDomainInput,
+  DomainListQuery,
+  DomainVerificationInstructions,
+  DomainVerificationResult,
+  DomainResponse,
+} from "./schemas/domains.js";
+
 export type {
   User,
   Role,
@@ -92,6 +107,3 @@ export type {
   EnvVar,
   DecryptedEnvVar,
 } from "./types/index.js";
-
-
-

@@ -193,12 +193,14 @@ model EnvVar {
 /// A custom domain attached to a user's project.
 /// Includes SSL and verification status.
 model Domain {
-  id         String       @id @default(cuid())
-  hostname   String       @unique
-  status     DomainStatus @default(PENDING)
-  sslEnabled Boolean      @default(false) @map("ssl_enabled")
-  userId     String       @map("user_id")
-  projectId  String?      @map("project_id")
+  id                String       @id @default(cuid())
+  hostname          String       @unique
+  status            DomainStatus @default(PENDING)
+  sslEnabled        Boolean      @default(false) @map("ssl_enabled")
+  /// Unique verification token expected in DNS TXT record for domain ownership validation (F3.1).
+  verificationToken String?      @map("verification_token")
+  userId            String       @map("user_id")
+  projectId         String?      @map("project_id")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
 

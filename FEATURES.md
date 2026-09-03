@@ -884,18 +884,18 @@ Automatically redeploy projects when code is pushed to connected GitHub reposito
 ## Phase 3: Domain & DNS
 
 ### F3.1 — Custom Domain Management
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Allow users to attach custom domains to projects. Validate domain ownership and configure routing.
 
 **Acceptance Criteria:**
-- [ ] `POST /api/domains` — add domain to project
-- [ ] Domain validation via DNS TXT record
-- [ ] `GET /api/domains` — list domains
-- [ ] `DELETE /api/domains/:id` — remove domain
-- [ ] Traefik router auto-configuration
-- [ ] Domain status tracking (pending, active, error)
+- [x] `POST /api/domains` — add domain to project
+- [x] Domain validation via DNS TXT record
+- [x] `GET /api/domains` — list domains
+- [x] `DELETE /api/domains/:id` — remove domain
+- [x] Traefik router auto-configuration
+- [x] Domain status tracking (pending, active, error)
 
 **Test Plan:**
 1. Add domain → validation instructions shown
@@ -905,6 +905,23 @@ Allow users to attach custom domains to projects. Validate domain ownership and 
 
 **Developer Docs:**
 - **Location:** `docs/dev/domains.md`
+
+**Files Created:**
+- `packages/shared/src/schemas/domains.ts`
+- `apps/api/src/modules/domains/schema.ts`
+- `apps/api/src/modules/domains/service.ts`
+- `apps/api/src/modules/domains/routes.ts`
+- `apps/dashboard/src/hooks/useDomains.ts`
+- `apps/dashboard/src/components/projects/DomainPanel.tsx`
+- `apps/dashboard/src/app/(panel)/domains/page.tsx`
+- `tests/test_custom_domains.py`
+- `docs/dev/domains.md`
+
+**Files Modified:**
+- `packages/shared/src/index.ts`
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/index.ts`
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
 
 ---
 
