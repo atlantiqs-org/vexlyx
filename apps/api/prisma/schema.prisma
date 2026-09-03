@@ -199,17 +199,24 @@ model Domain {
   sslEnabled        Boolean      @default(false) @map("ssl_enabled")
   /// Unique verification token expected in DNS TXT record for domain ownership validation (F3.1).
   verificationToken String?      @map("verification_token")
+  /// Optional path prefix routing (e.g. /api or /blog)
+  pathPrefix        String?      @map("path_prefix")
+  /// Parent domain ID if this domain is a subdomain of another registered domain (F3.2)
+  parentId          String?      @map("parent_id")
   userId            String       @map("user_id")
   projectId         String?      @map("project_id")
-  createdAt  DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  parent     Domain?      @relation("DomainSubdomains", fields: [parentId], references: [id], onDelete: Cascade)
+  subdomains Domain[]     @relation("DomainSubdomains")
   dnsRecords DnsRecord[]
   mailboxes  Mailbox[]
 
   @@index([userId])
+  @@index([parentId])
   @@map("domains")
 }
 

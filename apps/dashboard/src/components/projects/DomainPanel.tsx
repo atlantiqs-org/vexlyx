@@ -15,7 +15,9 @@ import {
   Loader2,
   RefreshCw,
   HelpCircle,
+  Sparkles,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,14 +112,19 @@ export function DomainPanel({ project }: DomainPanelProps) {
         projectId: project.id,
       });
 
-      toast.success(`Domain "${cleanHostname}" attached`);
-      setNewHostname("");
-      setAddModalOpen(false);
-
-      // Immediately show verification instructions
-      setInstructionsDomain(created);
-      setInstructionsModalOpen(true);
+      if (created.status === "ACTIVE") {
+        toast.success(`Domain "${cleanHostname}" attached and actively routing traffic via Traefik!`);
+        setNewHostname("");
+        setAddModalOpen(false);
+      } else {
+        toast.success(`Domain "${cleanHostname}" attached. DNS TXT verification required.`);
+        setNewHostname("");
+        setAddModalOpen(false);
+        setInstructionsDomain(created);
+        setInstructionsModalOpen(true);
+      }
     } catch (err: unknown) {
+
       const msg = err instanceof Error ? err.message : "Failed to add domain";
       toast.error(msg);
     } finally {
@@ -255,7 +262,7 @@ export function DomainPanel({ project }: DomainPanelProps) {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         <Badge
                           variant="outline"
                           className={cn("gap-1 text-[10px] font-medium py-0 px-1.5", statusCfg.className)}
@@ -263,6 +270,26 @@ export function DomainPanel({ project }: DomainPanelProps) {
                           <StatusIcon className="h-3 w-3" />
                           {statusCfg.label}
                         </Badge>
+
+                        {domain.hostname.startsWith("*.") && (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 py-0 px-1.5"
+                          >
+                            <Sparkles className="h-2.5 w-2.5" />
+                            Wildcard
+                          </Badge>
+                        )}
+
+                        {domain.parentId && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-blue-600 dark:text-blue-400 border-blue-500/20 py-0 px-1.5"
+                          >
+                            Subdomain
+                          </Badge>
+                        )}
+
 
                         {domain.status !== "ACTIVE" && (
                           <button

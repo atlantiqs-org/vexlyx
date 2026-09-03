@@ -17,7 +17,12 @@ import {
   Loader2,
   FolderGit2,
   HelpCircle,
+  Layers,
+  Sparkles,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { useDomains } from "@/hooks/useDomains";
 import { useProjects } from "@/hooks/useProjects";
+import { SubdomainModal } from "@/components/domains/SubdomainModal";
 import { cn } from "@/lib/utils";
 import type { DomainResponse, DomainStatus } from "@vexlyx/shared";
 
@@ -129,12 +135,20 @@ export default function DomainsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [projectFilter, setProjectFilter] = useState<string>("ALL");
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
 
-  // Add domain modal state
+  // Add root domain modal state
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [newHostname, setNewHostname] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState<string>("none");
   const [isAdding, setIsAdding] = useState(false);
+
+  // Subdomain modal state
+  const [subdomainModalOpen, setSubdomainModalOpen] = useState(false);
+  const [subdomainParentId, setSubdomainParentId] = useState<string | undefined>();
+
+  // Accordion state for expanded domains (to see subdomains)
+  const [expandedDomainIds, setExpandedDomainIds] = useState<Record<string, boolean>>({});
 
   // Instructions modal state
   const [instructionsDomain, setInstructionsDomain] = useState<DomainResponse | null>(null);
@@ -147,6 +161,13 @@ export default function DomainsPage() {
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<DomainResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const toggleExpand = (domainId: string) => {
+    setExpandedDomainIds((prev) => ({
+      ...prev,
+      [domainId]: !prev[domainId],
+    }));
+  };
 
   // Filtered domains list
   const filteredDomains = useMemo(() => {
@@ -173,9 +194,18 @@ export default function DomainsPage() {
         }
       }
 
+      // Type filter
+      if (typeFilter !== "ALL") {
+        const isWild = domain.hostname.startsWith("*.");
+        if (typeFilter === "ROOT" && (domain.parentId || isWild)) return false;
+        if (typeFilter === "SUBDOMAIN" && !domain.parentId) return false;
+        if (typeFilter === "WILDCARD" && !isWild) return false;
+      }
+
+
       return true;
     });
-  }, [domains, searchQuery, statusFilter, projectFilter]);
+  }, [domains, searchQuery, statusFilter, projectFilter, typeFilter]);
 
   const copyToClipboard = (text: string, field: string) => {
     void navigator.clipboard.writeText(text);
@@ -204,9 +234,11 @@ export default function DomainsPage() {
       setSelectedProjectId("none");
       setAddModalOpen(false);
 
-      // Open instructions modal immediately
-      setInstructionsDomain(created);
-      setInstructionsModalOpen(true);
+      // Open instructions modal if verification is needed
+      if (created.status !== "ACTIVE") {
+        setInstructionsDomain(created);
+        setInstructionsModalOpen(true);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to add domain";
       toast.error(msg);
@@ -248,16 +280,21 @@ export default function DomainsPage() {
     }
   };
 
+  const openSubdomainModalFor = (parentId?: string) => {
+    setSubdomainParentId(parentId);
+    setSubdomainModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Page Header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Domains
+            Domains &amp; Subdomains
           </h1>
           <p className="text-sm text-muted-foreground">
-            Manage custom domain names, DNS TXT ownership verification, and automatic Traefik routing.
+            Manage custom domain names, wildcard routes (`*.domain.com`), and automatic Traefik traffic proxies.
           </p>
         </div>
 
@@ -271,6 +308,16 @@ export default function DomainsPage() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
             Refresh
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openSubdomainModalFor()}
+            className="h-9 gap-1.5 text-xs font-medium"
+          >
+            <Layers className="h-3.5 w-3.5 text-primary" />
+            Add Subdomain
           </Button>
 
           <Button
@@ -292,7 +339,7 @@ export default function DomainsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search domains…"
+            placeholder="Search domains or subdomains…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-9 text-xs"
@@ -300,6 +347,19 @@ export default function DomainsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Type filter */}
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="h-9 w-[140px] text-xs">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Types</SelectItem>
+              <SelectItem value="ROOT">Apex Domains</SelectItem>
+              <SelectItem value="SUBDOMAIN">Subdomains</SelectItem>
+              <SelectItem value="WILDCARD">Wildcards</SelectItem>
+            </SelectContent>
+          </Select>
+
           {/* Status filter */}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="h-9 w-[150px] text-xs">
@@ -315,7 +375,7 @@ export default function DomainsPage() {
 
           {/* Project filter */}
           <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="h-9 w-[170px] text-xs">
+            <SelectTrigger className="h-9 w-[160px] text-xs">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
             <SelectContent>
@@ -341,24 +401,26 @@ export default function DomainsPage() {
               <Globe className="h-6 w-6 text-muted-foreground" />
             </div>
             <h3 className="mt-4 text-sm font-semibold text-foreground">
-              {searchQuery || statusFilter !== "ALL" || projectFilter !== "ALL"
+              {searchQuery || statusFilter !== "ALL" || projectFilter !== "ALL" || typeFilter !== "ALL"
                 ? "No matching domains found"
-                : "No custom domains yet"}
+                : "No custom domains or subdomains yet"}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-sm">
-              {searchQuery || statusFilter !== "ALL" || projectFilter !== "ALL"
+              {searchQuery || statusFilter !== "ALL" || projectFilter !== "ALL" || typeFilter !== "ALL"
                 ? "Try adjusting your search or filters."
-                : "Attach a custom domain to route live web traffic to any of your deployed projects."}
+                : "Attach a custom domain or configure subdomains to route traffic directly to your projects."}
             </p>
-            {!searchQuery && statusFilter === "ALL" && projectFilter === "ALL" && (
-              <Button
-                size="sm"
-                onClick={() => setAddModalOpen(true)}
-                className="mt-4 h-8 text-xs font-medium"
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Your First Domain
-              </Button>
+            {!searchQuery && statusFilter === "ALL" && projectFilter === "ALL" && typeFilter === "ALL" && (
+              <div className="flex items-center gap-2 mt-4">
+                <Button
+                  size="sm"
+                  onClick={() => setAddModalOpen(true)}
+                  className="h-8 text-xs font-medium"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Your First Domain
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -368,6 +430,9 @@ export default function DomainsPage() {
             const statusCfg = STATUS_CONFIG[domain.status] ?? STATUS_CONFIG.PENDING;
             const StatusIcon = statusCfg.icon;
             const isVerifying = verifyingId === domain.id;
+            const isWildcard = domain.hostname.startsWith("*.");
+            const hasSubdomains = Boolean(domain.subdomains && domain.subdomains.length > 0);
+            const isExpanded = Boolean(expandedDomainIds[domain.id]);
 
             return (
               <Card
@@ -376,13 +441,34 @@ export default function DomainsPage() {
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-2">
-                    <Badge
-                      variant="outline"
-                      className={cn("gap-1 text-[10px] font-medium py-0.5 px-2", statusCfg.className)}
-                    >
-                      <StatusIcon className="h-3 w-3" />
-                      {statusCfg.label}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge
+                        variant="outline"
+                        className={cn("gap-1 text-[10px] font-medium py-0.5 px-2", statusCfg.className)}
+                      >
+                        <StatusIcon className="h-3 w-3" />
+                        {statusCfg.label}
+                      </Badge>
+
+                      {isWildcard && (
+                        <Badge
+                          variant="secondary"
+                          className="gap-1 text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" />
+                          Wildcard
+                        </Badge>
+                      )}
+
+                      {domain.parentId && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-blue-600 dark:text-blue-400 border-blue-500/20"
+                        >
+                          Subdomain
+                        </Badge>
+                      )}
+                    </div>
 
                     <Button
                       variant="ghost"
@@ -400,7 +486,7 @@ export default function DomainsPage() {
                       {domain.hostname}
                     </CardTitle>
 
-                    {domain.status === "ACTIVE" && (
+                    {domain.status === "ACTIVE" && !isWildcard && (
                       <a
                         href={`http://${domain.hostname}`}
                         target="_blank"
@@ -412,6 +498,12 @@ export default function DomainsPage() {
                       </a>
                     )}
                   </div>
+
+                  {domain.parent && (
+                    <div className="text-[11px] text-muted-foreground font-mono">
+                      ↳ of {domain.parent.hostname}
+                    </div>
+                  )}
 
                   <CardDescription className="text-xs flex items-center gap-1.5 mt-1">
                     <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -433,14 +525,90 @@ export default function DomainsPage() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Traefik Routing:</span>
                       <span className="font-medium text-foreground">
-                        {domain.status === "ACTIVE" ? "Active (Port 80)" : "Disabled"}
+                        {domain.status === "ACTIVE"
+                          ? isWildcard
+                            ? "Wildcard Priority 10"
+                            : "Direct Priority 100"
+                          : "Disabled"}
                       </span>
                     </div>
+                    {domain.pathPrefix && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Path Prefix:</span>
+                        <span className="font-mono text-foreground">{domain.pathPrefix}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Added:</span>
                       <span className="text-foreground">{formatDate(domain.createdAt)}</span>
                     </div>
                   </div>
+
+                  {/* Subdomains section if this is a parent domain */}
+                  {!domain.parentId && !isWildcard && (
+                    <div className="rounded-md border border-border/80 p-2 text-xs space-y-2 bg-card">
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(domain.id)}
+                          className="flex items-center gap-1 text-[11px] font-medium text-foreground hover:text-primary transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                          <span>Subdomains ({domain.subdomains?.length ?? 0})</span>
+                        </button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openSubdomainModalFor(domain.id)}
+                          className="h-6 px-1.5 text-[10px] text-primary hover:text-primary gap-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add Subdomain
+                        </Button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="pt-1 space-y-1.5 border-t border-border/60">
+                          {hasSubdomains ? (
+                            domain.subdomains!.map((sub) => (
+                              <div
+                                key={sub.id}
+                                className="flex items-center justify-between gap-1 text-[11px] rounded bg-muted/40 p-1.5"
+                              >
+                                <div className="truncate font-mono font-medium">
+                                  {sub.hostname}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {sub.project && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {sub.project.name}
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setDeleteTarget(sub)}
+                                    className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground italic py-1">
+                              No subdomains yet. Click &ldquo;Add Subdomain&rdquo; to attach subdomains or wildcards.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <Button
@@ -481,6 +649,17 @@ export default function DomainsPage() {
         </div>
       )}
 
+      {/* ── Subdomain Modal ────────────────────────────────────────────────── */}
+      <SubdomainModal
+        open={subdomainModalOpen}
+        onOpenChange={setSubdomainModalOpen}
+        parentDomains={domains}
+        projects={projects}
+        defaultParentId={subdomainParentId}
+        createDomain={createDomain}
+        onCreated={() => void refresh()}
+      />
+
       {/* ── Add Domain Modal ──────────────────────────────────────────────── */}
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
         <DialogContent className="sm:max-w-md">
@@ -488,7 +667,7 @@ export default function DomainsPage() {
             <DialogHeader>
               <DialogTitle>Add Custom Domain</DialogTitle>
               <DialogDescription>
-                Connect a custom domain name to route incoming web requests to one of your projects.
+                Connect an apex domain or custom domain to route incoming web requests to one of your projects.
               </DialogDescription>
             </DialogHeader>
 
@@ -497,7 +676,7 @@ export default function DomainsPage() {
                 <Label htmlFor="global-domain-hostname">Domain Name</Label>
                 <Input
                   id="global-domain-hostname"
-                  placeholder="e.g. app.mycompany.com or example.com"
+                  placeholder="e.g. example.com or app.mycompany.com"
                   value={newHostname}
                   onChange={(e) => setNewHostname(e.target.value)}
                   disabled={isAdding}
@@ -573,7 +752,8 @@ export default function DomainsPage() {
                   <div className="font-semibold text-muted-foreground">TTL</div>
                   <div className="font-mono text-foreground font-bold">TXT</div>
                   <div className="font-mono text-foreground break-all">
-                    _vexlyx-challenge.{instructionsDomain.hostname}
+                    {instructionsDomain.verificationInstructions?.recordName ??
+                      `_vexlyx-challenge.${instructionsDomain.hostname.replace(/^\*\./, "")}`}
                   </div>
                   <div className="font-mono text-foreground">300 (or Auto)</div>
                 </div>

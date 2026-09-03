@@ -8,11 +8,12 @@ export const DomainStatusSchema = z.enum(["PENDING", "ACTIVE", "ERROR"]);
 export type DomainStatus = z.infer<typeof DomainStatusSchema>;
 
 // ---------------------------------------------------------------------------
-// Hostname validator
+// Hostname validator & helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Validates a Fully Qualified Domain Name (FQDN) according to RFC 1123.
+ * Validates a Fully Qualified Domain Name (FQDN) according to RFC 1123,
+ * with support for wildcard subdomains (e.g. *.example.com).
  * Accepts standard domains and subdomains (e.g. example.com, app.example.com, test.co.uk).
  * Forbids protocols, paths, ports, IP addresses, and invalid characters.
  */
@@ -33,12 +34,71 @@ export const HostnameSchema = z
       // Regex for valid domain labels separated by dots
       const fqdnRegex =
         /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
+
+      // Wildcard validation: must start with `*.` followed by a valid FQDN
+      if (val.startsWith("*.")) {
+        const remaining = val.slice(2);
+        // Wildcard must have at least one dot in remaining (e.g. *.example.com, not *.com)
+        if (!remaining.includes(".") || remaining.includes("*")) {
+          return false;
+        }
+        return fqdnRegex.test(remaining);
+      }
+
       return fqdnRegex.test(val);
     },
     {
-      message: "Must be a valid domain or subdomain (e.g. example.com or app.example.com)",
+      message:
+        "Must be a valid domain or subdomain (e.g. example.com, app.example.com, or *.example.com)",
     },
   );
+
+/**
+ * Checks if a given hostname is a wildcard subdomain (starts with *.).
+ */
+export function isWildcardHostname(hostname: string): boolean {
+  return hostname.startsWith("*.");
+}
+
+/**
+ * Extracts base/parent domain if the hostname is a subdomain, or null if it's already an apex domain.
+ * Handles wildcards (*.domain.com -> domain.com) and common multi-part TLDs.
+ */
+export function getParentDomain(hostname: string): string | null {
+  const clean = hostname.toLowerCase().trim();
+  const isWild = clean.startsWith("*.");
+  const stripped = isWild ? clean.slice(2) : clean;
+  const parts = stripped.split(".");
+
+  if (parts.length <= 2) {
+    if (isWild && parts.length === 2) {
+      return stripped;
+    }
+    return null;
+  }
+
+  // Common second-level TLDs (e.g., co.uk, com.au)
+  const secondLevelTlds = ["co.uk", "com.au", "co.nz", "co.jp", "com.br", "org.uk", "gov.uk"];
+  const lastTwo = parts.slice(-2).join(".");
+
+  if (secondLevelTlds.includes(lastTwo)) {
+    if (parts.length > 3) {
+      return parts.slice(1).join(".");
+    }
+    return isWild ? stripped : null;
+  }
+
+  return parts.slice(1).join(".");
+}
+
+
+/**
+ * Checks if a hostname represents a subdomain or wildcard.
+ */
+export function isSubdomain(hostname: string): boolean {
+  if (isWildcardHostname(hostname)) return true;
+  return getParentDomain(hostname) !== null;
+}
 
 // ---------------------------------------------------------------------------
 // Create Domain
@@ -47,6 +107,15 @@ export const HostnameSchema = z
 export const CreateDomainSchema = z.object({
   hostname: HostnameSchema,
   projectId: z.string().min(1, "Project ID is required").optional().nullable(),
+  parentId: z.string().min(1).optional().nullable(),
+  pathPrefix: z
+    .string()
+    .trim()
+    .refine((val) => !val || val.startsWith("/"), {
+      message: "Path prefix must start with a forward slash (e.g. /api)",
+    })
+    .optional()
+    .nullable(),
 });
 
 export type CreateDomainInput = z.infer<typeof CreateDomainSchema>;
@@ -61,6 +130,8 @@ export const DomainListQuerySchema = z.object({
   projectId: z.string().optional(),
   status: DomainStatusSchema.optional(),
   search: z.string().max(100).optional(),
+  parentId: z.string().optional(),
+  rootOnly: z.coerce.boolean().optional(),
 });
 
 export type DomainListQuery = z.infer<typeof DomainListQuerySchema>;
@@ -90,7 +161,17 @@ export interface DomainResponse {
   sslEnabled: boolean;
   userId: string;
   projectId: string | null;
+  parentId?: string | null;
+  pathPrefix?: string | null;
   verificationToken: string | null;
+  isWildcard?: boolean;
+  subdomainCount?: number;
+  subdomains?: DomainResponse[];
+  parent?: {
+    id: string;
+    hostname: string;
+    status: DomainStatus;
+  } | null;
   createdAt: string | Date;
   updatedAt: string | Date;
   project?: {
@@ -101,3 +182,4 @@ export interface DomainResponse {
   } | null;
   verificationInstructions?: DomainVerificationInstructions;
 }
+
