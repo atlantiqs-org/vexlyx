@@ -10,11 +10,13 @@ import type {
 
 interface UseDomainsOptions {
   projectId?: string;
+  parentId?: string;
+  rootOnly?: boolean;
   autoFetch?: boolean;
 }
 
 export function useDomains(options: UseDomainsOptions = {}) {
-  const { projectId, autoFetch = true } = options;
+  const { projectId, parentId, rootOnly, autoFetch = true } = options;
   const [domains, setDomains] = useState<DomainResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -28,6 +30,8 @@ export function useDomains(options: UseDomainsOptions = {}) {
       try {
         const queryParams = new URLSearchParams();
         if (projectId) queryParams.append("projectId", projectId);
+        if (parentId) queryParams.append("parentId", parentId);
+        if (rootOnly !== undefined) queryParams.append("rootOnly", String(rootOnly));
 
         const url = `/api/domains${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
         const data = await fetchAPI<DomainResponse[]>(url);
@@ -41,8 +45,9 @@ export function useDomains(options: UseDomainsOptions = {}) {
         setIsRefreshing(false);
       }
     },
-    [projectId],
+    [projectId, parentId, rootOnly],
   );
+
 
   useEffect(() => {
     if (autoFetch) {
@@ -90,6 +95,10 @@ export function useDomains(options: UseDomainsOptions = {}) {
     setDomains((prev) => prev.filter((d) => d.id !== id));
   };
 
+  const fetchSubdomains = async (parentDomainId: string): Promise<DomainResponse[]> => {
+    return await fetchAPI<DomainResponse[]>(`/api/domains/${parentDomainId}/subdomains`);
+  };
+
   return {
     domains,
     isLoading,
@@ -100,5 +109,7 @@ export function useDomains(options: UseDomainsOptions = {}) {
     createDomain,
     verifyDomain,
     deleteDomain,
+    fetchSubdomains,
   };
 }
+

@@ -73,6 +73,23 @@ export async function domainRoutes(app: FastifyInstance) {
   );
 
   // ---------------------------------------------------------------------------
+  // GET /api/domains/:id/subdomains — list all subdomains for a parent domain
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/:id/subdomains",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        return await service.listSubdomains(request.userId!, id);
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+
+  // ---------------------------------------------------------------------------
   // POST /api/domains/:id/verify — trigger DNS TXT verification
   // ---------------------------------------------------------------------------
   app.post(

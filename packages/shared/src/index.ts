@@ -83,6 +83,9 @@ export {
   HostnameSchema,
   CreateDomainSchema,
   DomainListQuerySchema,
+  isWildcardHostname,
+  getParentDomain,
+  isSubdomain,
 } from "./schemas/domains.js";
 export type {
   DomainStatus,
@@ -92,6 +95,7 @@ export type {
   DomainVerificationResult,
   DomainResponse,
 } from "./schemas/domains.js";
+
 
 export type {
   User,

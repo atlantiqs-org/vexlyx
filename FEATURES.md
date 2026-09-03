@@ -926,17 +926,17 @@ Allow users to attach custom domains to projects. Validate domain ownership and 
 ---
 
 ### F3.2 — Subdomain Support
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Support subdomains pointing to different projects or paths within the same server.
 
 **Acceptance Criteria:**
-- [ ] `api.domain.com` → API project
-- [ ] `blog.domain.com` → blog project
-- [ ] `app.domain.com` → main app
-- [ ] Wildcard subdomain support (`*.domain.com`)
-- [ ] Subdomain management UI
+- [x] `api.domain.com` → API project
+- [x] `blog.domain.com` → blog project
+- [x] `app.domain.com` → main app
+- [x] Wildcard subdomain support (`*.domain.com`)
+- [x] Subdomain management UI
 
 **Test Plan:**
 1. Add subdomain → routes to correct project
@@ -945,6 +945,21 @@ Support subdomains pointing to different projects or paths within the same serve
 
 **Developer Docs:**
 - **Location:** `docs/dev/subdomains.md`
+
+**Files Created:**
+- `apps/dashboard/src/components/domains/SubdomainModal.tsx`
+- `tests/test_subdomains.py`
+- `docs/dev/subdomains.md`
+
+**Files Modified:**
+- `packages/shared/src/schemas/domains.ts`
+- `packages/shared/src/index.ts`
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/modules/domains/service.ts`
+- `apps/api/src/modules/domains/routes.ts`
+- `apps/dashboard/src/hooks/useDomains.ts`
+- `apps/dashboard/src/app/(panel)/domains/page.tsx`
+- `apps/dashboard/src/components/projects/DomainPanel.tsx`
 
 ---
 
