@@ -1,0 +1,104 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { fetchAPI, ApiRequestError } from "@/lib/api";
+import type {
+  DomainResponse,
+  CreateDomainInput,
+  DomainVerificationResult,
+} from "@vexlyx/shared";
+
+interface UseDomainsOptions {
+  projectId?: string;
+  autoFetch?: boolean;
+}
+
+export function useDomains(options: UseDomainsOptions = {}) {
+  const { projectId, autoFetch = true } = options;
+  const [domains, setDomains] = useState<DomainResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDomains = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setIsLoading(true);
+      setError(null);
+
+      try {
+        const queryParams = new URLSearchParams();
+        if (projectId) queryParams.append("projectId", projectId);
+
+        const url = `/api/domains${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+        const data = await fetchAPI<DomainResponse[]>(url);
+        setDomains(data ?? []);
+      } catch (err) {
+        const message =
+          err instanceof ApiRequestError ? err.message : "Failed to load custom domains";
+        setError(message);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [projectId],
+  );
+
+  useEffect(() => {
+    if (autoFetch) {
+      void fetchDomains();
+    }
+  }, [autoFetch, fetchDomains]);
+
+  const refresh = async () => {
+    setIsRefreshing(true);
+    await fetchDomains(true);
+  };
+
+  const createDomain = async (input: CreateDomainInput): Promise<DomainResponse> => {
+    const created = await fetchAPI<DomainResponse>("/api/domains", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+
+    setDomains((prev) => [created, ...prev]);
+    return created;
+  };
+
+  const verifyDomain = async (
+    id: string,
+    mockRecord?: string,
+  ): Promise<DomainVerificationResult> => {
+    const query = mockRecord ? `?mockRecord=${encodeURIComponent(mockRecord)}` : "";
+    const result = await fetchAPI<DomainVerificationResult>(`/api/domains/${id}/verify${query}`, {
+      method: "POST",
+    });
+
+    // Update local domain status
+    setDomains((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, status: result.status } : d)),
+    );
+
+    return result;
+  };
+
+  const deleteDomain = async (id: string): Promise<void> => {
+    await fetchAPI(`/api/domains/${id}`, {
+      method: "DELETE",
+    });
+
+    setDomains((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  return {
+    domains,
+    isLoading,
+    isRefreshing,
+    error,
+    refetch: () => fetchDomains(),
+    refresh,
+    createDomain,
+    verifyDomain,
+    deleteDomain,
+  };
+}

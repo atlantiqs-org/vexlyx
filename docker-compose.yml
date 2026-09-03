@@ -88,6 +88,8 @@ services:
     ports:
       - "80:80"
       - "8080:8080"
+    environment:
+      - DOCKER_API_VERSION=1.45
     volumes:
       - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./docker/traefik/dynamic:/etc/traefik/dynamic:ro

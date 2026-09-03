@@ -46,6 +46,8 @@ const envSchema = z.object({
   MYSQL_ROOT_USER: z.string().min(1).default("root"),
   MYSQL_ROOT_PASSWORD: z.string().min(1).default("vexlyx_mysql_root"),
   ADMINER_URL: z.string().default("http://localhost:8088"),
+  // Custom Domain Mock DNS (F3.1)
+  VEXLYX_MOCK_DNS: z.string().optional(),
 });
 
 /**
