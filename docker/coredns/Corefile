@@ -1,0 +1,18 @@
+.:53 {
+    # Auto-load all RFC 1035 zone files placed in /etc/coredns/zones/
+    # Files matching {zone}.db will be served authoritatively
+    auto {
+        directory /etc/coredns/zones (.*)\.db
+        reload 5s
+    }
+
+    # Forward external and non-authoritative queries to upstream DNS resolvers
+    forward . 1.1.1.1 8.8.8.8
+
+    # Cache DNS answers for 30 seconds
+    cache 30
+
+    # Output query logging and error messages
+    log
+    errors
+}

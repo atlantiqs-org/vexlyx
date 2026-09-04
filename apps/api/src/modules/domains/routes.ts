@@ -1,11 +1,18 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { DomainService, DomainError } from "./service.js";
+import { DnsService } from "./dns-service.js";
 import {
   CreateDomainSchema,
   DomainListQuerySchema,
   DomainIdParamSchema,
+  DomainRecordParamSchema,
   VerifyDomainQuerySchema,
+  CreateDnsRecordSchema,
+  UpdateDnsRecordSchema,
+  ImportZoneFileSchema,
 } from "./schema.js";
+
+import { isZodError, handleZodError } from "../../plugins/error-handler.js";
 
 function handleDomainError(err: unknown, reply: FastifyReply): void {
   if (err instanceof DomainError) {
@@ -16,11 +23,17 @@ function handleDomainError(err: unknown, reply: FastifyReply): void {
     });
     return;
   }
+  if (isZodError(err)) {
+    const { statusCode, body } = handleZodError(err);
+    reply.status(statusCode).send(body);
+    return;
+  }
   throw err;
 }
 
 export async function domainRoutes(app: FastifyInstance) {
   const service = new DomainService(app.prisma);
+  const dnsService = new DnsService(app.prisma);
 
   // ---------------------------------------------------------------------------
   // GET /api/domains — list domains
@@ -122,6 +135,148 @@ export async function domainRoutes(app: FastifyInstance) {
         const { id } = DomainIdParamSchema.parse(request.params);
         await service.delete(request.userId!, id);
         reply.status(204).send();
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/domains/:id/dns — list DNS records
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/:id/dns",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        return await dnsService.listRecords(request.userId!, id);
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/dns — create a new DNS record (201 Created)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/dns",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const input = CreateDnsRecordSchema.parse(request.body);
+        const record = await dnsService.createRecord(request.userId!, id, input);
+        reply.status(201);
+        return record;
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/dns/defaults — setup recommended DNS records
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/dns/defaults",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        return await dnsService.initializeDefaultRecords(request.userId!, id);
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // PATCH /api/domains/:id/dns/:recordId — update DNS record
+  // ---------------------------------------------------------------------------
+  app.patch(
+    "/:id/dns/:recordId",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id, recordId } = DomainRecordParamSchema.parse(request.params);
+        const input = UpdateDnsRecordSchema.parse(request.body);
+        return await dnsService.updateRecord(request.userId!, id, recordId, input);
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // DELETE /api/domains/:id/dns/:recordId — delete DNS record (204 No Content)
+  // ---------------------------------------------------------------------------
+  app.delete(
+    "/:id/dns/:recordId",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id, recordId } = DomainRecordParamSchema.parse(request.params);
+        await dnsService.deleteRecord(request.userId!, id, recordId);
+        reply.status(204).send();
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/domains/:id/dns/export — export RFC 1035 zone file
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/:id/dns/export",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const zone = await dnsService.exportZoneFile(request.userId!, id);
+        reply.header("Content-Disposition", `attachment; filename="${zone.filename}"`);
+        reply.type("text/plain; charset=utf-8");
+        return zone.content;
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/dns/import — import RFC 1035 zone file
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/dns/import",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const input = ImportZoneFileSchema.parse(request.body);
+        return await dnsService.importZoneFile(
+          request.userId!,
+          id,
+          input.zoneContent,
+          input.strategy,
+        );
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/dns/:recordId/propagation — check propagation status
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/dns/:recordId/propagation",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id, recordId } = DomainRecordParamSchema.parse(request.params);
+        return await dnsService.checkPropagation(request.userId!, id, recordId);
       } catch (err) {
         handleDomainError(err, reply);
       }

@@ -1,0 +1,486 @@
+import fs from "node:fs";
+import path from "node:path";
+import dns from "node:dns/promises";
+import type { PrismaClient } from "@prisma/client";
+import {
+  generateZoneFile,
+  parseZoneFile,
+} from "@vexlyx/shared";
+import type {
+  CreateDnsRecordInput,
+  UpdateDnsRecordInput,
+  DnsRecordResponse,
+  DnsPropagationResponse,
+  DnsResolverCheck,
+  DnsRecordType,
+} from "@vexlyx/shared";
+import { DomainError } from "./service.js";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getCoreDnsZonesDir(): string {
+  const candidates = [
+    path.resolve(process.cwd(), "docker/coredns/zones"),
+    path.resolve(process.cwd(), "../../docker/coredns/zones"),
+    path.resolve(process.cwd(), "../docker/coredns/zones"),
+  ];
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      return c;
+    }
+  }
+
+  const fallback = path.resolve(process.cwd(), "../../docker/coredns/zones");
+  try {
+    fs.mkdirSync(fallback, { recursive: true });
+  } catch {
+    // Ignore directory creation error in read-only environments
+  }
+  return fallback;
+}
+
+export class DnsService {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  /**
+   * Helper to verify domain ownership.
+   */
+  private async getDomainOrThrow(userId: string, domainId: string) {
+    const domain = await this.prisma.domain.findFirst({
+      where: { id: domainId, userId },
+    });
+
+    if (!domain) {
+      throw new DomainError("Domain not found or unauthorized", "DOMAIN_NOT_FOUND", 404);
+    }
+
+    return domain;
+  }
+
+  /**
+   * List all DNS records for a domain.
+   */
+  async listRecords(userId: string, domainId: string): Promise<DnsRecordResponse[]> {
+    await this.getDomainOrThrow(userId, domainId);
+
+    const records = await this.prisma.dnsRecord.findMany({
+      where: { domainId },
+      orderBy: [{ type: "asc" }, { name: "asc" }, { createdAt: "asc" }],
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      type: r.type as DnsRecordType,
+      name: r.name,
+      value: r.value,
+      ttl: r.ttl,
+      priority: r.priority,
+      weight: r.weight,
+      port: r.port,
+      domainId: r.domainId,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Create a single DNS record with RFC conflict validation.
+   */
+  async createRecord(
+    userId: string,
+    domainId: string,
+    input: CreateDnsRecordInput,
+  ): Promise<DnsRecordResponse> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+
+    // RFC 1912: CNAME records cannot coexist with any other record of the same name
+    if (input.type === "CNAME") {
+      const existing = await this.prisma.dnsRecord.findFirst({
+        where: { domainId, name: input.name },
+      });
+      if (existing) {
+        throw new DomainError(
+          `Cannot create CNAME record: other records already exist for "${input.name}"`,
+          "CNAME_CONFLICT",
+          400,
+        );
+      }
+    } else {
+      const existingCname = await this.prisma.dnsRecord.findFirst({
+        where: { domainId, name: input.name, type: "CNAME" },
+      });
+      if (existingCname) {
+        throw new DomainError(
+          `Cannot create ${input.type} record: a CNAME record already exists for "${input.name}"`,
+          "CNAME_CONFLICT",
+          400,
+        );
+      }
+    }
+
+    const record = await this.prisma.dnsRecord.create({
+      data: {
+        type: input.type,
+        name: input.name,
+        value: input.value,
+        ttl: input.ttl,
+        priority: input.priority ?? null,
+        weight: input.weight ?? null,
+        port: input.port ?? null,
+        domainId: domain.id,
+      },
+    });
+
+    // Synchronize zone file for CoreDNS/BIND9
+    await this.syncZoneFile(domain.hostname, domain.id);
+
+    return {
+      id: record.id,
+      type: record.type as DnsRecordType,
+      name: record.name,
+      value: record.value,
+      ttl: record.ttl,
+      priority: record.priority,
+      weight: record.weight,
+      port: record.port,
+      domainId: record.domainId,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Update an existing DNS record.
+   */
+  async updateRecord(
+    userId: string,
+    domainId: string,
+    recordId: string,
+    input: UpdateDnsRecordInput,
+  ): Promise<DnsRecordResponse> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+
+    const existing = await this.prisma.dnsRecord.findFirst({
+      where: { id: recordId, domainId },
+    });
+
+    if (!existing) {
+      throw new DomainError("DNS record not found", "RECORD_NOT_FOUND", 404);
+    }
+
+    const updated = await this.prisma.dnsRecord.update({
+      where: { id: recordId },
+      data: {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.value !== undefined && { value: input.value }),
+        ...(input.ttl !== undefined && { ttl: input.ttl }),
+        ...(input.priority !== undefined && { priority: input.priority }),
+        ...(input.weight !== undefined && { weight: input.weight }),
+        ...(input.port !== undefined && { port: input.port }),
+      },
+    });
+
+    await this.syncZoneFile(domain.hostname, domain.id);
+
+    return {
+      id: updated.id,
+      type: updated.type as DnsRecordType,
+      name: updated.name,
+      value: updated.value,
+      ttl: updated.ttl,
+      priority: updated.priority,
+      weight: updated.weight,
+      port: updated.port,
+      domainId: updated.domainId,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Delete a DNS record.
+   */
+  async deleteRecord(userId: string, domainId: string, recordId: string): Promise<void> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+
+    const existing = await this.prisma.dnsRecord.findFirst({
+      where: { id: recordId, domainId },
+    });
+
+    if (!existing) {
+      throw new DomainError("DNS record not found", "RECORD_NOT_FOUND", 404);
+    }
+
+    await this.prisma.dnsRecord.delete({
+      where: { id: recordId },
+    });
+
+    await this.syncZoneFile(domain.hostname, domain.id);
+  }
+
+  /**
+   * Pre-populate recommended default records (Apex A, www CNAME, ns1/ns2 NS).
+   */
+  async initializeDefaultRecords(userId: string, domainId: string): Promise<DnsRecordResponse[]> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+    const serverIp = process.env.SERVER_IP || "127.0.0.1";
+
+    const defaults: Array<{
+      type: DnsRecordType;
+      name: string;
+      value: string;
+      ttl: number;
+      priority?: number;
+    }> = [
+      { type: "A", name: "@", value: serverIp, ttl: 3600 },
+      { type: "CNAME", name: "www", value: domain.hostname, ttl: 3600 },
+      { type: "NS", name: "@", value: "ns1.vexlyx.com", ttl: 86400 },
+      { type: "NS", name: "@", value: "ns2.vexlyx.com", ttl: 86400 },
+    ];
+
+    for (const def of defaults) {
+      const exists = await this.prisma.dnsRecord.findFirst({
+        where: {
+          domainId: domain.id,
+          type: def.type,
+          name: def.name,
+        },
+      });
+
+      if (!exists) {
+        await this.prisma.dnsRecord.create({
+          data: {
+            domainId: domain.id,
+            type: def.type,
+            name: def.name,
+            value: def.value,
+            ttl: def.ttl,
+            priority: def.priority ?? null,
+          },
+        });
+      }
+    }
+
+    await this.syncZoneFile(domain.hostname, domain.id);
+    return this.listRecords(userId, domainId);
+  }
+
+  /**
+   * Export an RFC 1035 zone file.
+   */
+  async exportZoneFile(
+    userId: string,
+    domainId: string,
+  ): Promise<{ filename: string; content: string }> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+    const records = await this.prisma.dnsRecord.findMany({
+      where: { domainId },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+    });
+
+    const content = generateZoneFile(domain.hostname, records);
+    return {
+      filename: `${domain.hostname}.zone`,
+      content,
+    };
+  }
+
+  /**
+   * Import records from an RFC 1035 zone file.
+   */
+  async importZoneFile(
+    userId: string,
+    domainId: string,
+    zoneContent: string,
+    strategy: "skip" | "replace" = "skip",
+  ): Promise<{ importedCount: number; records: DnsRecordResponse[]; errors: string[] }> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+    const { records: parsedRecords, errors } = parseZoneFile(zoneContent, domain.hostname);
+
+    if (parsedRecords.length === 0 && errors.length > 0) {
+      throw new DomainError(
+        `Failed to parse zone file: ${errors.join("; ")}`,
+        "ZONE_PARSE_ERROR",
+        400,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (strategy === "replace") {
+        await tx.dnsRecord.deleteMany({
+          where: { domainId },
+        });
+      }
+
+      for (const rec of parsedRecords) {
+        if (strategy === "skip") {
+          const exists = await tx.dnsRecord.findFirst({
+            where: {
+              domainId,
+              type: rec.type,
+              name: rec.name,
+              value: rec.value,
+            },
+          });
+          if (exists) continue;
+        }
+
+        await tx.dnsRecord.create({
+          data: {
+            domainId,
+            type: rec.type,
+            name: rec.name,
+            value: rec.value,
+            ttl: rec.ttl,
+            priority: rec.priority ?? null,
+            weight: rec.weight ?? null,
+            port: rec.port ?? null,
+          },
+        });
+      }
+    });
+
+    await this.syncZoneFile(domain.hostname, domain.id);
+    const allRecords = await this.listRecords(userId, domainId);
+
+    return {
+      importedCount: parsedRecords.length,
+      records: allRecords,
+      errors,
+    };
+  }
+
+  /**
+   * Check DNS propagation status against major public resolvers.
+   */
+  async checkPropagation(
+    userId: string,
+    domainId: string,
+    recordId: string,
+  ): Promise<DnsPropagationResponse> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+
+    const record = await this.prisma.dnsRecord.findFirst({
+      where: { id: recordId, domainId },
+    });
+
+    if (!record) {
+      throw new DomainError("DNS record not found", "RECORD_NOT_FOUND", 404);
+    }
+
+    // Determine query target FQDN
+    const cleanHost = domain.hostname.startsWith("*.") ? domain.hostname.slice(2) : domain.hostname;
+    let queryTarget: string;
+    if (record.name === "@") {
+      queryTarget = cleanHost;
+    } else if (record.name.endsWith(cleanHost)) {
+      queryTarget = record.name;
+    } else {
+      queryTarget = `${record.name}.${cleanHost}`;
+    }
+
+    const resolversToQuery = [
+      { name: "Cloudflare (1.1.1.1)", ip: "1.1.1.1" },
+      { name: "Google (8.8.8.8)", ip: "8.8.8.8" },
+      { name: "Quad9 (9.9.9.9)", ip: "9.9.9.9" },
+    ];
+
+    const results: DnsResolverCheck[] = [];
+
+    for (const r of resolversToQuery) {
+      const startTime = Date.now();
+      try {
+        const resolver = new dns.Resolver();
+        resolver.setServers([r.ip]);
+
+        let detectedValues: string[] = [];
+        const type = record.type.toUpperCase();
+
+        if (type === "A") {
+          const res = await resolver.resolve4(queryTarget);
+          detectedValues = res;
+        } else if (type === "AAAA") {
+          const res = await resolver.resolve6(queryTarget);
+          detectedValues = res;
+        } else if (type === "CNAME") {
+          const res = await resolver.resolveCname(queryTarget);
+          detectedValues = res;
+        } else if (type === "MX") {
+          const res = await resolver.resolveMx(queryTarget);
+          detectedValues = res.map((m) => `${m.priority} ${m.exchange}`);
+        } else if (type === "TXT") {
+          const res = await resolver.resolveTxt(queryTarget);
+          detectedValues = res.map((chunks) => chunks.join(""));
+        } else if (type === "NS") {
+          const res = await resolver.resolveNs(queryTarget);
+          detectedValues = res;
+        } else if (type === "SRV") {
+          const res = await resolver.resolveSrv(queryTarget);
+          detectedValues = res.map((s) => `${s.priority} ${s.weight} ${s.port} ${s.name}`);
+        }
+
+        const latencyMs = Date.now() - startTime;
+        const normalizedExpected = record.value.trim().toLowerCase().replace(/\.$/, "");
+        const isMatch = detectedValues.some(
+          (v) => v.trim().toLowerCase().replace(/\.$/, "") === normalizedExpected,
+        );
+
+        results.push({
+          resolver: r.name,
+          ip: r.ip,
+          status: isMatch ? "MATCH" : detectedValues.length > 0 ? "MISMATCH" : "NOT_FOUND",
+          detectedValues,
+          latencyMs,
+        });
+      } catch (err: unknown) {
+        const latencyMs = Date.now() - startTime;
+        const errCode = (err as { code?: string })?.code;
+        results.push({
+          resolver: r.name,
+          ip: r.ip,
+          status: errCode === "ENOTFOUND" || errCode === "ENODATA" ? "NOT_FOUND" : "ERROR",
+          detectedValues: [],
+          latencyMs,
+          error: (err as Error)?.message || "Query timeout",
+        });
+      }
+    }
+
+    const isFullyPropagated =
+      results.length > 0 && results.every((r) => r.status === "MATCH");
+
+    return {
+      recordId: record.id,
+      recordType: record.type as DnsRecordType,
+      recordName: record.name,
+      expectedValue: record.value,
+      isFullyPropagated,
+      resolvers: results,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Write RFC 1035 zone file to CoreDNS zones directory.
+   */
+  async syncZoneFile(hostname: string, domainId: string): Promise<void> {
+    try {
+      const records = await this.prisma.dnsRecord.findMany({
+        where: { domainId },
+        orderBy: [{ type: "asc" }, { name: "asc" }],
+      });
+
+      const cleanHost = hostname.startsWith("*.") ? hostname.slice(2) : hostname;
+      const zoneContent = generateZoneFile(cleanHost, records);
+      const zonesDir = getCoreDnsZonesDir();
+      const zoneFilePath = path.join(zonesDir, `${cleanHost}.db`);
+
+      fs.writeFileSync(zoneFilePath, zoneContent, "utf-8");
+    } catch {
+      // Non-fatal if filesystem is temporarily restricted
+    }
+  }
+}

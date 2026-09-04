@@ -609,6 +609,19 @@ http:
     // Clean up dynamic Traefik file for main domain
     this.removeTraefikRouter(domain.id);
 
+    // Clean up CoreDNS zone file on disk
+    const cleanHost = domain.hostname.startsWith("*.") ? domain.hostname.slice(2) : domain.hostname;
+    for (const base of ["docker/coredns/zones", "../../docker/coredns/zones", "../docker/coredns/zones"]) {
+      const zonePath = path.resolve(process.cwd(), base, `${cleanHost}.db`);
+      if (fs.existsSync(zonePath)) {
+        try {
+          fs.unlinkSync(zonePath);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     // Delete domain (cascades to subdomains and dnsRecords in database)
     await this.prisma.domain.delete({
       where: { id: domain.id },

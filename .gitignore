@@ -49,3 +49,7 @@ __pycache__/
 .venv/
 venv/
 apps/api/Python/
+
+# CoreDNS generated zone database files
+docker/coredns/zones/*.db
+!docker/coredns/zones/.gitkeep

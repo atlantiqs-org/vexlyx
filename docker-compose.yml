@@ -104,6 +104,21 @@ services:
       retries: 5
       start_period: 10s
 
+  coredns:
+    image: coredns/coredns:1.11.3
+    container_name: vexlyx-coredns
+    restart: unless-stopped
+    command: -conf /etc/coredns/Corefile
+    ports:
+      - "${DNS_PORT:-53}:53/udp"
+      - "${DNS_PORT:-53}:53/tcp"
+    volumes:
+      - ./docker/coredns/Corefile:/etc/coredns/Corefile:ro
+      - ./docker/coredns/zones:/etc/coredns/zones:ro
+    networks:
+      - default
+      - traefik-net
+
 volumes:
   vexlyx_postgres_data:
   vexlyx_mysql_data:
