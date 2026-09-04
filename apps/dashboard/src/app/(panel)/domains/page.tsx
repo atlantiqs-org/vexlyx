@@ -22,6 +22,8 @@ import {
   ChevronDown,
   ChevronRight,
   Server,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -469,6 +471,29 @@ export default function DomainsPage() {
                           Subdomain
                         </Badge>
                       )}
+
+                      {domain.sslEnabled ? (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "gap-1 text-[10px] font-medium py-0.5 px-2",
+                            domain.certificate?.isExpiringSoon
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                          )}
+                        >
+                          <Lock className="h-2.5 w-2.5" />
+                          {domain.certificate?.isExpiringSoon ? "SSL Expiring" : "SSL Active"}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="gap-1 text-[10px] font-medium py-0.5 px-2 bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
+                        >
+                          <Unlock className="h-2.5 w-2.5" />
+                          No SSL
+                        </Badge>
+                      )}
                     </div>
 
                     <Button
@@ -621,6 +646,18 @@ export default function DomainsPage() {
                       <Link href={`/domains/${domain.id}/dns`}>
                         <Server className="h-3.5 w-3.5 text-indigo-500" />
                         Manage DNS
+                      </Link>
+                    </Button>
+
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 text-xs gap-1.5 font-medium hover:text-primary"
+                    >
+                      <Link href={`/domains/${domain.id}/ssl`}>
+                        <Lock className="h-3.5 w-3.5 text-emerald-500" />
+                        Manage SSL
                       </Link>
                     </Button>
 

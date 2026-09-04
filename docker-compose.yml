@@ -87,12 +87,15 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
       - "8080:8080"
     environment:
       - DOCKER_API_VERSION=1.45
     volumes:
       - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./docker/traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./docker/traefik/certs:/etc/traefik/certs:ro
+      - ./docker/traefik/acme.json:/etc/traefik/acme.json
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - default

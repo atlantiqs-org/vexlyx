@@ -71,6 +71,22 @@ enum MailboxStatus {
   DELETED
 }
 
+/// Type of SSL/TLS certificate attached to a domain.
+enum CertType {
+  LETS_ENCRYPT
+  CUSTOM
+  SELF_SIGNED
+}
+
+/// Lifecycle and health status of an SSL certificate.
+enum CertStatus {
+  PENDING
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  ERROR
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -212,12 +228,43 @@ model Domain {
   project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   parent     Domain?      @relation("DomainSubdomains", fields: [parentId], references: [id], onDelete: Cascade)
   subdomains Domain[]     @relation("DomainSubdomains")
-  dnsRecords DnsRecord[]
-  mailboxes  Mailbox[]
+  dnsRecords  DnsRecord[]
+  mailboxes   Mailbox[]
+  certificate Certificate?
 
   @@index([userId])
   @@index([parentId])
   @@map("domains")
+}
+
+/// An SSL/TLS certificate attached to a custom domain.
+model Certificate {
+  id            String      @id @default(cuid())
+  domainId      String      @unique @map("domain_id")
+  type          CertType    @default(LETS_ENCRYPT)
+  status        CertStatus  @default(PENDING)
+  issuer        String?
+  commonName    String      @map("common_name")
+  sans          String[]    @default([])
+  validFrom     DateTime?   @map("valid_from")
+  validTo       DateTime?   @map("valid_to")
+  autoRenew     Boolean     @default(true) @map("auto_renew")
+  forceHttps    Boolean     @default(true) @map("force_https")
+  certPath      String?     @map("cert_path")
+  keyPath       String?     @map("key_path")
+  encryptedKey  String?     @map("encrypted_key")
+  serialNumber  String?     @map("serial_number")
+  errorMessage  String?     @map("error_message")
+  lastCheckedAt DateTime?   @map("last_checked_at")
+  lastRenewedAt DateTime?   @map("last_renewed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  domain        Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([validTo])
+  @@map("certificates")
 }
 
 /// A DNS record belonging to a domain zone.

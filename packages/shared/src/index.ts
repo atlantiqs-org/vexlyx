@@ -119,7 +119,21 @@ export type {
   GenerateZoneOptions,
   ParsedDnsRecord,
 } from "./schemas/dns.js";
-
+export {
+  CertTypeSchema,
+  CertStatusSchema,
+  UploadCertificateSchema,
+  ProvisionSslSchema,
+  UpdateSslSettingsSchema,
+} from "./schemas/ssl.js";
+export type {
+  CertType,
+  CertStatus,
+  UploadCertificateInput,
+  ProvisionSslInput,
+  UpdateSslSettingsInput,
+  CertificateResponse,
+} from "./schemas/ssl.js";
 
 export type {
   User,

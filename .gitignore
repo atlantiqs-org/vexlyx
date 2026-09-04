@@ -53,3 +53,9 @@ apps/api/Python/
 # CoreDNS generated zone database files
 docker/coredns/zones/*.db
 !docker/coredns/zones/.gitkeep
+
+# Traefik SSL certificates and ACME storage
+docker/traefik/acme.json
+docker/traefik/certs/*.crt
+docker/traefik/certs/*.key
+!docker/traefik/certs/.gitkeep

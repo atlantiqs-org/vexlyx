@@ -42,3 +42,20 @@ export type {
   DnsRecordResponse,
   DnsPropagationResponse,
 } from "@vexlyx/shared";
+
+export {
+  UploadCertificateSchema,
+  ProvisionSslSchema,
+  UpdateSslSettingsSchema,
+  CertTypeSchema,
+  CertStatusSchema,
+} from "@vexlyx/shared";
+export type {
+  UploadCertificateInput,
+  ProvisionSslInput,
+  UpdateSslSettingsInput,
+  CertType,
+  CertStatus,
+  CertificateResponse,
+} from "@vexlyx/shared";
+
