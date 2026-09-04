@@ -21,6 +21,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
+  Server,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -612,16 +613,28 @@ export default function DomainsPage() {
 
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <Button
+                      asChild
                       variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 text-xs gap-1.5 font-medium hover:text-primary"
+                    >
+                      <Link href={`/domains/${domain.id}/dns`}>
+                        <Server className="h-3.5 w-3.5 text-indigo-500" />
+                        Manage DNS
+                      </Link>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => {
                         setInstructionsDomain(domain);
                         setInstructionsModalOpen(true);
                       }}
-                      className="h-8 flex-1 text-xs gap-1"
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      title="DNS Verification Challenge"
                     >
                       <HelpCircle className="h-3.5 w-3.5" />
-                      DNS Instructions
                     </Button>
 
                     {domain.status !== "ACTIVE" && (

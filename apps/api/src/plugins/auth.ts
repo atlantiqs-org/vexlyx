@@ -57,7 +57,7 @@ async function authPlugin(app: FastifyInstance) {
   // Shared preHandler hook to require authentication
   const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.userId) {
-      reply.status(401).send({
+      return reply.status(401).send({
         error: "Authentication required",
         code: "UNAUTHORIZED",
         details: {},

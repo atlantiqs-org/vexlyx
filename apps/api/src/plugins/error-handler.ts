@@ -4,6 +4,7 @@ import type {
   FastifyReply,
   FastifyError,
 } from "fastify";
+import fp from "fastify-plugin";
 import { ZodError } from "zod";
 
 /** Consistent error response shape returned by all API errors */
@@ -43,7 +44,7 @@ interface ZodErrorLike {
   issues: ZodIssueLike[];
 }
 
-function isZodError(error: unknown): error is ZodErrorLike {
+export function isZodError(error: unknown): error is ZodErrorLike {
   if (!error || typeof error !== "object") return false;
   if (error instanceof ZodError) return true;
   const e = error as Record<string, unknown>;
@@ -53,13 +54,7 @@ function isZodError(error: unknown): error is ZodErrorLike {
   );
 }
 
-/**
- * Transforms a ZodError into a 400 response with per-field error messages.
- * Groups multiple issues by their field path for easy frontend consumption.
- * @param error - The ZodError from failed schema validation
- * @returns Formatted error response with field-level details
- */
-function handleZodError(error: ZodErrorLike) {
+export function handleZodError(error: ZodErrorLike) {
   const fieldErrors: Record<string, string[]> = {};
   let firstMessage = "Validation failed";
 
@@ -87,7 +82,7 @@ function handleZodError(error: ZodErrorLike) {
  * Internal error details are never leaked to the client for 500 errors.
  * @param app - The Fastify instance to register the handlers on
  */
-export async function errorHandlerPlugin(app: FastifyInstance) {
+async function errorHandler(app: FastifyInstance) {
   app.setNotFoundHandler(
     (_request: FastifyRequest, reply: FastifyReply) => {
       const { statusCode, body } = buildErrorResponse(
@@ -136,3 +131,7 @@ export async function errorHandlerPlugin(app: FastifyInstance) {
     },
   );
 }
+
+export const errorHandlerPlugin = fp(errorHandler, {
+  name: "errorHandlerPlugin",
+});

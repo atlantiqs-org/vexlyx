@@ -96,6 +96,30 @@ export type {
   DomainResponse,
 } from "./schemas/domains.js";
 
+export {
+  DnsRecordTypeSchema,
+  DnsRecordNameSchema,
+  CreateDnsRecordSchema,
+  UpdateDnsRecordSchema,
+  ImportZoneFileSchema,
+  generateZoneFile,
+  parseZoneFile,
+  IPV4_REGEX,
+  IPV6_REGEX,
+  DNS_NAME_REGEX,
+} from "./schemas/dns.js";
+export type {
+  DnsRecordType,
+  CreateDnsRecordInput,
+  UpdateDnsRecordInput,
+  ImportZoneFileInput,
+  DnsRecordResponse,
+  DnsResolverCheck,
+  DnsPropagationResponse,
+  GenerateZoneOptions,
+  ParsedDnsRecord,
+} from "./schemas/dns.js";
+
 
 export type {
   User,

@@ -228,6 +228,8 @@ model DnsRecord {
   value     String
   ttl       Int      @default(3600)
   priority  Int?
+  weight    Int?
+  port      Int?
   domainId  String   @map("domain_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

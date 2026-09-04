@@ -14,9 +14,31 @@ export const DomainIdParamSchema = z.object({
 
 export type DomainIdParam = z.infer<typeof DomainIdParamSchema>;
 
+export const DomainRecordParamSchema = z.object({
+  id: z.string().min(1, "Domain ID is required"),
+  recordId: z.string().min(1, "Record ID is required"),
+});
+
+export type DomainRecordParam = z.infer<typeof DomainRecordParamSchema>;
+
 export const VerifyDomainQuerySchema = z.object({
   mockRecord: z.string().optional(),
   mock: z.enum(["true", "false"]).optional(),
 });
 
 export type VerifyDomainQuery = z.infer<typeof VerifyDomainQuerySchema>;
+
+export {
+  CreateDnsRecordSchema,
+  UpdateDnsRecordSchema,
+  ImportZoneFileSchema,
+  DnsRecordTypeSchema,
+} from "@vexlyx/shared";
+export type {
+  CreateDnsRecordInput,
+  UpdateDnsRecordInput,
+  ImportZoneFileInput,
+  DnsRecordType,
+  DnsRecordResponse,
+  DnsPropagationResponse,
+} from "@vexlyx/shared";
