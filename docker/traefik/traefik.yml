@@ -1,16 +1,28 @@
-# Traefik v3 — Static Configuration (Development)
+# Traefik v3 — Static Configuration
 # Dynamic routing configs go in ./dynamic/
 
 api:
   dashboard: true
   insecure: true
 
+ping: {}
+
 log:
-  level: DEBUG
+  level: INFO
 
 entryPoints:
   web:
     address: ":80"
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "admin@vexlyx.com"
+      storage: "/etc/traefik/acme.json"
+      httpChallenge:
+        entryPoint: "web"
 
 providers:
   docker:

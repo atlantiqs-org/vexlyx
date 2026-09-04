@@ -181,5 +181,7 @@ export interface DomainResponse {
     status: string;
   } | null;
   verificationInstructions?: DomainVerificationInstructions;
+  certificate?: import("./ssl.js").CertificateResponse | null;
+  sslStatus?: import("./ssl.js").CertStatus;
 }
 

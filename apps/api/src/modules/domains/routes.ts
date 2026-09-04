@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { DomainService, DomainError } from "./service.js";
 import { DnsService } from "./dns-service.js";
+import { SslService } from "./ssl-service.js";
 import {
   CreateDomainSchema,
   DomainListQuerySchema,
@@ -10,6 +11,9 @@ import {
   CreateDnsRecordSchema,
   UpdateDnsRecordSchema,
   ImportZoneFileSchema,
+  UploadCertificateSchema,
+  ProvisionSslSchema,
+  UpdateSslSettingsSchema,
 } from "./schema.js";
 
 import { isZodError, handleZodError } from "../../plugins/error-handler.js";
@@ -34,6 +38,7 @@ function handleDomainError(err: unknown, reply: FastifyReply): void {
 export async function domainRoutes(app: FastifyInstance) {
   const service = new DomainService(app.prisma);
   const dnsService = new DnsService(app.prisma);
+  const sslService = new SslService(app.prisma);
 
   // ---------------------------------------------------------------------------
   // GET /api/domains — list domains
@@ -277,6 +282,131 @@ export async function domainRoutes(app: FastifyInstance) {
       try {
         const { id, recordId } = DomainRecordParamSchema.parse(request.params);
         return await dnsService.checkPropagation(request.userId!, id, recordId);
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ===========================================================================
+  // SSL Certificate Management Endpoints (F3.4)
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // GET /api/domains/ssl/alerts — audit all certificates for upcoming expiry (<= 7 days)
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/ssl/alerts",
+    { preHandler: [app.requireAuth] },
+    async (_request, reply) => {
+      try {
+        return await sslService.checkExpiryAlerts();
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/domains/:id/ssl — get SSL certificate details & status
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/:id/ssl",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const cert = await sslService.getCertificate(request.userId!, id);
+        return { certificate: cert };
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/ssl/provision — provision Auto SSL (Let's Encrypt / Dev)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/ssl/provision",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const input = ProvisionSslSchema.parse(request.body ?? {});
+        const cert = await sslService.provisionAutoSsl(request.userId!, id, input);
+        reply.status(201);
+        return { certificate: cert };
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/ssl/upload — upload custom SSL certificate & private key
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/ssl/upload",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const input = UploadCertificateSchema.parse(request.body);
+        const cert = await sslService.uploadCustomCert(request.userId!, id, input);
+        reply.status(201);
+        return { certificate: cert };
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/domains/:id/ssl/renew — force certificate renewal check
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/:id/ssl/renew",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const cert = await sslService.renewCertificate(request.userId!, id);
+        return { certificate: cert };
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // PATCH /api/domains/:id/ssl/settings — update SSL settings (forceHttps, autoRenew)
+  // ---------------------------------------------------------------------------
+  app.patch(
+    "/:id/ssl/settings",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        const input = UpdateSslSettingsSchema.parse(request.body);
+        const cert = await sslService.updateSettings(request.userId!, id, input);
+        return { certificate: cert };
+      } catch (err) {
+        handleDomainError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // DELETE /api/domains/:id/ssl — disable SSL for domain
+  // ---------------------------------------------------------------------------
+  app.delete(
+    "/:id/ssl",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = DomainIdParamSchema.parse(request.params);
+        return await sslService.disableSsl(request.userId!, id);
       } catch (err) {
         handleDomainError(err, reply);
       }
