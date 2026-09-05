@@ -1290,25 +1290,45 @@ Automatically generate and manage email authentication DNS records.
 ---
 
 ### F4.6 — Email Forwarding & Aliases
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Support email forwarding and alias creation.
 
 **Acceptance Criteria:**
-- [ ] Create alias `sales@domain.com` → forwards to `user@domain.com`
-- [ ] Multiple destination addresses per alias
-- [ ] Catch-all alias support
-- [ ] Alias management UI
-- [ ] Vacation auto-responder
+- [x] Create alias `sales@domain.com` → forwards to `user@domain.com`
+- [x] Multiple destination addresses per alias
+- [x] Catch-all alias support
+- [x] Alias management UI
+
+> Vacation auto-responder split out to F4.7 (requires Dovecot Pigeonhole/Sieve, not yet installed).
 
 **Test Plan:**
 1. Create alias → email forwarded correctly
 2. Catch-all → unmatched emails forwarded to admin
-3. Vacation responder → auto-reply sent
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/aliases.md`
+
+---
+
+### F4.7 — Vacation Auto-Responder
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Per-mailbox vacation/out-of-office auto-reply, split out from F4.6 pending Dovecot Pigeonhole/Sieve installation.
+
+**Acceptance Criteria:**
+- [ ] Dovecot Pigeonhole (Sieve) installed and wired into the mail stack
+- [ ] Per-mailbox vacation message configuration UI
+- [ ] Auto-reply sent once per sender within a configurable interval
+
+**Test Plan:**
+1. Enable vacation responder on a mailbox → sender receives one auto-reply
+2. Second message from same sender within interval → no duplicate auto-reply
+
+**Developer Docs:**
+- **Location:** `docs/dev/email/vacation-responder.md`
 
 ---
 

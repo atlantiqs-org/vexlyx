@@ -363,6 +363,73 @@ def sync_virtual_domains(domains: list, mailboxes: list = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Virtual Aliases & Forwarding (F4.6)
+# ---------------------------------------------------------------------------
+
+def sync_virtual_aliases(aliases: list) -> dict:
+    """
+    Writes Postfix's virtual_alias_maps lookup table from VirtualAlias rows.
+    Each entry is "source\tdest1,dest2,..." — Postfix's native comma-separated
+    RHS syntax for multi-destination forwarding. A catch-all is stored with a
+    bare "@domain.com" source (no local part), which Postfix matches against
+    any address at that domain not otherwise listed in virtual_mailbox_maps.
+    """
+    postfix_dir = get_postfix_dir()
+    config_dir = postfix_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    virtual_alias_file = config_dir / "virtual_alias_maps"
+
+    lines = []
+    for a in sorted(aliases, key=lambda a: a["source"]):
+        source = a["source"].strip().lower()
+        dests = ",".join(d.strip().lower() for d in a.get("destinations", []) if d.strip())
+        if source and dests:
+            lines.append(f"{source}\t{dests}")
+
+    virtual_alias_file.write_text(
+        "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8", newline="\n"
+    )
+
+    # See sync_virtual_domains: Windows bind-mount write-then-read race workaround.
+    time.sleep(0.3)
+
+    # Same postmap/chmod dance as virtual_mailbox_maps: postmap runs as root
+    # inside the container, but the unprivileged `virtual` delivery agent
+    # can't read a root-only .lmdb file without the chmod.
+    try:
+        subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "postmap", "lmdb:/etc/postfix/virtual_alias_maps"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "chmod", "644", "/etc/postfix/virtual_alias_maps.lmdb"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+    reloaded = False
+    try:
+        proc = subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "postfix", "reload"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode == 0:
+            reloaded = True
+    except Exception:
+        pass
+
+    return {"success": True, "syncedCount": len(lines), "reloaded": reloaded}
+
+
+# ---------------------------------------------------------------------------
 # Network & Port Probing
 # ---------------------------------------------------------------------------
 
@@ -721,6 +788,9 @@ def main():
             domains = payload.get("domains", [])
             mailboxes = payload.get("mailboxes", [])
             respond(sync_virtual_domains(domains, mailboxes))
+        elif cmd == "sync_virtual_aliases":
+            aliases = payload.get("aliases", [])
+            respond(sync_virtual_aliases(aliases))
         elif cmd == "generate_dkim":
             domain = payload.get("domain")
             if not domain:

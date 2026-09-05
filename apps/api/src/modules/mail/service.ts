@@ -489,6 +489,22 @@ export class MailService {
   }
 
   /**
+   * Synchronizes a user's VirtualAlias rows to Postfix's virtual_alias_maps
+   * (F4.6) — forwarding and catch-all addresses. Independent of
+   * syncVirtualDomains: aliases don't touch virtual_domains/virtual_mailbox_maps.
+   */
+  async syncVirtualAliases(userId: string): Promise<{ success: boolean; syncedCount: number }> {
+    const aliases = await this.prisma.virtualAlias.findMany({
+      where: { userId },
+      select: { source: true, destinations: true },
+    });
+
+    return runPostfixManager<{ success: boolean; syncedCount: number }>("sync_virtual_aliases", {
+      aliases: aliases.map((a) => ({ source: a.source, destinations: a.destinations })),
+    });
+  }
+
+  /**
    * Generates or retrieves 2048-bit RSA DKIM keys and formats DNS TXT record for a domain.
    * Also optionally auto-adds the TXT record to CoreDNS zone if domain exists.
    */
