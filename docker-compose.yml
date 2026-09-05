@@ -169,10 +169,43 @@ services:
       - default
       - traefik-net
 
+  roundcube:
+    image: roundcube/roundcubemail:1.6.18-apache
+    container_name: vexlyx-roundcube
+    restart: unless-stopped
+    ports:
+      - "${WEBMAIL_PORT:-8089}:80"
+    environment:
+      ROUNDCUBEMAIL_DB_TYPE: sqlite
+      ROUNDCUBEMAIL_SKIN: elastic
+      # tls:// forces STARTTLS — Dovecot's `ssl = required` (docker/dovecot/dovecot.conf)
+      # rejects auth on a plaintext connection, so a bare "dovecot"/"postfix"
+      # host (no scheme) silently fails every login. See docker/roundcube/config/local.inc.php
+      # for the matching self-signed-cert trust override this requires.
+      ROUNDCUBEMAIL_DEFAULT_HOST: tls://dovecot
+      ROUNDCUBEMAIL_DEFAULT_PORT: 143
+      ROUNDCUBEMAIL_SMTP_SERVER: tls://postfix
+      ROUNDCUBEMAIL_SMTP_PORT: 587
+    volumes:
+      - vexlyx_roundcube_data:/var/roundcube/db
+      - ./docker/roundcube/config:/var/roundcube/config:ro
+    networks:
+      - default
+      - traefik-net
+    depends_on:
+      - dovecot
+      - postfix
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webmail.rule=Host(`webmail.vexlyx.localhost`)"
+      - "traefik.http.routers.webmail.entrypoints=web"
+      - "traefik.http.services.webmail.loadbalancer.server.port=80"
+
 volumes:
   vexlyx_postgres_data:
   vexlyx_mysql_data:
   vexlyx_redis_data:
+  vexlyx_roundcube_data:
 
 networks:
   default:

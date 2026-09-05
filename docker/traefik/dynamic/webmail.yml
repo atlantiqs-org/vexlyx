@@ -1,0 +1,21 @@
+# Static route for the shared Roundcube webmail instance (F4.4).
+#
+# Routed via the Traefik file provider rather than Docker labels: on this
+# Docker Desktop build, Traefik's docker provider fails to reach the daemon
+# (a known upstream Traefik/Docker-Engine-29.x incompatibility — reproduces
+# even with a bare vanilla Traefik container, unrelated to Vexlyx config, and
+# affects the `adminer` service's Docker-label route identically). The file
+# provider bypasses the Docker socket entirely and is the same mechanism
+# DomainService uses for per-domain routing, so it isn't affected.
+http:
+  routers:
+    webmail:
+      rule: Host(`webmail.vexlyx.localhost`)
+      entryPoints:
+        - web
+      service: webmail
+  services:
+    webmail:
+      loadBalancer:
+        servers:
+          - url: "http://vexlyx-roundcube:80"

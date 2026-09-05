@@ -109,6 +109,22 @@ export async function mailRoutes(app: FastifyInstance) {
   );
 
   // ---------------------------------------------------------------------------
+  // GET /api/mail/webmail/status — Roundcube webmail container health
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/webmail/status",
+    { preHandler: [app.requireAuth] },
+    async (_request, reply) => {
+      try {
+        const status = await service.getWebmailStatus();
+        return reply.status(200).send(status);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // GET /api/mail/test-relay — Probe open relay restriction
   // ---------------------------------------------------------------------------
   app.get(

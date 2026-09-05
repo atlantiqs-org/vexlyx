@@ -52,6 +52,10 @@ const envSchema = z.object({
   IMAP_HOST: z.string().min(1).default("127.0.0.1"),
   IMAP_PORT: z.coerce.number().int().default(143),
   IMAPS_PORT: z.coerce.number().int().default(993),
+  // Webmail — Roundcube (F4.4)
+  WEBMAIL_URL: z.string().default("http://localhost:8089"),
+  WEBMAIL_PORT: z.coerce.number().int().default(8089),
+  WEBMAIL_CONTAINER_NAME: z.string().min(1).default("vexlyx-roundcube"),
 });
 
 /**
