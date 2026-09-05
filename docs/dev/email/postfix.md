@@ -155,6 +155,6 @@ Covered tests:
 
 ## 6. How to Extend
 
-- **F4.2 Dovecot IMAP Server**: Postfix is already configured with `smtpd_sasl_type = dovecot` and `smtpd_sasl_path = private/auth`. Once Dovecot is deployed, it binds the SASL socket at `/var/spool/postfix/private/auth`.
+- **F4.2 Dovecot IMAP Server** (🟢 COMPLETED): Postfix is configured with `smtpd_sasl_type = dovecot` and `smtpd_sasl_path = inet:dovecot:12345` (a TCP auth listener, not a shared unix socket — Postfix and Dovecot run in separate containers). See `docs/dev/email/dovecot.md`.
 - **F4.3 Mailbox Management UI**: The virtual mailbox map structure (`/etc/postfix/virtual_mailbox_maps`) is ready for per-user quota and address provisioning.
 - **F4.5 SPF & DMARC Auto-Configuration**: The DKIM public keys generated in F4.1 directly populate the DMARC and SPF alignment policies.

@@ -136,6 +136,7 @@ export type {
 } from "./schemas/ssl.js";
 
 export {
+  ImapStatusSchema,
   SmtpStatusSchema,
   DkimRecordSchema,
   VirtualDomainSchema,
@@ -144,6 +145,7 @@ export {
   SyncVirtualDomainsSchema,
 } from "./schemas/mail.js";
 export type {
+  ImapStatusResponse,
   SmtpStatusResponse,
   DkimRecordResponse,
   VirtualDomain,

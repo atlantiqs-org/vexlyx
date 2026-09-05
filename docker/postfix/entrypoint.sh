@@ -24,9 +24,11 @@ chmod 640 /etc/postfix/virtual_domains
 chmod 640 /etc/postfix/virtual_mailbox_maps
 chmod 640 /etc/postfix/virtual_alias_maps
 # 3. Virtual Mailbox Base Directory
-# Required by Postfix virtual delivery agent (virtual_mailbox_base in main.cf)
+# Required by Postfix virtual delivery agent (virtual_mailbox_base in main.cf).
+# Shared with Dovecot (F4.2) via bind mount — uid:gid 5000:5000 must match
+# virtual_uid_maps/virtual_gid_maps above and Dovecot's mail_uid/mail_gid.
 mkdir -p /var/mail/vhosts/vexlyx.local/test
-chown -R 101:12 /var/mail/vhosts 2>/dev/null || true
+chown -R 5000:5000 /var/mail/vhosts 2>/dev/null || true
 
 # Seed a test mailbox so virtual delivery succeeds in dev (Dovecot handles this in prod)
 if [ ! -s /etc/postfix/virtual_mailbox_maps ]; then
