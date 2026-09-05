@@ -6,11 +6,13 @@ import type { PrismaClient } from "@prisma/client";
 import type {
   SmtpStatusResponse,
   ImapStatusResponse,
+  WebmailStatusResponse,
   DkimRecordResponse,
   VirtualDomain,
   SendTestEmailInput,
   TestEmailResultResponse,
 } from "@vexlyx/shared";
+import { env } from "../../config/env.js";
 
 export class MailError extends Error {
   constructor(
@@ -57,6 +59,24 @@ function getDovecotManagerScriptPath(): string {
   }
 
   return candidates[0] ?? resolve(process.cwd(), "system/python/dovecot_manager.py");
+}
+
+function getWebmailManagerScriptPath(): string {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(currentDir, "../../../../../system/python/webmail_manager.py"),
+    resolve(currentDir, "../../../../system/python/webmail_manager.py"),
+    resolve(process.cwd(), "../../system/python/webmail_manager.py"),
+    resolve(process.cwd(), "system/python/webmail_manager.py"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0] ?? resolve(process.cwd(), "system/python/webmail_manager.py");
 }
 
 function getPythonExe(): string {
@@ -164,6 +184,56 @@ export async function runDovecotManager<T = Record<string, unknown>>(
     child.on("close", (code) => {
       if (code !== 0 && !stdout.trim()) {
         rej(new MailError(`dovecot_manager failed (code ${code}): ${stderr}`, "PROCESS_ERROR", 500));
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout.trim()) as T;
+        res(parsed);
+      } catch {
+        rej(new MailError(`Failed to parse manager response: ${stdout}`, "PARSE_ERROR", 500));
+      }
+    });
+
+    child.stdin.write(JSON.stringify(payload));
+    child.stdin.end();
+  });
+}
+
+async function runWebmailManager<T = Record<string, unknown>>(
+  command: string,
+  payload: Record<string, unknown> = {},
+): Promise<T> {
+  const scriptPath = getWebmailManagerScriptPath();
+  const pythonExe = getPythonExe();
+
+  return new Promise((res, rej) => {
+    const child = spawn(pythonExe, [scriptPath, command], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+      },
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf-8");
+    });
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf-8");
+    });
+
+    child.on("error", (err) => {
+      rej(new MailError(`Failed to spawn webmail_manager: ${err.message}`, "SPAWN_ERROR", 500));
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0 && !stdout.trim()) {
+        rej(new MailError(`webmail_manager failed (code ${code}): ${stderr}`, "PROCESS_ERROR", 500));
         return;
       }
 
@@ -375,6 +445,19 @@ export class MailService {
       rcptResponse: string;
       transcript: string[];
     }>("test_relay", { host, port });
+    return result;
+  }
+
+  /**
+   * Probes the Roundcube webmail container's reachability and running state.
+   */
+  async getWebmailStatus(): Promise<WebmailStatusResponse> {
+    const host = process.env.WEBMAIL_HOST || "127.0.0.1";
+    const result = await runWebmailManager<WebmailStatusResponse>("status", {
+      host,
+      port: env.WEBMAIL_PORT,
+      url: env.WEBMAIL_URL,
+    });
     return result;
   }
 }

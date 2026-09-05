@@ -138,6 +138,7 @@ export type {
 export {
   ImapStatusSchema,
   SmtpStatusSchema,
+  WebmailStatusSchema,
   DkimRecordSchema,
   VirtualDomainSchema,
   SendTestEmailSchema,
@@ -147,6 +148,7 @@ export {
 export type {
   ImapStatusResponse,
   SmtpStatusResponse,
+  WebmailStatusResponse,
   DkimRecordResponse,
   VirtualDomain,
   SendTestEmailInput,

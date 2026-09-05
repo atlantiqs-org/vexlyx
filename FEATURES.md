@@ -1205,19 +1205,19 @@ Dashboard interface for creating and managing email mailboxes.
 ---
 
 ### F4.4 — Webmail (Roundcube)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Deploy Roundcube as a Docker container for web-based email access.
 
 **Acceptance Criteria:**
-- [ ] Roundcube Docker container running
-- [ ] Proxied via Traefik at `webmail.domain.com`
-- [ ] Auto-configured with Dovecot/Postfix settings
-- [ ] Multiple mailbox support
-- [ ] Compose, reply, forward functionality
-- [ ] Address book
-- [ ] Attachment support
+- [x] Roundcube Docker container running
+- [x] Proxied via Traefik at `webmail.vexlyx.localhost` (single shared instance, same tier as `adminer`)
+- [x] Auto-configured with Dovecot/Postfix settings (no config changes needed on either)
+- [x] Multiple mailbox support (any Dovecot mailbox can log in)
+- [x] Compose, reply, forward functionality (Roundcube core)
+- [x] Address book (Roundcube core)
+- [x] Attachment support (Roundcube core)
 
 **Test Plan:**
 1. Access webmail → login page loads
@@ -1227,6 +1227,25 @@ Deploy Roundcube as a Docker container for web-based email access.
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/webmail.md`
+
+**Files Created:**
+- `system/python/webmail_manager.py`
+- `docker/traefik/dynamic/webmail.yml`
+- `docker/roundcube/config/local.inc.php`
+- `apps/dashboard/src/hooks/useWebmail.ts`
+- `apps/dashboard/src/components/mail/WebmailPanel.tsx`
+- `docs/dev/email/webmail.md`
+
+**Files Modified:**
+- `docker-compose.yml`
+- `packages/shared/src/schemas/mail.ts`
+- `packages/shared/src/index.ts`
+- `apps/api/src/config/env.ts`
+- `apps/api/.env.example`
+- `apps/api/src/modules/mail/service.ts`
+- `apps/api/src/modules/mail/routes.ts`
+- `apps/dashboard/src/app/(panel)/mail/page.tsx`
+- `FEATURES.md`
 
 ---
 

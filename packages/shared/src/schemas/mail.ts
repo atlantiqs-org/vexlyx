@@ -99,6 +99,19 @@ export const TestEmailResultSchema = z.object({
 export type TestEmailResultResponse = z.infer<typeof TestEmailResultSchema>;
 
 /**
+ * Schema validating Roundcube webmail container status.
+ */
+export const WebmailStatusSchema = z.object({
+  service: z.literal("roundcube"),
+  status: z.enum(["active", "inactive", "error"]),
+  containerRunning: z.boolean(),
+  url: z.string(),
+  lastChecked: z.string(),
+});
+
+export type WebmailStatusResponse = z.infer<typeof WebmailStatusSchema>;
+
+/**
  * Schema for synchronizing virtual domains from database to Postfix.
  */
 export const SyncVirtualDomainsSchema = z.object({

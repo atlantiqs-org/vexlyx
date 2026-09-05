@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MailboxesPanel } from "@/components/mail/MailboxesPanel";
+import { WebmailPanel } from "@/components/mail/WebmailPanel";
 import { useMail } from "@/hooks/useMail";
 import { cn } from "@/lib/utils";
 import type { SendTestEmailInput, TestEmailResultResponse } from "@vexlyx/shared";
@@ -238,6 +239,7 @@ export default function MailPage() {
         <TabsList>
           <TabsTrigger value="domains">Domains & DKIM</TabsTrigger>
           <TabsTrigger value="mailboxes">Mailboxes</TabsTrigger>
+          <TabsTrigger value="webmail">Webmail</TabsTrigger>
         </TabsList>
 
         <TabsContent value="domains" className="space-y-6">
@@ -699,6 +701,10 @@ export default function MailPage() {
 
         <TabsContent value="mailboxes">
           <MailboxesPanel />
+        </TabsContent>
+
+        <TabsContent value="webmail">
+          <WebmailPanel />
         </TabsContent>
       </Tabs>
 
