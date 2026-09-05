@@ -1,0 +1,58 @@
+# Vexlyx Postfix main.cf Configuration (F4.1)
+# Outgoing SMTP MTA & Mail Submission Agent
+
+# General Identity
+myhostname = mail.vexlyx.local
+mydomain = vexlyx.local
+myorigin = $mydomain
+mydestination = localhost.$mydomain, localhost
+inet_interfaces = all
+inet_protocols = ipv4
+
+# Virtual Domains & Mailboxes
+virtual_mailbox_domains = /etc/postfix/virtual_domains
+virtual_mailbox_maps = lmdb:/etc/postfix/virtual_mailbox_maps
+virtual_alias_maps = lmdb:/etc/postfix/virtual_alias_maps
+# Base directory for virtual mailbox delivery (required by virtual delivery agent)
+# In production this will be served by Dovecot (F4.2). For dev, mail is stored locally.
+virtual_mailbox_base = /var/mail/vhosts
+virtual_minimum_uid = 100
+virtual_uid_maps = static:101
+virtual_gid_maps = static:12
+
+# Network & Relay Security (Strict Anti-Open-Relay)
+# Relay allowed ONLY for local networks or authenticated clients
+mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+
+# TLS Configuration
+smtpd_tls_security_level = may
+smtpd_tls_cert_file = /etc/postfix/certs/cert.pem
+smtpd_tls_key_file = /etc/postfix/certs/key.pem
+smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_ciphers = high
+smtpd_tls_mandatory_ciphers = high
+smtpd_tls_session_cache_database = lmdb:${data_directory}/smtpd_scache
+smtp_tls_session_cache_database = lmdb:${data_directory}/smtp_scache
+smtpd_tls_loglevel = 1
+
+# SASL Authentication
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain = $mydomain
+broken_sasl_auth_clients = yes
+
+# OpenDKIM Milter Integration
+smtpd_milters = inet:127.0.0.1:8891
+non_smtpd_milters = $smtpd_milters
+milter_default_action = accept
+milter_protocol = 6
+
+# Banner
+smtpd_banner = $myhostname ESMTP Vexlyx Mail Server
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 3.6
