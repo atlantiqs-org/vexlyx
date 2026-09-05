@@ -21,6 +21,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -107,6 +108,9 @@ def generate_dkim_keys(domain: str, selector: str = "default", key_size: int = 2
         txt_content = pub_file.read_text(encoding="utf-8").strip()
         pub_der_match = re.search(r'p=([a-zA-Z0-9+/=]+)', txt_content)
         pub_b64 = pub_der_match.group(1) if pub_der_match else ""
+        # Re-assert the container-native KeyTable path even when the key
+        # already exists, so a stale/host-path entry self-heals on next call.
+        update_opendkim_tables(domain, selector, f"/etc/opendkim/keys/{domain}/{selector}.private")
         return {
             "domain": domain,
             "selector": selector,
@@ -146,10 +150,17 @@ def generate_dkim_keys(domain: str, selector: str = "default", key_size: int = 2
         pub_b64 = base64.b64encode(pub_der).decode("ascii")
 
     dns_txt_record = f"v=DKIM1; k=rsa; p={pub_b64}"
-    pub_file.write_text(dns_txt_record, encoding="utf-8")
+    pub_file.write_text(dns_txt_record, encoding="utf-8", newline="\n")
 
-    # Update OpenDKIM tables
-    update_opendkim_tables(domain, selector, str(priv_file))
+    # Update OpenDKIM tables. The container mounts this host directory
+    # (docker/postfix/opendkim) at /etc/opendkim (docker-compose.yml), so the
+    # KeyTable must reference the private key by that container-native POSIX
+    # path — never the host filesystem path (str(priv_file) would write a
+    # Windows path like "D:\...\default.private" on a Windows dev host, which
+    # OpenDKIM inside the Linux container cannot resolve, causing every
+    # signing attempt to fail with a milter temp-reject).
+    container_priv_path = f"/etc/opendkim/keys/{domain}/{selector}.private"
+    update_opendkim_tables(domain, selector, container_priv_path)
 
     return {
         "domain": domain,
@@ -171,29 +182,59 @@ def update_opendkim_tables(domain: str, selector: str, priv_path: str) -> None:
     key_entry = f"{selector}._domainkey.{domain} {domain}:{selector}:{priv_path}\n"
     sign_entry = f"*@{domain} {selector}._domainkey.{domain}\n"
 
-    # Append if not present in KeyTable
+    # Upsert in KeyTable: replace any existing line for this selector/domain
+    # (e.g. a stale host-path entry) rather than only appending when absent,
+    # so re-running this after a bad write self-heals instead of staying broken.
     key_lines = key_table.read_text(encoding="utf-8").splitlines() if key_table.exists() else []
-    if not any(f"{selector}._domainkey.{domain}" in line for line in key_lines):
-        with open(key_table, "a", encoding="utf-8") as f:
-            f.write(key_entry)
+    key_lines = [line for line in key_lines if f"{selector}._domainkey.{domain} " not in line]
+    key_lines.append(key_entry.rstrip("\n"))
+    # newline="\n" everywhere below is required on Windows: Python's default
+    # text-mode write translates "\n" to os.linesep ("\r\n" on Windows),
+    # silently embedding CRLF into every config file this script writes.
+    # Postfix inside the Linux container then fails to parse the affected
+    # lookup table — e.g. "fatal: match_list_parse: read file
+    # /etc/postfix/virtual_domains: No data available" — even though the
+    # file's content looks correct in any text editor.
+    key_table.write_text("\n".join(key_lines) + "\n", encoding="utf-8", newline="\n")
 
     # Append if not present in SigningTable
     sign_lines = signing_table.read_text(encoding="utf-8").splitlines() if signing_table.exists() else []
     if not any(f"*@{domain}" in line for line in sign_lines):
-        with open(signing_table, "a", encoding="utf-8") as f:
+        with open(signing_table, "a", encoding="utf-8", newline="\n") as f:
             f.write(sign_entry)
 
     # Append to TrustedHosts
     host_lines = trusted_hosts.read_text(encoding="utf-8").splitlines() if trusted_hosts.exists() else []
     if not host_lines:
         default_hosts = ["127.0.0.1", "localhost", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-        with open(trusted_hosts, "w", encoding="utf-8") as f:
+        with open(trusted_hosts, "w", encoding="utf-8", newline="\n") as f:
             for dh in default_hosts:
                 f.write(f"{dh}\n")
             f.write(f"{domain}\n")
     elif domain not in host_lines:
-        with open(trusted_hosts, "a", encoding="utf-8") as f:
+        with open(trusted_hosts, "a", encoding="utf-8", newline="\n") as f:
             f.write(f"{domain}\n")
+
+    reload_opendkim()
+
+
+def reload_opendkim() -> None:
+    """
+    OpenDKIM reads KeyTable/SigningTable/TrustedHosts once at startup and
+    keeps them in memory — a plain file write is invisible to it until it
+    gets SIGHUP. Without this, a newly written or corrected KeyTable entry
+    silently has no effect and every signing attempt for that domain keeps
+    failing the milter with a 451 temp-reject.
+    """
+    try:
+        subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "pkill", "-HUP", "opendkim"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        pass
 
 
 def get_dkim_record(domain: str, selector: str = "default") -> dict:
@@ -233,16 +274,71 @@ def sync_virtual_domains(domains: list, mailboxes: list = None) -> dict:
     virtual_mailbox_file = config_dir / "virtual_mailbox_maps"
 
     unique_domains = sorted(list(set(d.strip().lower() for d in domains if d.strip())))
-    lines = [f"{dom} # virtual domain" for dom in unique_domains]
-    virtual_domains_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    # virtual_mailbox_domains has no lmdb:/hash: prefix in main.cf, so Postfix
+    # parses it as a plain whitespace-separated domain list rather than an
+    # indexed key-value map — a trailing "# comment" on the same line is not
+    # valid syntax there (only a full-line comment is) and logs a warning on
+    # every trivial-rewrite lookup.
+    lines = unique_domains
+    virtual_domains_file.write_text(
+        "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8", newline="\n"
+    )
 
     mailbox_lines = []
     if mailboxes:
         for m in mailboxes:
             m = m.strip().lower()
             if "@" in m:
-                mailbox_lines.append(f"{m} {m.replace('@', '/')}/")
-    virtual_mailbox_file.write_text("\n".join(mailbox_lines) + ("\n" if mailbox_lines else ""), encoding="utf-8")
+                local_part, mailbox_domain = m.split("@", 1)
+                # Must match Dovecot's mail_location exactly (dovecot.conf):
+                # maildir:/var/mail/vhosts/%d/%n/Maildir — domain, THEN local
+                # part, THEN a "Maildir" subfolder. Postfix's virtual_mailbox_base
+                # is /var/mail/vhosts (main.cf), so this relative path is what
+                # decides where Postfix physically writes the message; getting
+                # the order or the "Maildir" segment wrong means mail is
+                # delivered somewhere Dovecot's IMAP will never look.
+                mailbox_lines.append(f"{m} {mailbox_domain}/{local_part}/Maildir/")
+    virtual_mailbox_file.write_text(
+        "\n".join(mailbox_lines) + ("\n" if mailbox_lines else ""), encoding="utf-8", newline="\n"
+    )
+
+    # Docker Desktop's Windows bind-mount (gRPC-FUSE/virtiofs) occasionally
+    # serves a transient read error for a fraction of a second right after a
+    # host-side write — same class of flakiness already noted for Dovecot's
+    # index files in dovecot.conf. Postfix's trivial-rewrite process has no
+    # retry logic: if it starts and hits that window, it fatals, and Postfix
+    # then throttles respawning it for up to service_throttle_time (60s),
+    # rejecting virtual-domain lookups the whole time. A brief settle delay
+    # before reload makes it very unlikely reload lands inside that window.
+    time.sleep(0.3)
+
+    # virtual_mailbox_maps is an lmdb: lookup table (see main.cf) — Postfix reads
+    # the compiled .lmdb file, not the plain-text source, so every write here
+    # must be recompiled with postmap before a reload picks it up. Without this,
+    # Postfix keeps rejecting mail for mailboxes added/removed after container
+    # startup (entrypoint.sh only runs postmap once, at boot).
+    #
+    # `docker exec` runs as root, so postmap writes the .lmdb file as
+    # root:root mode 640 — but actual mail delivery happens in the unprivileged
+    # `virtual` service, which runs as the postfix:postfix mail_owner and
+    # can't read a root-only file. Without the chmod below, every delivery
+    # fails with "Permission denied" / "mail system configuration error",
+    # even though the lookup table itself is correct and reload succeeds.
+    try:
+        subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "postmap", "lmdb:/etc/postfix/virtual_mailbox_maps"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "chmod", "644", "/etc/postfix/virtual_mailbox_maps.lmdb"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        pass
 
     # If running in docker or host with postfix installed, attempt reload
     reloaded = False

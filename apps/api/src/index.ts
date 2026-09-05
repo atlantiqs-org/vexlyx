@@ -23,6 +23,7 @@ import { databaseRoutes } from "./modules/databases/routes.js";
 import { webhookRoutes } from "./modules/webhooks/routes.js";
 import { domainRoutes } from "./modules/domains/routes.js";
 import { mailRoutes } from "./modules/mail/routes.js";
+import { mailboxRoutes } from "./modules/mailboxes/routes.js";
 
 
 /**
@@ -77,6 +78,7 @@ async function buildApp() {
   await app.register(webhookRoutes, { prefix: "/api/webhooks" });
   await app.register(domainRoutes, { prefix: "/api/domains" });
   await app.register(mailRoutes, { prefix: "/api/mail" });
+  await app.register(mailboxRoutes, { prefix: "/api/mailboxes" });
 
   return app;
 }

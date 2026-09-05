@@ -37,6 +37,12 @@ if [ ! -s /etc/postfix/virtual_mailbox_maps ]; then
 fi
 postmap /etc/postfix/virtual_mailbox_maps || true
 postmap /etc/postfix/virtual_alias_maps || true
+# postmap (run as root here) writes .lmdb files as root:root mode 640, but
+# actual delivery happens in the unprivileged "virtual" service (mail_owner
+# postfix:postfix), which then can't read them — every delivery fails with
+# "Permission denied" / "mail system configuration error" despite the map
+# itself being correct. Must stay world-readable after every recompile.
+chmod 644 /etc/postfix/virtual_mailbox_maps.lmdb /etc/postfix/virtual_alias_maps.lmdb 2>/dev/null || true
 
 # Fix all spool directory ownership (must run as root before postfix starts)
 # Without this, Postfix's cleanup daemon fails with: 451 queue file write error

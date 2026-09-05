@@ -47,6 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { MailboxesPanel } from "@/components/mail/MailboxesPanel";
 import { useMail } from "@/hooks/useMail";
 import { cn } from "@/lib/utils";
 import type { SendTestEmailInput, TestEmailResultResponse } from "@vexlyx/shared";
@@ -232,6 +234,13 @@ export default function MailPage() {
 
       <Separator />
 
+      <Tabs defaultValue="domains" className="w-full">
+        <TabsList>
+          <TabsTrigger value="domains">Domains & DKIM</TabsTrigger>
+          <TabsTrigger value="mailboxes">Mailboxes</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="domains" className="space-y-6">
       {/* Status & Service Health Cards Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* MTA Daemon Status */}
@@ -686,6 +695,12 @@ export default function MailPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="mailboxes">
+          <MailboxesPanel />
+        </TabsContent>
+      </Tabs>
 
       {/* Send Test Email Modal */}
       <Dialog open={isTestEmailOpen} onOpenChange={setIsTestEmailOpen}>

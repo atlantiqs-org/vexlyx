@@ -130,7 +130,7 @@ async function runPostfixManager<T = Record<string, unknown>>(
   });
 }
 
-async function runDovecotManager<T = Record<string, unknown>>(
+export async function runDovecotManager<T = Record<string, unknown>>(
   command: string,
   payload: Record<string, unknown> = {},
 ): Promise<T> {
@@ -284,7 +284,7 @@ export class MailService {
     const [syncRes, dovecotRes] = await Promise.all([
       runPostfixManager<{ success: boolean; syncedCount: number; domains: string[] }>(
         "sync_virtual_domains",
-        { domains: hostnames },
+        { domains: hostnames, mailboxes: mailboxes.map((m) => m.address) },
       ),
       runDovecotManager<{ success: boolean; syncedCount: number }>("sync_mailboxes", {
         domains: hostnames,
