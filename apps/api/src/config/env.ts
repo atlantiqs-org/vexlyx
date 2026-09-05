@@ -48,6 +48,10 @@ const envSchema = z.object({
   ADMINER_URL: z.string().default("http://localhost:8088"),
   // Custom Domain Mock DNS (F3.1)
   VEXLYX_MOCK_DNS: z.string().optional(),
+  // Email — Dovecot IMAP Server (F4.2)
+  IMAP_HOST: z.string().min(1).default("127.0.0.1"),
+  IMAP_PORT: z.coerce.number().int().default(143),
+  IMAPS_PORT: z.coerce.number().int().default(993),
 });
 
 /**

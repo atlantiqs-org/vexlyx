@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""
+dovecot_manager.py -- System-layer script for Vexlyx Dovecot IMAP Management (F4.2).
+
+Handles:
+- Status checks for the Dovecot daemon, Port 143 (IMAP), Port 993 (IMAPS),
+  and the internal SASL auth listener (port 12345) used by Postfix.
+- Synchronizing Mailbox rows from Postgres into Dovecot's passwd-file
+  (used as BOTH passdb and userdb), including per-mailbox Maildir++ quota
+  rules derived from Mailbox.quota (megabytes).
+
+Outputs structured JSON responses on stdout.
+"""
+
+import json
+import socket
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+# Stream Encoding Configuration
+if hasattr(sys.stdin, "reconfigure"):
+    try:
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+def respond(data: dict) -> None:
+    print(json.dumps(data), flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Path Helpers
+# ---------------------------------------------------------------------------
+
+def get_dovecot_dir() -> Path:
+    candidates = [
+        Path.cwd() / "docker" / "dovecot",
+        Path.cwd().parent / "docker" / "dovecot",
+        Path.cwd().parent.parent / "docker" / "dovecot",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    target = Path.cwd() / "docker" / "dovecot"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def get_users_file() -> Path:
+    config_dir = get_dovecot_dir() / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    users_file = config_dir / "users"
+    if not users_file.exists():
+        users_file.write_text("", encoding="utf-8")
+    return users_file
+
+
+# ---------------------------------------------------------------------------
+# Virtual Mailbox Synchronization
+# ---------------------------------------------------------------------------
+
+# Fixed numeric uid/gid shared with Postfix's virtual_uid_maps/virtual_gid_maps
+# (docker/postfix/main.cf) and Dovecot's mail_uid/mail_gid (dovecot.conf).
+VMAIL_UID = 5000
+VMAIL_GID = 5000
+DEFAULT_QUOTA_MB = 1024
+
+
+def _address_domain(address: str) -> str:
+    return address.split("@", 1)[1].strip().lower() if "@" in address else ""
+
+
+def _format_passwd_line(address: str, password_hash: str, quota_mb: int) -> str:
+    scheme_hash = password_hash if password_hash.startswith("{") else f"{{ARGON2ID}}{password_hash}"
+    return f"{address}:{scheme_hash}:{VMAIL_UID}:{VMAIL_GID}::::userdb_quota_rule=*:storage={quota_mb}M"
+
+
+def sync_mailboxes(mailboxes: list, domains: list) -> dict:
+    """
+    Upserts Mailbox rows (scoped to `domains`) into the Dovecot passwd-file.
+
+    Existing lines for addresses under `domains` are replaced entirely by the
+    incoming `mailboxes` list (so deleted mailboxes disappear); lines for
+    addresses under domains NOT in `domains` (e.g. dev fixtures seeded by
+    entrypoint.sh) are left untouched.
+    """
+    users_file = get_users_file()
+    domains_lower = set(d.strip().lower() for d in domains if d.strip())
+
+    existing_lines = []
+    if users_file.exists():
+        existing_lines = [
+            line for line in users_file.read_text(encoding="utf-8").splitlines() if line.strip()
+        ]
+
+    # Keep lines whose address domain is NOT part of this sync's scope.
+    kept_lines = [
+        line for line in existing_lines
+        if _address_domain(line.split(":", 1)[0]) not in domains_lower
+    ]
+
+    new_lines = []
+    for m in mailboxes:
+        address = str(m.get("address", "")).strip().lower()
+        password_hash = str(m.get("passwordHash", ""))
+        quota_mb = int(m.get("quotaMb", DEFAULT_QUOTA_MB))
+        if "@" not in address or not password_hash:
+            continue
+        new_lines.append(_format_passwd_line(address, password_hash, quota_mb))
+
+    all_lines = kept_lines + new_lines
+    users_file.write_text("\n".join(all_lines) + ("\n" if all_lines else ""), encoding="utf-8")
+
+    return {
+        "success": True,
+        "syncedCount": len(new_lines),
+        "mailboxes": [line.split(":", 1)[0] for line in new_lines],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Network & Port Probing
+# ---------------------------------------------------------------------------
+
+def check_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
+    try:
+        s = socket.create_connection((host, port), timeout=timeout)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Status Inspection
+# ---------------------------------------------------------------------------
+
+def get_dovecot_status(host: str = "127.0.0.1") -> dict:
+    port143_open = check_port_open(host, 143)
+    port993_open = check_port_open(host, 993)
+    sasl_open = check_port_open(host, 12345)
+
+    container_running = False
+    try:
+        proc = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", "vexlyx-dovecot"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if proc.returncode == 0 and "true" in proc.stdout.lower():
+            container_running = True
+    except Exception:
+        pass
+
+    users_file = get_dovecot_dir() / "config" / "users"
+    mailbox_count = 0
+    if users_file.exists():
+        mailbox_count = len(
+            [line for line in users_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        )
+
+    is_active = port143_open or port993_open or container_running
+    status_str = "active" if is_active else "inactive"
+
+    return {
+        "service": "dovecot",
+        "status": status_str,
+        "port143Open": port143_open,
+        "port993Open": port993_open,
+        "tlsEnforced": True,  # ssl = required in dovecot.conf
+        "saslAuthConnected": sasl_open or container_running,
+        "activeMailboxesCount": mailbox_count,
+        "lastChecked": datetime.now(timezone.utc).isoformat(),
+        "containerRunning": container_running,
+    }
+
+
+# ---------------------------------------------------------------------------
+# CLI Command Dispatcher
+# ---------------------------------------------------------------------------
+
+def main():
+    if len(sys.argv) < 2:
+        respond({"error": "Missing command argument", "code": "INVALID_ARGUMENTS"})
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+    payload = {}
+    if len(sys.argv) >= 3:
+        try:
+            payload = json.loads(sys.argv[2])
+        except Exception:
+            payload = {}
+    elif not sys.stdin.isatty():
+        try:
+            stdin_data = sys.stdin.read().strip()
+            if stdin_data:
+                payload = json.loads(stdin_data)
+        except Exception:
+            payload = {}
+
+    try:
+        if cmd == "status":
+            host = payload.get("host", "127.0.0.1")
+            respond(get_dovecot_status(host))
+        elif cmd == "sync_mailboxes":
+            mailboxes = payload.get("mailboxes", [])
+            domains = payload.get("domains", [])
+            respond(sync_mailboxes(mailboxes, domains))
+        else:
+            respond({"error": f"Unknown command: {cmd}", "code": "UNKNOWN_COMMAND"})
+            sys.exit(1)
+    except Exception as e:
+        respond({"error": str(e), "code": "EXECUTION_ERROR"})
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -38,6 +38,10 @@ apps/api/prisma/generated/
 # Docker volumes
 docker/data/
 
+# Shared Maildir storage between Postfix and Dovecot (F4.1/F4.2) — runtime mail data
+docker/mail-data/*
+!docker/mail-data/.gitkeep
+
 # Local workspaces & generated keys (F1.3)
 workspaces/
 apps/api/workspaces/

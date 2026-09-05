@@ -137,11 +137,34 @@ services:
       - ./docker/postfix/config/virtual_mailbox_maps:/etc/postfix/virtual_mailbox_maps
       - ./docker/postfix/opendkim:/etc/opendkim
       - ./docker/postfix/opendkim/opendkim.conf:/etc/opendkim/opendkim.conf:ro
+      # Shared Maildir storage with Dovecot (F4.2) — a host bind mount rather
+      # than a named volume, since named volumes reset ownership to root on
+      # Windows/WSL2 mounts (see the /var/spool/postfix note below).
+      - ./docker/mail-data/vhosts:/var/mail/vhosts
       # NOTE: /var/spool/postfix is intentionally NOT a named volume.
       # Docker named volumes on Windows (WSL2) reset directory ownership to root
       # on mount, which causes Postfix's cleanup daemon to fail with:
       #   451 4.3.0 Error: queue file write error
       # The spool is ephemeral for dev — production uses the host filesystem.
+    networks:
+      - default
+      - traefik-net
+    depends_on:
+      - dovecot
+
+  dovecot:
+    build:
+      context: ./docker/dovecot
+      dockerfile: Dockerfile
+    image: vexlyx-dovecot:latest
+    container_name: vexlyx-dovecot
+    restart: unless-stopped
+    ports:
+      - "${IMAP_PORT:-143}:143"
+      - "${IMAPS_PORT:-993}:993"
+    volumes:
+      - ./docker/mail-data/vhosts:/var/mail/vhosts
+      - ./docker/dovecot/config/users:/etc/dovecot/users
     networks:
       - default
       - traefik-net

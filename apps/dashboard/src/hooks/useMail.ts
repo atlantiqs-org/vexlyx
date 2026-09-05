@@ -54,10 +54,12 @@ export function useMail() {
   }, [fetchStatus, fetchDomains]);
 
   const syncDomains = async () => {
-    const result = await fetchAPI<{ success: boolean; syncedCount: number; domains: string[] }>(
-      "/api/mail/sync",
-      { method: "POST" },
-    );
+    const result = await fetchAPI<{
+      success: boolean;
+      syncedCount: number;
+      domains: string[];
+      mailboxesSynced: number;
+    }>("/api/mail/sync", { method: "POST" });
     await refreshAll();
     return result;
   };

@@ -1111,18 +1111,18 @@ Install and configure Postfix for outgoing email (SMTP).
 ---
 
 ### F4.2 — Dovecot IMAP Server
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Install and configure Dovecot for incoming email (IMAP).
 
 **Acceptance Criteria:**
-- [ ] Dovecot installed and running on host
-- [ ] Port 143 and 993 open
-- [ ] Virtual mailbox configuration
-- [ ] Maildir format storage
-- [ ] Quota management
-- [ ] SSL/TLS on port 993
+- [x] Dovecot installed and running on host
+- [x] Port 143 and 993 open
+- [x] Virtual mailbox configuration
+- [x] Maildir format storage
+- [x] Quota management
+- [x] SSL/TLS on port 993
 
 **Test Plan:**
 1. Connect via IMAPS → login successful
@@ -1131,6 +1131,30 @@ Install and configure Dovecot for incoming email (IMAP).
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/dovecot.md`
+
+**Files Created:**
+- `docker/dovecot/Dockerfile`
+- `docker/dovecot/dovecot.conf`
+- `docker/dovecot/entrypoint.sh`
+- `docker/dovecot/config/users`
+- `system/python/dovecot_manager.py`
+- `system/scripts/setup-dovecot.sh`
+- `tests/test_dovecot_imap.py`
+- `docs/dev/email/dovecot.md`
+
+**Files Modified:**
+- `docker-compose.yml`
+- `docker/postfix/main.cf`
+- `docker/postfix/entrypoint.sh`
+- `packages/shared/src/schemas/mail.ts`
+- `packages/shared/src/index.ts`
+- `apps/api/src/config/env.ts`
+- `apps/api/src/modules/mail/service.ts`
+- `apps/api/.env.example`
+- `apps/dashboard/src/hooks/useMail.ts`
+- `apps/dashboard/src/app/(panel)/mail/page.tsx`
+- `.gitignore`
+- `FEATURES.md`
 
 ---
 

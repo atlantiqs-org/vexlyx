@@ -1,6 +1,22 @@
 import { z } from "zod";
 
 /**
+ * Schema validating Dovecot IMAP server diagnostics and service status.
+ */
+export const ImapStatusSchema = z.object({
+  service: z.literal("dovecot"),
+  status: z.enum(["active", "inactive", "error"]),
+  port143Open: z.boolean(),
+  port993Open: z.boolean(),
+  tlsEnforced: z.boolean(),
+  saslAuthConnected: z.boolean(),
+  activeMailboxesCount: z.number().int().nonnegative(),
+  lastChecked: z.string(),
+});
+
+export type ImapStatusResponse = z.infer<typeof ImapStatusSchema>;
+
+/**
  * Schema validating SMTP server diagnostics and service status.
  */
 export const SmtpStatusSchema = z.object({
@@ -14,6 +30,8 @@ export const SmtpStatusSchema = z.object({
   activeVirtualDomainsCount: z.number().int().nonnegative(),
   queueCount: z.number().int().nonnegative(),
   lastChecked: z.string(),
+  /** Dovecot IMAP status (F4.2), attached alongside SMTP status for a single combined mail health check. */
+  imap: ImapStatusSchema.optional(),
 });
 
 export type SmtpStatusResponse = z.infer<typeof SmtpStatusSchema>;

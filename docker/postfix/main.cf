@@ -14,11 +14,13 @@ virtual_mailbox_domains = /etc/postfix/virtual_domains
 virtual_mailbox_maps = lmdb:/etc/postfix/virtual_mailbox_maps
 virtual_alias_maps = lmdb:/etc/postfix/virtual_alias_maps
 # Base directory for virtual mailbox delivery (required by virtual delivery agent)
-# In production this will be served by Dovecot (F4.2). For dev, mail is stored locally.
+# Shared with Dovecot (F4.2) via a bind-mounted host directory so both
+# containers read/write the same Maildir tree.
 virtual_mailbox_base = /var/mail/vhosts
 virtual_minimum_uid = 100
-virtual_uid_maps = static:101
-virtual_gid_maps = static:12
+# Must match Dovecot's mail_uid/mail_gid (docker/dovecot/dovecot.conf) exactly.
+virtual_uid_maps = static:5000
+virtual_gid_maps = static:5000
 
 # Network & Relay Security (Strict Anti-Open-Relay)
 # Relay allowed ONLY for local networks or authenticated clients
@@ -38,8 +40,13 @@ smtpd_tls_session_cache_database = lmdb:${data_directory}/smtpd_scache
 smtp_tls_session_cache_database = lmdb:${data_directory}/smtp_scache
 smtpd_tls_loglevel = 1
 
-# SASL Authentication
+# SASL Authentication (via Dovecot's auth service — F4.2)
+# Dovecot runs in a separate container, so auth goes over an internal TCP
+# listener (service auth { inet_listener { port = 12345 } } in dovecot.conf)
+# rather than a shared unix socket.
 smtpd_sasl_auth_enable = yes
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = inet:dovecot:12345
 smtpd_sasl_security_options = noanonymous
 smtpd_sasl_local_domain = $mydomain
 broken_sasl_auth_clients = yes

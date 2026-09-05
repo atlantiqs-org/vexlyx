@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import type {
   SmtpStatusResponse,
+  ImapStatusResponse,
   DkimRecordResponse,
   VirtualDomain,
   SendTestEmailInput,
@@ -38,6 +39,24 @@ function getPostfixManagerScriptPath(): string {
   }
 
   return candidates[0] ?? resolve(process.cwd(), "system/python/postfix_manager.py");
+}
+
+function getDovecotManagerScriptPath(): string {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(currentDir, "../../../../../system/python/dovecot_manager.py"),
+    resolve(currentDir, "../../../../system/python/dovecot_manager.py"),
+    resolve(process.cwd(), "../../system/python/dovecot_manager.py"),
+    resolve(process.cwd(), "system/python/dovecot_manager.py"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0] ?? resolve(process.cwd(), "system/python/dovecot_manager.py");
 }
 
 function getPythonExe(): string {
@@ -111,16 +130,74 @@ async function runPostfixManager<T = Record<string, unknown>>(
   });
 }
 
+async function runDovecotManager<T = Record<string, unknown>>(
+  command: string,
+  payload: Record<string, unknown> = {},
+): Promise<T> {
+  const scriptPath = getDovecotManagerScriptPath();
+  const pythonExe = getPythonExe();
+
+  return new Promise((res, rej) => {
+    const child = spawn(pythonExe, [scriptPath, command], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+      },
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf-8");
+    });
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf-8");
+    });
+
+    child.on("error", (err) => {
+      rej(new MailError(`Failed to spawn dovecot_manager: ${err.message}`, "SPAWN_ERROR", 500));
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0 && !stdout.trim()) {
+        rej(new MailError(`dovecot_manager failed (code ${code}): ${stderr}`, "PROCESS_ERROR", 500));
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout.trim()) as T;
+        res(parsed);
+      } catch {
+        rej(new MailError(`Failed to parse manager response: ${stdout}`, "PARSE_ERROR", 500));
+      }
+    });
+
+    child.stdin.write(JSON.stringify(payload));
+    child.stdin.end();
+  });
+}
+
 export class MailService {
   constructor(private readonly prisma: PrismaClient) {}
 
   /**
-   * Probes and returns Postfix SMTP and OpenDKIM service health.
+   * Probes and returns Postfix SMTP + OpenDKIM and Dovecot IMAP service health.
    */
   async getStatus(): Promise<SmtpStatusResponse> {
-    const host = process.env.SMTP_HOST || "127.0.0.1";
-    const result = await runPostfixManager<SmtpStatusResponse>("status", { host });
-    return result;
+    const smtpHost = process.env.SMTP_HOST || "127.0.0.1";
+    const imapHost = process.env.IMAP_HOST || "127.0.0.1";
+
+    const [smtpResult, imapResult] = await Promise.all([
+      runPostfixManager<SmtpStatusResponse>("status", { host: smtpHost }),
+      runDovecotManager<ImapStatusResponse>("status", { host: imapHost }).catch(
+        () => undefined,
+      ),
+    ]);
+
+    return { ...smtpResult, imap: imapResult };
   }
 
   /**
@@ -180,21 +257,42 @@ export class MailService {
   }
 
   /**
-   * Synchronizes active domains from the database to Postfix virtual domains map.
+   * Synchronizes active domains from the database to Postfix's virtual domains
+   * map, and their Mailbox rows into Dovecot's passwd-file (passdb + userdb)
+   * so IMAP logins and Maildir++ quota rules stay current (F4.2).
    */
-  async syncVirtualDomains(userId: string): Promise<{ success: boolean; syncedCount: number; domains: string[] }> {
+  async syncVirtualDomains(
+    userId: string,
+  ): Promise<{ success: boolean; syncedCount: number; domains: string[]; mailboxesSynced: number }> {
     const domains = await this.prisma.domain.findMany({
       where: { userId },
-      select: { hostname: true },
+      select: {
+        hostname: true,
+        mailboxes: { select: { address: true, password: true, quota: true } },
+      },
     });
 
     const hostnames = domains.map((d) => d.hostname);
-    const syncRes = await runPostfixManager<{ success: boolean; syncedCount: number; domains: string[] }>(
-      "sync_virtual_domains",
-      { domains: hostnames },
+    const mailboxes = domains.flatMap((d) =>
+      d.mailboxes.map((m) => ({
+        address: m.address,
+        passwordHash: m.password,
+        quotaMb: m.quota,
+      })),
     );
 
-    return syncRes;
+    const [syncRes, dovecotRes] = await Promise.all([
+      runPostfixManager<{ success: boolean; syncedCount: number; domains: string[] }>(
+        "sync_virtual_domains",
+        { domains: hostnames },
+      ),
+      runDovecotManager<{ success: boolean; syncedCount: number }>("sync_mailboxes", {
+        domains: hostnames,
+        mailboxes,
+      }).catch(() => ({ success: false, syncedCount: 0 })),
+    ]);
+
+    return { ...syncRes, mailboxesSynced: dovecotRes.syncedCount };
   }
 
   /**

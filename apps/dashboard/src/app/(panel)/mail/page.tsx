@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Server,
+  Inbox,
   Lock,
   RefreshCw,
   Send,
@@ -110,7 +111,9 @@ export default function MailPage() {
     setIsSyncing(true);
     try {
       const res = await syncDomains();
-      toast.success(`Synchronized ${res.syncedCount} virtual domains with Postfix`);
+      toast.success(
+        `Synchronized ${res.syncedCount} virtual domains with Postfix and ${res.mailboxesSynced} mailboxes with Dovecot`,
+      );
     } catch {
       toast.error("Failed to sync virtual domains");
     } finally {
@@ -230,7 +233,7 @@ export default function MailPage() {
       <Separator />
 
       {/* Status & Service Health Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* MTA Daemon Status */}
         <Card className="border border-border bg-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -363,6 +366,51 @@ export default function MailPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Milter: {status?.openDkimConnected ? "OpenDKIM Active" : "Standby"}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* IMAP (Dovecot) Service Status */}
+        <Card className="border border-border bg-card">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              IMAP Service (Dovecot)
+            </CardTitle>
+            <Inbox className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      status?.imap?.port993Open
+                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-slate-500/20 bg-slate-500/10 text-slate-500",
+                    )}
+                  >
+                    {status?.imap?.port993Open ? "993 (IMAPS) Open" : "993 (IMAPS) Closed"}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      status?.imap?.port143Open
+                        ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                        : "border-slate-500/20 bg-slate-500/10 text-slate-500",
+                    )}
+                  >
+                    143 (IMAP)
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {status?.imap?.activeMailboxesCount ?? 0} mailbox
+                  {status?.imap?.activeMailboxesCount === 1 ? "" : "es"} · SASL{" "}
+                  {status?.imap?.saslAuthConnected ? "connected" : "standby"}
                 </p>
               </div>
             )}
