@@ -8,6 +8,7 @@ import type {
   DkimRecordResponse,
   SendTestEmailInput,
   TestEmailResultResponse,
+  MailAuthStatusResponse,
 } from "@vexlyx/shared";
 
 export function useMail() {
@@ -72,6 +73,14 @@ export function useMail() {
     return result;
   };
 
+  const regenerateMailAuth = async (domainId: string): Promise<MailAuthStatusResponse> => {
+    const result = await fetchAPI<MailAuthStatusResponse>(`/api/mail/auth/${domainId}/regenerate`, {
+      method: "POST",
+    });
+    await fetchDomains();
+    return result;
+  };
+
   const sendTestEmail = async (input: SendTestEmailInput): Promise<TestEmailResultResponse> => {
     return await fetchAPI<TestEmailResultResponse>("/api/mail/test-send", {
       method: "POST",
@@ -94,6 +103,7 @@ export function useMail() {
     refreshAll,
     syncDomains,
     generateDkim,
+    regenerateMailAuth,
     sendTestEmail,
     testOpenRelay,
   };

@@ -63,6 +63,7 @@ export default function MailPage() {
     refreshAll,
     syncDomains,
     generateDkim,
+    regenerateMailAuth,
     sendTestEmail,
     testOpenRelay,
   } = useMail();
@@ -73,6 +74,7 @@ export default function MailPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [generatingDkimId, setGeneratingDkimId] = useState<string | null>(null);
+  const [regeneratingAuthId, setRegeneratingAuthId] = useState<string | null>(null);
 
   // Test Email Modal state
   const [isTestEmailOpen, setIsTestEmailOpen] = useState(false);
@@ -136,6 +138,18 @@ export default function MailPage() {
       toast.error("Failed to generate DKIM key");
     } finally {
       setGeneratingDkimId(null);
+    }
+  };
+
+  const handleRegenerateAuth = async (domainId: string) => {
+    setRegeneratingAuthId(domainId);
+    try {
+      const res = await regenerateMailAuth(domainId);
+      toast.success(`Regenerated email auth records for ${res.hostname} — score ${res.score}/100`);
+    } catch {
+      toast.error("Failed to regenerate SPF/DKIM/DMARC/MX records");
+    } finally {
+      setRegeneratingAuthId(null);
     }
   };
 
@@ -237,7 +251,7 @@ export default function MailPage() {
 
       <Tabs defaultValue="domains" className="w-full">
         <TabsList>
-          <TabsTrigger value="domains">Domains & DKIM</TabsTrigger>
+          <TabsTrigger value="domains">Domains & Email Auth</TabsTrigger>
           <TabsTrigger value="mailboxes">Mailboxes</TabsTrigger>
           <TabsTrigger value="webmail">Webmail</TabsTrigger>
         </TabsList>
@@ -435,10 +449,10 @@ export default function MailPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-lg font-semibold text-foreground">
-                Virtual Domains & DKIM Signatures
+                Virtual Domains & Email Authentication
               </CardTitle>
               <CardDescription>
-                Domains routed through Postfix for outgoing email and signed cryptographically with OpenDKIM.
+                SPF, DKIM, DMARC, and MX records auto-configured per domain, with an internal deliverability score.
               </CardDescription>
             </div>
 
@@ -532,6 +546,19 @@ export default function MailPage() {
                       </div>
 
                       <div className="flex items-center gap-3">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            domain.deliverabilityScore === 100
+                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              : domain.deliverabilityScore >= 50
+                                ? "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                : "border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                          )}
+                        >
+                          {domain.deliverabilityGrade} ({domain.deliverabilityScore}/100)
+                        </Badge>
+
                         {domain.dkimEnabled ? (
                           <Badge
                             variant="outline"
@@ -567,6 +594,83 @@ export default function MailPage() {
                     {/* Accordion Expanded Content */}
                     {isExpanded && (
                       <div className="border-t border-border bg-slate-50/50 p-4 dark:bg-slate-900/50">
+                        <div className="mb-4 space-y-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <h4 className="text-sm font-semibold text-foreground">
+                                Email Authentication (SPF · DKIM · DMARC · MX)
+                              </h4>
+                              <p className="text-xs text-muted-foreground">
+                                Deliverability score: {domain.deliverabilityGrade} (
+                                {domain.deliverabilityScore}/100)
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2"
+                              onClick={() => handleRegenerateAuth(domain.domainId)}
+                              disabled={regeneratingAuthId === domain.domainId}
+                            >
+                              <Zap
+                                className={cn(
+                                  "h-3.5 w-3.5 text-indigo-500",
+                                  regeneratingAuthId === domain.domainId && "animate-spin",
+                                )}
+                              />
+                              {regeneratingAuthId === domain.domainId
+                                ? "Regenerating…"
+                                : "Regenerate All"}
+                            </Button>
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            {(
+                              [
+                                {
+                                  label: "SPF",
+                                  pass: domain.spfConfigured,
+                                  detail: domain.authChecks?.spf.detail,
+                                },
+                                {
+                                  label: "DMARC",
+                                  pass: domain.dmarcConfigured,
+                                  detail: domain.authChecks?.dmarc.detail,
+                                },
+                                {
+                                  label: "MX",
+                                  pass: domain.mxConfigured,
+                                  detail: domain.authChecks?.mx.detail,
+                                },
+                              ] as const
+                            ).map((item) => (
+                              <div key={item.label} className="rounded-md border border-border bg-card p-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium text-muted-foreground">
+                                    {item.label}
+                                  </span>
+                                  {item.pass ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                    >
+                                      Missing
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p
+                                  className="mt-1 truncate text-[11px] text-muted-foreground"
+                                  title={item.detail}
+                                >
+                                  {item.detail ?? "Not configured"}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
                         {domain.dkimEnabled && dkim ? (
                           <div className="space-y-4">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

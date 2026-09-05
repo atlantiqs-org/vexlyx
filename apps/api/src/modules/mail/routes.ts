@@ -92,6 +92,23 @@ export async function mailRoutes(app: FastifyInstance) {
   );
 
   // ---------------------------------------------------------------------------
+  // POST /api/mail/auth/:domainId/regenerate — Regenerate SPF/DKIM/DMARC/MX
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/auth/:domainId/regenerate",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { domainId } = MailDomainParamSchema.parse(request.params);
+        const result = await service.ensureEmailAuthRecords(request.userId!, domainId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // POST /api/mail/test-send — Send test email with TLS handshake verification
   // ---------------------------------------------------------------------------
   app.post(

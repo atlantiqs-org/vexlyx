@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   SmtpStatusSchema,
   DkimRecordSchema,
+  MailAuthCheckSchema,
+  MailAuthStatusSchema,
   VirtualDomainSchema,
   SendTestEmailSchema,
   TestEmailResultSchema,
@@ -11,6 +13,8 @@ import {
 export {
   SmtpStatusSchema,
   DkimRecordSchema,
+  MailAuthCheckSchema,
+  MailAuthStatusSchema,
   VirtualDomainSchema,
   SendTestEmailSchema,
   TestEmailResultSchema,
@@ -20,6 +24,8 @@ export {
 export type {
   SmtpStatusResponse,
   DkimRecordResponse,
+  MailAuthCheck,
+  MailAuthStatusResponse,
   VirtualDomain,
   SendTestEmailInput,
   TestEmailResultResponse,
