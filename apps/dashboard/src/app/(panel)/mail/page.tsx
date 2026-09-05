@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MailboxesPanel } from "@/components/mail/MailboxesPanel";
+import { AliasesPanel } from "@/components/mail/AliasesPanel";
 import { WebmailPanel } from "@/components/mail/WebmailPanel";
 import { useMail } from "@/hooks/useMail";
 import { cn } from "@/lib/utils";
@@ -253,6 +254,7 @@ export default function MailPage() {
         <TabsList>
           <TabsTrigger value="domains">Domains & Email Auth</TabsTrigger>
           <TabsTrigger value="mailboxes">Mailboxes</TabsTrigger>
+          <TabsTrigger value="aliases">Aliases</TabsTrigger>
           <TabsTrigger value="webmail">Webmail</TabsTrigger>
         </TabsList>
 
@@ -805,6 +807,10 @@ export default function MailPage() {
 
         <TabsContent value="mailboxes">
           <MailboxesPanel />
+        </TabsContent>
+
+        <TabsContent value="aliases">
+          <AliasesPanel />
         </TabsContent>
 
         <TabsContent value="webmail">

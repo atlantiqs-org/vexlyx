@@ -179,6 +179,20 @@ export type {
   MailboxPasswordResult,
 } from "./schemas/mailbox.js";
 
+export {
+  AliasDestinationSchema,
+  CreateAliasSchema,
+  UpdateAliasDestinationsSchema,
+  AliasListQuerySchema,
+  AliasSchema,
+} from "./schemas/alias.js";
+export type {
+  CreateAliasInput,
+  UpdateAliasDestinationsInput,
+  AliasListQuery,
+  AliasResponse,
+} from "./schemas/alias.js";
+
 export type {
   User,
   Role,

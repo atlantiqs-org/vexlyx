@@ -37,6 +37,12 @@ if [ ! -s /etc/postfix/virtual_mailbox_maps ]; then
 fi
 postmap /etc/postfix/virtual_mailbox_maps || true
 postmap /etc/postfix/virtual_alias_maps || true
+# On a Windows Docker Desktop bind mount (gRPC-FUSE/virtiofs), the .lmdb file
+# postmap just wrote is sometimes not yet stat-able by the immediately
+# following chmod, which then fails silently ("|| true" swallows it) and
+# leaves the file root-only. Same class of race postfix_manager.py already
+# works around with a settle delay before its own postmap/chmod calls.
+sleep 0.3
 # postmap (run as root here) writes .lmdb files as root:root mode 640, but
 # actual delivery happens in the unprivileged "virtual" service (mail_owner
 # postfix:postfix), which then can't read them — every delivery fails with

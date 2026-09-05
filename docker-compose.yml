@@ -135,6 +135,7 @@ services:
     volumes:
       - ./docker/postfix/config/virtual_domains:/etc/postfix/virtual_domains
       - ./docker/postfix/config/virtual_mailbox_maps:/etc/postfix/virtual_mailbox_maps
+      - ./docker/postfix/config/virtual_alias_maps:/etc/postfix/virtual_alias_maps
       - ./docker/postfix/opendkim:/etc/opendkim
       - ./docker/postfix/opendkim/opendkim.conf:/etc/opendkim/opendkim.conf:ro
       # Shared Maildir storage with Dovecot (F4.2) — a host bind mount rather
