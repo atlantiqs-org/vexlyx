@@ -122,6 +122,30 @@ services:
       - default
       - traefik-net
 
+  postfix:
+    build:
+      context: ./docker/postfix
+      dockerfile: Dockerfile
+    image: vexlyx-postfix:latest
+    container_name: vexlyx-postfix
+    restart: unless-stopped
+    ports:
+      - "${SMTP_PORT:-25}:25"
+      - "${SUBMISSION_PORT:-587}:587"
+    volumes:
+      - ./docker/postfix/config/virtual_domains:/etc/postfix/virtual_domains
+      - ./docker/postfix/config/virtual_mailbox_maps:/etc/postfix/virtual_mailbox_maps
+      - ./docker/postfix/opendkim:/etc/opendkim
+      - ./docker/postfix/opendkim/opendkim.conf:/etc/opendkim/opendkim.conf:ro
+      # NOTE: /var/spool/postfix is intentionally NOT a named volume.
+      # Docker named volumes on Windows (WSL2) reset directory ownership to root
+      # on mount, which causes Postfix's cleanup daemon to fail with:
+      #   451 4.3.0 Error: queue file write error
+      # The spool is ephemeral for dev — production uses the host filesystem.
+    networks:
+      - default
+      - traefik-net
+
 volumes:
   vexlyx_postgres_data:
   vexlyx_mysql_data:

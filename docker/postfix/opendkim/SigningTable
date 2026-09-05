@@ -1,0 +1,3 @@
+*@vexlyx-test.com default._domainkey.vexlyx-test.com
+*@test-postfix-mailer.org default._domainkey.test-postfix-mailer.org
+*@wp-blogs.vexlyx.localhost default._domainkey.wp-blogs.vexlyx.localhost

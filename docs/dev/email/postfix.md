@@ -1,0 +1,160 @@
+# Postfix SMTP Server (F4.1)
+
+> **Feature:** F4.1 — Postfix SMTP Server  
+> **Status:** 🟢 COMPLETED  
+> **Package:** `@vexlyx/api`, `@vexlyx/dashboard`, `@vexlyx/shared`  
+> **Prisma Models:** `Domain`, `DnsRecord`, `Mailbox`  
+> **Infrastructure:** Postfix 3.x MTA, OpenDKIM Milter, RFC 6409 Submission  
+
+---
+
+## 1. Overview
+
+Postfix SMTP Server provides enterprise-grade outgoing email transport (MTA) and mail submission for all domains managed in Vexlyx.
+
+Drawing from modern cloud-native standards (Mailcow, Plesk, CloudPanel, Resend), Vexlyx decouples outgoing mail into:
+1. **RFC 6409 Port Separation**: Clear segregation between port 25 (server-to-server relay/delivery with strict open relay denial) and port 587 (authenticated client submission with mandatory TLS encryption).
+2. **Cryptographic DKIM Signing via OpenDKIM**: Automated 2048-bit RSA key pair generation per domain, auto-configuring `KeyTable`, `SigningTable`, and `TrustedHosts`, with direct integration into Vexlyx CoreDNS (F3.3) for instant one-click DNS TXT record deployment.
+3. **Decoupled Virtual Domain Sync**: Virtual domain tables (`/etc/postfix/virtual_domains`, `virtual_mailbox_maps`) synchronized as flat hash maps via `postfix_manager.py`, isolating mail delivery from runtime database schema changes.
+4. **Hybrid Dev & Production Parity**: Full containerized development environment in `docker-compose.yml` (`vexlyx-postfix`) exposing ports 25 and 587, alongside a dedicated bare-metal production installer (`system/scripts/setup-postfix.sh`).
+5. **Interactive Diagnostic Sandbox**: Real-time SMTP handshake testing and open relay verification directly within the Vexlyx dashboard.
+
+---
+
+## 2. Architecture & Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Next.js Dashboard UI                     │
+│  - /mail (Global Mail & Outgoing SMTP hub)                  │
+│  - Daemon status & Port 25 / 587 health badges              │
+│  - Virtual domains accordion with DKIM DNS TXT copy helpers │
+│  - Interactive SMTP Test Email & Anti-Relay Probe modals    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTP / JSON
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Fastify API Server                      │
+│  - GET  /api/mail/status       (Daemon & port status)       │
+│  - GET  /api/mail/domains      (List domains & DKIM state)  │
+│  - POST /api/mail/sync         (Sync virtual domains)       │
+│  - POST /api/mail/dkim/:id     (Generate DKIM / add to DNS) │
+│  - POST /api/mail/test-send    (Live SMTP test delivery)    │
+│  - GET  /api/mail/test-relay   (Probe open relay defense)   │
+└───────────────┬──────────────────────────────┬──────────────┘
+                │                              │
+                ▼                              ▼
+┌───────────────────────────────┐ ┌───────────────────────────┐
+│      PostgreSQL (Prisma)      │ │  system/python/           │
+│  - model Domain               │ │  postfix_manager.py       │
+│  - model DnsRecord            │ │  - 2048-bit RSA DKIM keys │
+│  - model Mailbox              │ │  - sync virtual maps      │
+└───────────────────────────────┘ │  - handshake probing      │
+                                  └─────────────┬─────────────┘
+                                                │ Configures
+                                                ▼
+                                  ┌───────────────────────────┐
+                                  │ Postfix & OpenDKIM Engine │
+                                  │ - Port 25 (SMTP MTA)      │
+                                  │ - Port 587 (Submission)   │
+                                  │ - Port 8891 (Milter)      │
+                                  │ - Strict Anti-Open-Relay  │
+                                  └───────────────────────────┘
+```
+
+---
+
+## 3. Configuration Specifications
+
+### Postfix `main.cf` (`docker/postfix/main.cf`)
+```text
+# Identity
+myhostname = mail.vexlyx.local
+mydomain = vexlyx.local
+myorigin = $mydomain
+mydestination = localhost.$mydomain, localhost
+inet_interfaces = all
+inet_protocols = ipv4
+
+# Virtual Domains & Mailboxes
+virtual_mailbox_domains = /etc/postfix/virtual_domains
+virtual_mailbox_maps = hash:/etc/postfix/virtual_mailbox_maps
+virtual_alias_maps = hash:/etc/postfix/virtual_alias_maps
+
+# Relay Security (No Open Relay)
+mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+
+# TLS Encryption
+smtpd_tls_security_level = may
+smtpd_tls_cert_file = /etc/postfix/certs/cert.pem
+smtpd_tls_key_file = /etc/postfix/certs/key.pem
+smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+
+# OpenDKIM Milter
+smtpd_milters = inet:127.0.0.1:8891
+non_smtpd_milters = $smtpd_milters
+milter_default_action = accept
+milter_protocol = 6
+```
+
+### Postfix `master.cf` (`docker/postfix/master.cf`)
+```text
+# Standard SMTP MTA
+smtp      inet  n       -       n       -       -       smtpd
+
+# Submission Port 587 (RFC 6409)
+submission inet n       -       n       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_reject_unlisted_recipient=no
+  -o smtpd_client_restrictions=permit_sasl_authenticated,permit_mynetworks,reject
+  -o smtpd_relay_restrictions=permit_sasl_authenticated,permit_mynetworks,reject
+  -o milter_macro_daemon_name=ORIGINATING
+```
+
+---
+
+## 4. OpenDKIM & DNS TXT Auto-Configuration
+
+1. **Key Generation**: 2048-bit RSA private keys are stored in `/etc/opendkim/keys/{domain}/{selector}.private`.
+2. **OpenDKIM Configuration**:
+   - `KeyTable`: `default._domainkey.domain.com domain.com:default:/etc/opendkim/keys/domain.com/default.private`
+   - `SigningTable`: `*@domain.com default._domainkey.domain.com`
+   - `TrustedHosts`: Local subnets and domain names.
+3. **RFC 6376 DNS TXT Record**:
+   - Record Name: `default._domainkey.domain.com`
+   - Record Value: `v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCA...`
+   - Auto-inserted into `model DnsRecord` zone when CoreDNS (F3.3) is active.
+
+---
+
+## 5. Testing & Verification
+
+Run the dedicated test suite:
+```bash
+python tests/test_postfix_smtp.py
+```
+
+Covered tests:
+- `test_01_generate_dkim_keys_and_dns_record`: Verifies 2048-bit key generation and `v=DKIM1; k=rsa; p=...` format.
+- `test_02_opendkim_tables_updated`: Verifies `KeyTable`, `SigningTable`, and `TrustedHosts`.
+- `test_03_get_dkim_existing`: Checks retrieving existing DKIM keys from disk.
+- `test_04_sync_virtual_domains`: Verifies flat map creation for virtual domains and mailboxes.
+- `test_05_status_inspection`: Verifies service status structure.
+- `test_01_main_cf_security_parameters`: Checks `main.cf` parameters.
+- `test_02_master_cf_submission_service`: Checks port 587 submission parameters.
+- `test_03_opendkim_conf_parameters`: Checks `opendkim.conf`.
+- `test_04_host_setup_script_exists`: Validates VPS installation script.
+- `test_01_unauthenticated_requests_return_401`: Enforces security on all mail endpoints.
+
+---
+
+## 6. How to Extend
+
+- **F4.2 Dovecot IMAP Server**: Postfix is already configured with `smtpd_sasl_type = dovecot` and `smtpd_sasl_path = private/auth`. Once Dovecot is deployed, it binds the SASL socket at `/var/spool/postfix/private/auth`.
+- **F4.3 Mailbox Management UI**: The virtual mailbox map structure (`/etc/postfix/virtual_mailbox_maps`) is ready for per-user quota and address provisioning.
+- **F4.5 SPF & DMARC Auto-Configuration**: The DKIM public keys generated in F4.1 directly populate the DMARC and SPF alignment policies.

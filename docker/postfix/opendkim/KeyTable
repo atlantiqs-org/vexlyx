@@ -1,0 +1,3 @@
+default._domainkey.vexlyx-test.com vexlyx-test.com:default:D:\learing\Vexlyx\docker\postfix\opendkim\keys\vexlyx-test.com\default.private
+default._domainkey.test-postfix-mailer.org test-postfix-mailer.org:default:D:\learing\Vexlyx\docker\postfix\opendkim\keys\test-postfix-mailer.org\default.private
+default._domainkey.wp-blogs.vexlyx.localhost wp-blogs.vexlyx.localhost:default:D:\learing\Vexlyx\docker\postfix\opendkim\keys\wp-blogs.vexlyx.localhost\default.private

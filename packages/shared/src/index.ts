@@ -135,6 +135,23 @@ export type {
   CertificateResponse,
 } from "./schemas/ssl.js";
 
+export {
+  SmtpStatusSchema,
+  DkimRecordSchema,
+  VirtualDomainSchema,
+  SendTestEmailSchema,
+  TestEmailResultSchema,
+  SyncVirtualDomainsSchema,
+} from "./schemas/mail.js";
+export type {
+  SmtpStatusResponse,
+  DkimRecordResponse,
+  VirtualDomain,
+  SendTestEmailInput,
+  TestEmailResultResponse,
+  SyncVirtualDomainsInput,
+} from "./schemas/mail.js";
+
 export type {
   User,
   Role,
