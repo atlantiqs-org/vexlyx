@@ -1250,26 +1250,42 @@ Deploy Roundcube as a Docker container for web-based email access.
 ---
 
 ### F4.5 — SPF, DKIM, DMARC Auto-Configuration
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Automatically generate and manage email authentication DNS records.
 
 **Acceptance Criteria:**
-- [ ] SPF record auto-generated per domain
-- [ ] DKIM key pair generation
-- [ ] DKIM public key in DNS TXT record
-- [ ] DMARC policy record generation
-- [ ] Email deliverability score monitoring
-- [ ] DNS records updated when mail domain added
+- [x] SPF record auto-generated per domain
+- [x] DKIM key pair generation
+- [x] DKIM public key in DNS TXT record
+- [x] DMARC policy record generation
+- [x] Email deliverability score monitoring (internal 0-100 score, no external API)
+- [x] DNS records updated when mail domain added (triggered on first mailbox creation)
 
 **Test Plan:**
 1. Add mail domain → SPF, DKIM, DMARC records created
 2. Send email → passes SPF/DKIM/DMARC checks
-3. Mail-Tester score → 9/10 or higher
+3. Mail-Tester score → 9/10 or higher (verify manually via mail-tester.com; Vexlyx's own score is internal-only and DB-based, see docs)
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/authentication.md`
+
+**Files Created:**
+- `docs/dev/email/authentication.md`
+- `tests/test_mail_authentication.py`
+
+**Files Modified:**
+- `apps/api/src/modules/domains/dns-service.ts`
+- `apps/api/src/modules/mail/service.ts`
+- `apps/api/src/modules/mail/routes.ts`
+- `apps/api/src/modules/mail/schema.ts`
+- `apps/api/src/modules/mailboxes/service.ts`
+- `packages/shared/src/schemas/mail.ts`
+- `packages/shared/src/index.ts`
+- `apps/dashboard/src/hooks/useMail.ts`
+- `apps/dashboard/src/app/(panel)/mail/page.tsx`
+- `FEATURES.md`
 
 ---
 

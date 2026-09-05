@@ -87,6 +87,10 @@ export class MailboxService {
       throw new MailboxError("Mailbox address already exists", "MAILBOX_EXISTS", 409);
     }
 
+    // Determined before creation: whether this will be the domain's first
+    // mailbox, used to trigger F4.5 SPF/DKIM/DMARC/MX auto-configuration.
+    const isFirstMailbox = (await this.prisma.mailbox.count({ where: { domainId: domain.id } })) === 0;
+
     const password = generatePassword();
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
@@ -102,6 +106,17 @@ export class MailboxService {
     });
 
     await this.mailService.syncVirtualDomains(userId);
+
+    if (isFirstMailbox) {
+      // Auto-configure SPF/DKIM/DMARC/MX (F4.5). Never blocks mailbox
+      // creation — mirrors DnsService.syncZoneFile's silent-catch philosophy.
+      try {
+        await this.mailService.ensureEmailAuthRecords(userId, domain.id);
+      } catch {
+        // Non-fatal: the mailbox exists regardless of DNS auto-config outcome.
+        // The user can still trigger it manually via "Regenerate All".
+      }
+    }
 
     return {
       mailbox: {

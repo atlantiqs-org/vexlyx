@@ -11,8 +11,11 @@ import type {
   VirtualDomain,
   SendTestEmailInput,
   TestEmailResultResponse,
+  MailAuthCheck,
+  MailAuthStatusResponse,
 } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
+import { DnsService } from "../domains/dns-service.js";
 
 export class MailError extends Error {
   constructor(
@@ -251,7 +254,11 @@ async function runWebmailManager<T = Record<string, unknown>>(
 }
 
 export class MailService {
-  constructor(private readonly prisma: PrismaClient) {}
+  private readonly dnsService: DnsService;
+
+  constructor(private readonly prisma: PrismaClient) {
+    this.dnsService = new DnsService(prisma);
+  }
 
   /**
    * Probes and returns Postfix SMTP + OpenDKIM and Dovecot IMAP service health.
@@ -280,8 +287,12 @@ export class MailService {
         mailboxes: true,
         dnsRecords: {
           where: {
-            type: "TXT",
-            name: "default._domainkey",
+            OR: [
+              { type: "TXT", name: "default._domainkey" },
+              { type: "TXT", name: "@" },
+              { type: "TXT", name: "_dmarc" },
+              { type: "MX", name: "@" },
+            ],
           },
         },
       },
@@ -301,7 +312,11 @@ export class MailService {
         publicKey: string;
       }>("get_dkim", { domain: d.hostname, selector: "default" });
 
-      const hasDnsTxt = d.dnsRecords.length > 0;
+      const hasDnsTxt = d.dnsRecords.some(
+        (r) => r.type === "TXT" && r.name === "default._domainkey",
+      );
+
+      const { checks, score, grade } = this.computeAuthChecks(d.dnsRecords);
 
       result.push({
         domainId: d.id,
@@ -320,10 +335,118 @@ export class MailService {
             }
           : undefined,
         mailboxCount: d.mailboxes.length,
+        spfConfigured: checks.spf.pass,
+        dmarcConfigured: checks.dmarc.pass,
+        mxConfigured: checks.mx.pass,
+        deliverabilityScore: score,
+        deliverabilityGrade: grade,
+        authChecks: checks,
       });
     }
 
     return result;
+  }
+
+  /**
+   * Pure, I/O-free computation of the F4.5 internal-only deliverability
+   * scorecard from an already-fetched set of DNS records. No external DNS
+   * lookups or third-party API calls are made — this only inspects Vexlyx's
+   * own DnsRecord rows.
+   */
+  private computeAuthChecks(
+    dnsRecords: Array<{ type: string; name: string; value: string; priority: number | null }>,
+  ): {
+    checks: { spf: MailAuthCheck; dkim: MailAuthCheck; dmarc: MailAuthCheck; mx: MailAuthCheck };
+    score: number;
+    grade: MailAuthStatusResponse["grade"];
+  } {
+    const unquote = (value: string) => value.replace(/^"|"$/g, "").trim();
+
+    const spfRecord = dnsRecords.find(
+      (r) => r.type === "TXT" && r.name === "@" && unquote(r.value).startsWith("v=spf1"),
+    );
+    const dmarcRecord = dnsRecords.find(
+      (r) => r.type === "TXT" && r.name === "_dmarc" && unquote(r.value).startsWith("v=DMARC1"),
+    );
+    const dkimRecord = dnsRecords.find((r) => r.type === "TXT" && r.name === "default._domainkey");
+    const mxRecord = dnsRecords.find((r) => r.type === "MX" && r.name === "@");
+
+    const spfValid = !!spfRecord && /^v=spf1(\s+\S+)*\s+[-~?]all$/.test(unquote(spfRecord.value));
+    const dmarcValid =
+      !!dmarcRecord && /^v=DMARC1;\s*p=(none|quarantine|reject)/.test(unquote(dmarcRecord.value));
+    const dkimPublished = !!dkimRecord;
+    const mxPresent = !!mxRecord;
+
+    const checks = {
+      spf: {
+        pass: spfValid,
+        detail: spfRecord ? unquote(spfRecord.value) : "No SPF TXT record found at @",
+      },
+      dkim: {
+        pass: dkimPublished,
+        detail: dkimPublished
+          ? "default._domainkey TXT record present"
+          : "DKIM not published to DNS",
+      },
+      dmarc: {
+        pass: dmarcValid,
+        detail: dmarcRecord ? unquote(dmarcRecord.value) : "No DMARC TXT record found at _dmarc",
+      },
+      mx: {
+        pass: mxPresent,
+        detail: mxRecord ? `${mxRecord.value} (priority ${mxRecord.priority})` : "No MX record found",
+      },
+    };
+
+    const score =
+      (checks.spf.pass ? 25 : 0) +
+      (checks.dkim.pass ? 25 : 0) +
+      (checks.dmarc.pass ? 25 : 0) +
+      (checks.mx.pass ? 25 : 0);
+
+    const grade: MailAuthStatusResponse["grade"] =
+      score === 100 ? "Excellent" : score >= 75 ? "Good" : score >= 50 ? "Needs Improvement" : "Poor";
+
+    return { checks, score, grade };
+  }
+
+  /**
+   * Computes the F4.5 deliverability scorecard for a single domain.
+   */
+  async getMailAuthStatus(userId: string, domainId: string): Promise<MailAuthStatusResponse> {
+    const domain = await this.prisma.domain.findFirst({
+      where: { id: domainId, userId },
+      include: { dnsRecords: true },
+    });
+
+    if (!domain) {
+      throw new MailError("Domain not found or unauthorized", "DOMAIN_NOT_FOUND", 404);
+    }
+
+    const { checks, score, grade } = this.computeAuthChecks(domain.dnsRecords);
+
+    return {
+      domainId: domain.id,
+      hostname: domain.hostname,
+      spfConfigured: checks.spf.pass,
+      dkimConfigured: checks.dkim.pass,
+      dmarcConfigured: checks.dmarc.pass,
+      mxConfigured: checks.mx.pass,
+      score,
+      grade,
+      checks,
+    };
+  }
+
+  /**
+   * Idempotently provisions SPF, DKIM, DMARC, and MX records for a domain
+   * (F4.5). Safe to call repeatedly — record creation is check-then-create,
+   * never destructive.
+   */
+  async ensureEmailAuthRecords(userId: string, domainId: string): Promise<MailAuthStatusResponse> {
+    await this.dnsService.initializeEmailAuthRecords(userId, domainId);
+    await this.getOrGenerateDkim(userId, domainId, true);
+    return this.getMailAuthStatus(userId, domainId);
   }
 
   /**
@@ -405,6 +528,9 @@ export class MailService {
           domainId: domain.id,
         },
       });
+      // Sync CoreDNS zone file so the new TXT record is actually resolvable,
+      // not just persisted in Postgres (F4.5).
+      await this.dnsService.syncZoneFile(domain.hostname, domain.id);
       inDns = true;
     }
 

@@ -52,6 +52,39 @@ export const DkimRecordSchema = z.object({
 export type DkimRecordResponse = z.infer<typeof DkimRecordSchema>;
 
 /**
+ * Schema for a single deliverability check (SPF/DKIM/DMARC/MX) result.
+ */
+export const MailAuthCheckSchema = z.object({
+  pass: z.boolean(),
+  detail: z.string(),
+});
+
+export type MailAuthCheck = z.infer<typeof MailAuthCheckSchema>;
+
+/**
+ * Schema for an internal-only 0-100 email deliverability scorecard (F4.5).
+ * Computed entirely from Vexlyx's own DnsRecord table — no external lookups.
+ */
+export const MailAuthStatusSchema = z.object({
+  domainId: z.string(),
+  hostname: z.string(),
+  spfConfigured: z.boolean(),
+  dkimConfigured: z.boolean(),
+  dmarcConfigured: z.boolean(),
+  mxConfigured: z.boolean(),
+  score: z.number().int().min(0).max(100),
+  grade: z.enum(["Excellent", "Good", "Needs Improvement", "Poor"]),
+  checks: z.object({
+    spf: MailAuthCheckSchema,
+    dkim: MailAuthCheckSchema,
+    dmarc: MailAuthCheckSchema,
+    mx: MailAuthCheckSchema,
+  }),
+});
+
+export type MailAuthStatusResponse = z.infer<typeof MailAuthStatusSchema>;
+
+/**
  * Schema for a virtual domain registered with Postfix.
  */
 export const VirtualDomainSchema = z.object({
@@ -61,6 +94,21 @@ export const VirtualDomainSchema = z.object({
   dkimEnabled: z.boolean(),
   dkimRecord: DkimRecordSchema.optional(),
   mailboxCount: z.number().int().default(0),
+  spfConfigured: z.boolean().default(false),
+  dmarcConfigured: z.boolean().default(false),
+  mxConfigured: z.boolean().default(false),
+  deliverabilityScore: z.number().int().min(0).max(100).default(0),
+  deliverabilityGrade: z
+    .enum(["Excellent", "Good", "Needs Improvement", "Poor"])
+    .default("Poor"),
+  authChecks: z
+    .object({
+      spf: MailAuthCheckSchema,
+      dkim: MailAuthCheckSchema,
+      dmarc: MailAuthCheckSchema,
+      mx: MailAuthCheckSchema,
+    })
+    .optional(),
 });
 
 export type VirtualDomain = z.infer<typeof VirtualDomainSchema>;

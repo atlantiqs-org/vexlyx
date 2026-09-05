@@ -269,6 +269,85 @@ export class DnsService {
   }
 
   /**
+   * Auto-generates SPF, DMARC, and MX (if missing) DNS records for email
+   * deliverability (F4.5). DKIM is handled separately by
+   * MailService.getOrGenerateDkim since it requires Python key generation.
+   * Idempotent: safe to call repeatedly, never overwrites an existing
+   * custom record (e.g. a pre-existing MX pointing at Google Workspace).
+   */
+  async initializeEmailAuthRecords(userId: string, domainId: string): Promise<DnsRecordResponse[]> {
+    const domain = await this.getDomainOrThrow(userId, domainId);
+    const serverIp = process.env.SERVER_IP || "127.0.0.1";
+
+    const defaults: Array<{
+      type: DnsRecordType;
+      name: string;
+      value: string;
+      ttl: number;
+      priority?: number;
+      /** Custom existence check — SPF must be matched by value prefix, not name alone. */
+      exists: () => Promise<boolean>;
+    }> = [
+      {
+        type: "TXT",
+        name: "@",
+        value: `v=spf1 mx a ip4:${serverIp} ~all`,
+        ttl: 3600,
+        // Other unrelated TXT records may already exist at "@", so SPF is
+        // identified by its "v=spf1" prefix rather than name alone.
+        exists: async () =>
+          !!(await this.prisma.dnsRecord.findFirst({
+            where: { domainId: domain.id, type: "TXT", name: "@", value: { startsWith: "v=spf1" } },
+          })),
+      },
+      {
+        type: "TXT",
+        name: "_dmarc",
+        value: `v=DMARC1; p=none; rua=mailto:postmaster@${domain.hostname}; pct=100`,
+        ttl: 3600,
+        exists: async () =>
+          !!(await this.prisma.dnsRecord.findFirst({
+            where: { domainId: domain.id, type: "TXT", name: "_dmarc" },
+          })),
+      },
+      {
+        type: "MX",
+        name: "@",
+        value: `mail.${domain.hostname}`,
+        ttl: 3600,
+        priority: 10,
+        exists: async () =>
+          !!(await this.prisma.dnsRecord.findFirst({
+            where: { domainId: domain.id, type: "MX", name: "@" },
+          })),
+      },
+    ];
+
+    let created = false;
+    for (const def of defaults) {
+      if (await def.exists()) continue;
+
+      await this.prisma.dnsRecord.create({
+        data: {
+          domainId: domain.id,
+          type: def.type,
+          name: def.name,
+          value: def.value,
+          ttl: def.ttl,
+          priority: def.priority ?? null,
+        },
+      });
+      created = true;
+    }
+
+    if (created) {
+      await this.syncZoneFile(domain.hostname, domain.id);
+    }
+
+    return this.listRecords(userId, domainId);
+  }
+
+  /**
    * Export an RFC 1035 zone file.
    */
   async exportZoneFile(
