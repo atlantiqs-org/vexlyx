@@ -13,6 +13,8 @@ Outputs structured JSON responses on stdout.
 """
 
 import json
+import os
+import re
 import socket
 import subprocess
 import sys
@@ -59,7 +61,7 @@ def get_users_file() -> Path:
     config_dir.mkdir(parents=True, exist_ok=True)
     users_file = config_dir / "users"
     if not users_file.exists():
-        users_file.write_text("", encoding="utf-8")
+        users_file.write_text("", encoding="utf-8", newline="\n")
     return users_file
 
 
@@ -78,7 +80,20 @@ def _address_domain(address: str) -> str:
     return address.split("@", 1)[1].strip().lower() if "@" in address else ""
 
 
+# Node's `argon2` package (apps/api, used by mailboxes/service.ts and
+# auth/service.ts) encodes the Argon2 PHC parameter string as "m=..,p=..,t=..".
+# Dovecot's ARGON2ID passdb parser requires the canonical "m=..,t=..,p=.."
+# order and silently derives the WRONG t/p values when it sees them swapped —
+# the hash still "looks" well-formed, but every IMAP login then fails with
+# "Password mismatch" even though the password is correct (verified: swapping
+# only the parameter order, keeping the same salt/digest, turns a failing
+# `doveadm pw -t` into a passing one). Reorder before writing so Dovecot reads
+# the same m/t/p values the hash was actually computed with.
+_ARGON2_PARAM_ORDER_RE = re.compile(r"(m=\d+),(p=\d+),(t=\d+)")
+
+
 def _format_passwd_line(address: str, password_hash: str, quota_mb: int) -> str:
+    password_hash = _ARGON2_PARAM_ORDER_RE.sub(r"\1,\3,\2", password_hash)
     scheme_hash = password_hash if password_hash.startswith("{") else f"{{ARGON2ID}}{password_hash}"
     return f"{address}:{scheme_hash}:{VMAIL_UID}:{VMAIL_GID}::::userdb_quota_rule=*:storage={quota_mb}M"
 
@@ -117,13 +132,66 @@ def sync_mailboxes(mailboxes: list, domains: list) -> dict:
         new_lines.append(_format_passwd_line(address, password_hash, quota_mb))
 
     all_lines = kept_lines + new_lines
-    users_file.write_text("\n".join(all_lines) + ("\n" if all_lines else ""), encoding="utf-8")
+    # newline="\n": Python's default text-mode write on Windows translates
+    # "\n" to "\r\n", which corrupts this passwd-file for the Linux Dovecot
+    # container (see the matching note in postfix_manager.py).
+    users_file.write_text(
+        "\n".join(all_lines) + ("\n" if all_lines else ""), encoding="utf-8", newline="\n"
+    )
 
     return {
         "success": True,
         "syncedCount": len(new_lines),
         "mailboxes": [line.split(":", 1)[0] for line in new_lines],
     }
+
+
+def get_vhosts_dir() -> Path:
+    candidates = [
+        Path.cwd() / "docker" / "mail-data" / "vhosts",
+        Path.cwd().parent / "docker" / "mail-data" / "vhosts",
+        Path.cwd().parent.parent / "docker" / "mail-data" / "vhosts",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]
+
+
+# ---------------------------------------------------------------------------
+# Mailbox Disk Usage (F4.3)
+# ---------------------------------------------------------------------------
+
+def get_mailbox_usage(address: str) -> dict:
+    """Sums real Maildir file sizes on disk for a single mailbox address."""
+    address = address.strip().lower()
+    if "@" not in address:
+        return {"address": address, "usedBytes": 0, "exists": False}
+
+    local_part, domain = address.split("@", 1)
+    maildir = get_vhosts_dir() / domain / local_part / "Maildir"
+
+    if not maildir.exists():
+        return {"address": address, "usedBytes": 0, "exists": False}
+
+    used_bytes = 0
+    for root, _dirs, files in os.walk(maildir):
+        for name in files:
+            try:
+                used_bytes += (Path(root) / name).stat().st_size
+            except OSError:
+                continue
+
+    return {"address": address, "usedBytes": used_bytes, "exists": True}
+
+
+def get_all_usage(addresses: list) -> dict:
+    """Batch usage lookup so the API spawns this script once instead of per-mailbox."""
+    usage = {}
+    for address in addresses:
+        result = get_mailbox_usage(address)
+        usage[result["address"]] = result["usedBytes"]
+    return {"usage": usage}
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +284,9 @@ def main():
             mailboxes = payload.get("mailboxes", [])
             domains = payload.get("domains", [])
             respond(sync_mailboxes(mailboxes, domains))
+        elif cmd == "get_usage":
+            addresses = payload.get("addresses", [])
+            respond(get_all_usage(addresses))
         else:
             respond({"error": f"Unknown command: {cmd}", "code": "UNKNOWN_COMMAND"})
             sys.exit(1)

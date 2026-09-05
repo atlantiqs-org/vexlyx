@@ -1159,18 +1159,18 @@ Install and configure Dovecot for incoming email (IMAP).
 ---
 
 ### F4.3 — Mailbox Management UI
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Dashboard interface for creating and managing email mailboxes.
 
 **Acceptance Criteria:**
-- [ ] `POST /api/mailboxes` — create mailbox
-- [ ] `GET /api/mailboxes` — list mailboxes
-- [ ] `DELETE /api/mailboxes/:id` — delete mailbox
-- [ ] Quota configuration per mailbox
-- [ ] Password reset functionality
-- [ ] Mailbox usage statistics
+- [x] `POST /api/mailboxes` — create mailbox
+- [x] `GET /api/mailboxes` — list mailboxes
+- [x] `DELETE /api/mailboxes/:id` — delete mailbox
+- [x] Quota configuration per mailbox
+- [x] Password reset functionality
+- [x] Mailbox usage statistics
 
 **Test Plan:**
 1. Create mailbox → can login via IMAP
@@ -1180,6 +1180,27 @@ Dashboard interface for creating and managing email mailboxes.
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/mailbox-management.md`
+
+**Files Created:**
+- `apps/api/src/modules/mailboxes/routes.ts`
+- `apps/api/src/modules/mailboxes/service.ts`
+- `apps/api/src/modules/mailboxes/schema.ts`
+- `packages/shared/src/schemas/mailbox.ts`
+- `apps/dashboard/src/hooks/useMailboxes.ts`
+- `apps/dashboard/src/components/mail/MailboxesPanel.tsx`
+- `apps/dashboard/src/components/ui/tabs.tsx`
+- `apps/dashboard/src/components/ui/table.tsx`
+- `docs/dev/email/mailbox-management.md`
+
+**Files Modified:**
+- `apps/api/src/index.ts`
+- `apps/api/src/modules/mail/service.ts`
+- `packages/shared/src/index.ts`
+- `apps/dashboard/src/app/(panel)/mail/page.tsx`
+- `system/python/dovecot_manager.py`
+- `system/python/postfix_manager.py`
+- `docker/postfix/entrypoint.sh`
+- `FEATURES.md`
 
 ---
 

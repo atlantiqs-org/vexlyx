@@ -154,6 +154,25 @@ export type {
   SyncVirtualDomainsInput,
 } from "./schemas/mail.js";
 
+export {
+  MailboxStatusSchema,
+  QuotaPresetSchema,
+  CreateMailboxSchema,
+  UpdateMailboxQuotaSchema,
+  MailboxListQuerySchema,
+  MailboxSchema,
+  MailboxPasswordResultSchema,
+} from "./schemas/mailbox.js";
+export type {
+  MailboxStatus,
+  QuotaPreset,
+  CreateMailboxInput,
+  UpdateMailboxQuotaInput,
+  MailboxListQuery,
+  MailboxResponse,
+  MailboxPasswordResult,
+} from "./schemas/mailbox.js";
+
 export type {
   User,
   Role,
