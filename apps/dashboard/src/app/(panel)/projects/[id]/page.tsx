@@ -11,6 +11,8 @@ import {
   Globe,
   Loader2,
   AlertTriangle,
+  FolderOpen,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,8 @@ import { WordPressPanel } from "@/components/projects/WordPressPanel";
 import { DockerfilePanel } from "@/components/projects/DockerfilePanel";
 import { DatabasePanel } from "@/components/projects/DatabasePanel";
 import { DomainPanel } from "@/components/projects/DomainPanel";
+import { FileManagerCard } from "@/components/projects/FileManagerCard";
+import { SftpPanel } from "@/components/projects/SftpPanel";
 import type { Project, ProjectStatus, ProjectType } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -231,17 +235,31 @@ export default function ProjectDetailPage() {
           </Badge>
         </div>
 
-        {/* Danger zone button */}
-        <Button
-          id="delete-project-btn"
-          variant="outline"
-          size="sm"
-          className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-          onClick={() => setDeleteDialogOpen(true)}
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </Button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 shadow-xs">
+            <Link
+              href={`/projects/${project.id}/files`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open File Manager in a new tab"
+            >
+              <FolderOpen className="h-4 w-4 text-amber-500" />
+              File Manager
+              <ExternalLink className="h-3 w-3 text-muted-foreground ml-0.5" />
+            </Link>
+          </Button>
+          <Button
+            id="delete-project-btn"
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       <Separator />
@@ -343,6 +361,12 @@ export default function ProjectDetailPage() {
         project={project}
         onProjectUpdate={fetchProject}
       />
+
+      {/* File Manager (F2.8) */}
+      <FileManagerCard projectId={project.id} />
+
+      {/* SFTP Access (F2.8) */}
+      <SftpPanel projectId={project.id} />
 
 
       {/* WordPress Management Panel */}

@@ -202,6 +202,7 @@ export type {
   UpdateVacationResponderInput,
 } from "./schemas/vacation.js";
 
+
 export type {
   User,
   Role,
@@ -216,3 +217,19 @@ export type {
   EnvVar,
   DecryptedEnvVar,
 } from "./types/index.js";
+
+export {
+  FileNodeSchema,
+  ListFilesQuerySchema,
+  ReadFileQuerySchema,
+  WriteFileBodySchema,
+  DeleteNodeBodySchema,
+  RenameBodySchema,
+  MkdirBodySchema,
+  CopyBodySchema,
+  MoveBodySchema,
+  SftpUserSchema,
+  SftpAddSshKeyBodySchema,
+} from "./schemas/files.js";
+export type { FileNode, SftpUser, SftpAddSshKeyBody } from "./schemas/files.js";
+

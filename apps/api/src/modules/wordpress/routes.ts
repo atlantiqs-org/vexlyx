@@ -4,6 +4,7 @@ import {
   ProjectIdParamSchema,
   WordPressInstallSchema,
   WordPressUploadSchema,
+  WordPressImportSchema,
 } from "./schema.js";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,69 @@ export async function wordpressRoutes(app: FastifyInstance) {
       try {
         const { id } = ProjectIdParamSchema.parse(request.params);
         const result = await service.getStatus(request.userId!, id);
+        return result;
+      } catch (err) {
+        handleWordPressError(err, reply);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // GET /api/projects/:id/wordpress/export
+  // One-click export: files + DB as tar.gz download
+  // -------------------------------------------------------------------------
+  app.get(
+    "/:id/wordpress/export",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = ProjectIdParamSchema.parse(request.params);
+        const { stream, filename } = await service.exportSite(request.userId!, id);
+        reply
+          .header("Content-Disposition", `attachment; filename="${filename}"`)
+          .header("Content-Type", "application/gzip");
+        return reply.send(stream);
+      } catch (err) {
+        handleWordPressError(err, reply);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // POST /api/projects/:id/wordpress/import
+  // Upload tar.gz → extract → import SQL → update wp-config
+  // -------------------------------------------------------------------------
+  app.post(
+    "/:id/wordpress/import",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { id } = ProjectIdParamSchema.parse(request.params);
+
+        let tarPath: string | undefined;
+        let dbName: string | undefined;
+        let dbUser: string | undefined;
+        let dbPassword: string | undefined;
+        let dbHost: string | undefined;
+
+        const parts = request.parts({
+          limits: { fileSize: 500 * 1024 * 1024 },
+        });
+
+        for await (const part of parts) {
+          if (part.type === "field") {
+            if (part.fieldname === "dbName") dbName = part.value as string;
+            if (part.fieldname === "dbUser") dbUser = part.value as string;
+            if (part.fieldname === "dbPassword") dbPassword = part.value as string;
+            if (part.fieldname === "dbHost") dbHost = part.value as string;
+          } else if (part.type === "file" && part.filename.endsWith(".tar.gz")) {
+            tarPath = await service.saveTempUpload(id, part.file, part.filename);
+          }
+        }
+
+        const body = WordPressImportSchema.parse({ tarPath, dbName, dbUser, dbPassword, dbHost });
+        const result = await service.importSite(request.userId!, id, body);
+        reply.status(200);
         return result;
       } catch (err) {
         handleWordPressError(err, reply);

@@ -13,6 +13,8 @@ import {
   Server,
   Database,
   Sparkles,
+  Download,
+  FolderInput,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +63,16 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   const [uploadType, setUploadType] = useState<"plugin" | "theme">("plugin");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Export/import state
+  const [isExporting, setIsExporting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importDbName, setImportDbName] = useState("wordpress");
+  const [importDbUser, setImportDbUser] = useState("root");
+  const [importDbPassword, setImportDbPassword] = useState("");
+  const [importDbHost, setImportDbHost] = useState("localhost");
+  const importFileRef = useRef<HTMLInputElement | null>(null);
 
   const loadDatabases = useCallback(async () => {
     try {
@@ -192,6 +204,52 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
     : project.internalPort
     ? `http://localhost:${project.internalPort}`
     : null;
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"}/api/projects/${project.id}/wordpress/export`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `wp-export-${project.id}.tar.gz`;
+      a.click();
+      toast.success("WordPress site exported successfully");
+    } catch {
+      toast.error("Export failed. Make sure WordPress is installed and deployed.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    const file = importFileRef.current?.files?.[0];
+    if (!file) { toast.error("Select a .tar.gz archive first"); return; }
+    setIsImporting(true);
+    try {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      form.append("dbName", importDbName);
+      form.append("dbUser", importDbUser);
+      form.append("dbPassword", importDbPassword);
+      form.append("dbHost", importDbHost);
+      const url = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"}/api/projects/${project.id}/wordpress/import`;
+      const res = await fetch(url, { method: "POST", credentials: "include", body: form });
+      if (!res.ok) {
+        const d = (await res.json()) as { error?: string };
+        throw new Error(d.error ?? "Import failed");
+      }
+      toast.success("WordPress site imported! Redeploy to apply changes.");
+      setImportOpen(false);
+      onProjectUpdate?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   return (
     <Card className="border border-border">
@@ -482,6 +540,93 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Export / Import section */}
+      <div className="border-t border-border p-4 space-y-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Backup & Migration</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            id="wp-export-btn"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => void handleExport()}
+            disabled={isExporting}
+          >
+            {isExporting
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Download className="h-3.5 w-3.5" />
+            }
+            Export Site (.tar.gz)
+          </Button>
+          <Button
+            id="wp-import-btn"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setImportOpen(true)}
+          >
+            <FolderInput className="h-3.5 w-3.5" />
+            Import Site
+          </Button>
+        </div>
+      </div>
+
+      {/* Import dialog */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import WordPress Site</DialogTitle>
+            <DialogDescription>
+              Upload a tar.gz backup (files + database.sql). The SQL dump will be imported and wp-config.php updated.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Backup Archive (.tar.gz)</Label>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".tar.gz,.tgz"
+                className="mt-1 block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:font-medium file:bg-background file:text-foreground hover:file:bg-muted"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">DB Name</Label>
+                <Input value={importDbName} onChange={(e) => setImportDbName(e.target.value)} className="mt-1 h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">DB Host</Label>
+                <Input value={importDbHost} onChange={(e) => setImportDbHost(e.target.value)} className="mt-1 h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">DB User</Label>
+                <Input value={importDbUser} onChange={(e) => setImportDbUser(e.target.value)} className="mt-1 h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">DB Password</Label>
+                <Input type="password" value={importDbPassword} onChange={(e) => setImportDbPassword(e.target.value)} className="mt-1 h-8 text-sm" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(false)} disabled={isImporting}>
+              Cancel
+            </Button>
+            <Button
+              id="confirm-wp-import-btn"
+              size="sm"
+              onClick={() => void handleImport()}
+              disabled={isImporting}
+            >
+              {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Import Site
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
+

@@ -107,6 +107,7 @@ model User {
   databases Database[]
   mailboxes Mailbox[]
   virtualAliases VirtualAlias[]
+  sftpUser  SftpUser?
 
   @@map("users")
 }
@@ -369,4 +370,25 @@ model VacationResponder {
   mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
 
   @@map("vacation_responders")
+}
+
+/// SFTP account for a panel user — chrooted to their projects directory.
+/// One account per Vexlyx user; scoped to /opt/vexlyx/projects/{userId}/
+model SftpUser {
+  id                String   @id @default(cuid())
+  userId            String   @unique @map("user_id")
+  /// Linux username in format vsftp_<cuid_prefix>
+  linuxUsername     String   @unique @map("linux_username")
+  /// AES-256-GCM encrypted password stored for display-on-demand only
+  encryptedPassword String?  @map("encrypted_password")
+  /// List of SSH public keys in authorized_keys format
+  sshPublicKeys     String[] @default([]) @map("ssh_public_keys")
+  isEnabled         Boolean  @default(true) @map("is_enabled")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sftp_users")
 }
