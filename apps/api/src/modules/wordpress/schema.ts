@@ -23,3 +23,14 @@ export const WordPressUploadSchema = z.object({
 });
 
 export type WordPressUploadInput = z.infer<typeof WordPressUploadSchema>;
+
+export const WordPressImportSchema = z.object({
+  tarPath: z.string().min(1, "Uploaded tar.gz path is required"),
+  dbName: z.string().max(100).default("wordpress"),
+  dbUser: z.string().max(100).default("root"),
+  dbPassword: z.string().max(255).default(""),
+  dbHost: z.string().max(255).default("localhost"),
+});
+
+export type WordPressImportInput = z.infer<typeof WordPressImportSchema>;
+

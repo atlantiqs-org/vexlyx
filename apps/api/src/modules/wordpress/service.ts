@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { existsSync, createReadStream } from "node:fs";
+import fs from "node:fs/promises";
+import { resolve, dirname, join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createWriteStream } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { EnvService } from "../env/service.js";
-import type { WordPressInstallInput, WordPressUploadInput } from "./schema.js";
+import type { WordPressInstallInput, WordPressUploadInput, WordPressImportInput } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -239,5 +242,81 @@ export class WordPressService {
     }
 
     return project;
+  }
+
+  async exportSite(
+    userId: string,
+    projectId: string,
+  ): Promise<{ stream: ReturnType<typeof createReadStream>; filename: string }> {
+    const project = await this.findOwnedProject(userId, projectId);
+    const projectDir = resolve(env.PROJECTS_DIR, projectId);
+    const exportDir = join("/tmp", "vexlyx-exports", projectId);
+    const filename = `wp-export-${project.id}-${Date.now()}.tar.gz`;
+    const tarPath = join(exportDir, filename);
+
+    await runPythonCommand<{ success: boolean }>({
+      command: "wordpress-export",
+      projectDir,
+      exportDir,
+      tarPath,
+    });
+
+    const stream = createReadStream(tarPath);
+    // Clean up after the stream closes
+    stream.on("close", () => {
+      void fs.rm(exportDir, { recursive: true, force: true }).catch(() => undefined);
+    });
+
+    return { stream, filename };
+  }
+
+  async saveTempUpload(
+    projectId: string,
+    readableStream: NodeJS.ReadableStream,
+    originalFilename: string,
+  ): Promise<string> {
+    const uploadDir = join("/tmp", "vexlyx-imports", projectId);
+    await fs.mkdir(uploadDir, { recursive: true });
+    const tarPath = join(uploadDir, originalFilename);
+    const ws = createWriteStream(tarPath);
+    await pipeline(readableStream, ws);
+    return tarPath;
+  }
+
+  async importSite(
+    userId: string,
+    projectId: string,
+    input: WordPressImportInput,
+  ): Promise<{ success: boolean; message: string }> {
+    const project = await this.findOwnedProject(userId, projectId);
+    const projectDir = resolve(env.PROJECTS_DIR, projectId);
+
+    const result = await runPythonCommand<{ success: boolean }>({
+      command: "wordpress-import",
+      projectDir,
+      tarPath: input.tarPath,
+      dbName: input.dbName,
+      dbUser: input.dbUser,
+      dbPassword: input.dbPassword,
+      dbHost: input.dbHost,
+    });
+
+    // Update env vars with new DB credentials
+    const envVars = [
+      { key: "DB_NAME", value: input.dbName },
+      { key: "DB_USER", value: input.dbUser },
+      { key: "DB_PASSWORD", value: input.dbPassword },
+      { key: "DB_HOST", value: input.dbHost },
+    ];
+    await this.envService.bulkUpsert(userId, projectId, envVars);
+
+    // Clean up temp upload
+    await fs.rm(input.tarPath, { force: true }).catch(() => undefined);
+
+    void project; // already validated above
+    return {
+      success: result.success,
+      message: "WordPress site imported successfully. Redeploy to apply changes.",
+    };
   }
 }

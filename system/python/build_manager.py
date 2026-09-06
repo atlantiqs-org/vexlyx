@@ -1557,6 +1557,148 @@ def cmd_dockerfile_save(payload: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# WordPress Export (F2.8)
+# ---------------------------------------------------------------------------
+
+def cmd_wordpress_export(payload: dict) -> None:
+    project_dir = Path(require_field(payload, "projectDir"))
+    export_dir = Path(require_field(payload, "exportDir"))
+    tar_path = Path(require_field(payload, "tarPath"))
+
+    if not project_dir.is_dir():
+        fail(f"Project directory not found: {project_dir}", "WP_DIR_NOT_FOUND")
+
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    # Read DB credentials from wp-config.php
+    wp_config = project_dir / "wp-config.php"
+    db_name = db_user = db_password = db_host = ""
+    if wp_config.is_file():
+        content = wp_config.read_text(encoding="utf-8", errors="replace")
+        for var, attr in [("DB_NAME", "db_name"), ("DB_USER", "db_user"),
+                          ("DB_PASSWORD", "db_password"), ("DB_HOST", "db_host")]:
+            m = re.search(rf"define\s*\(\s*['\"]{var}['\"]\s*,\s*['\"]([^'\"]*)['\"]", content)
+            if m:
+                val = m.group(1)
+                if attr == "db_name": db_name = val
+                elif attr == "db_user": db_user = val
+                elif attr == "db_password": db_password = val
+                elif attr == "db_host": db_host = val.split(":")[0]
+
+    # Dump database
+    sql_path = export_dir / "database.sql"
+    if db_name and db_user:
+        try:
+            mysqldump_cmd = [
+                "mysqldump",
+                f"--host={db_host or 'localhost'}",
+                f"--user={db_user}",
+                f"--password={db_password}",
+                "--single-transaction",
+                "--routines",
+                "--triggers",
+                db_name,
+            ]
+            result = subprocess.run(mysqldump_cmd, capture_output=True)
+            if result.returncode == 0:
+                sql_path.write_bytes(result.stdout)
+        except Exception:
+            pass  # Continue export without DB dump
+
+    # Create tar.gz: project files + optional SQL dump
+    with tarfile.open(tar_path, "w:gz") as tar:
+        tar.add(project_dir, arcname="files")
+        if sql_path.is_file():
+            tar.add(sql_path, arcname="database.sql")
+
+    respond({"success": True, "tarPath": str(tar_path)})
+
+
+# ---------------------------------------------------------------------------
+# WordPress Import (F2.8)
+# ---------------------------------------------------------------------------
+
+def cmd_wordpress_import(payload: dict) -> None:
+    project_dir = Path(require_field(payload, "projectDir"))
+    tar_path_str = require_field(payload, "tarPath")
+    tar_path = Path(tar_path_str)
+
+    db_name = payload.get("dbName", "wordpress")
+    db_user = payload.get("dbUser", "root")
+    db_password = payload.get("dbPassword", "")
+    db_host = payload.get("dbHost", "localhost")
+
+    if not tar_path.is_file():
+        fail(f"Uploaded archive not found: {tar_path}", "WP_TAR_NOT_FOUND")
+
+    if not tarfile.is_tarfile(str(tar_path)):
+        fail("Uploaded file is not a valid tar archive", "WP_INVALID_TAR")
+
+    # Extract
+    extract_tmp = tar_path.parent / "extracted"
+    extract_tmp.mkdir(parents=True, exist_ok=True)
+    extract_tmp_resolved = extract_tmp.resolve()
+
+    with tarfile.open(tar_path, "r:gz") as tar:
+        # Security: prevent tar-slip, symlink escapes, absolute paths, and parent traversal
+        safe_members = []
+        for m in tar.getmembers():
+            if m.issym() or m.islnk():
+                continue
+            name = m.name.replace("\\", "/")
+            if name.startswith("/") or "\0" in name or ".." in name.split("/"):
+                continue
+            dest_path = (extract_tmp / name).resolve()
+            try:
+                dest_path.relative_to(extract_tmp_resolved)
+            except ValueError:
+                continue
+            safe_members.append(m)
+
+        tar.extractall(path=extract_tmp, members=safe_members)
+
+    # Move extracted files into project dir
+    files_src = extract_tmp / "files"
+    if files_src.is_dir():
+        shutil.copytree(str(files_src), str(project_dir), dirs_exist_ok=True)
+    else:
+        shutil.copytree(str(extract_tmp), str(project_dir), dirs_exist_ok=True)
+
+    # Import SQL dump if present
+    sql_candidates = list(extract_tmp.glob("**/*.sql"))
+    if sql_candidates:
+        sql_file = sql_candidates[0]
+        try:
+            mysql_cmd = [
+                "mysql",
+                f"--host={db_host}",
+                f"--user={db_user}",
+                f"--password={db_password}",
+                db_name,
+            ]
+            with open(sql_file, "rb") as sql_in:
+                subprocess.run(mysql_cmd, stdin=sql_in, check=True)
+        except Exception as e:
+            fail(f"SQL import failed: {e}", "WP_SQL_IMPORT_FAILED")
+
+    # Write fresh wp-config.php with new credentials
+    wp_config_path = project_dir / "wp-config.php"
+    if not wp_config_path.is_file() or db_name:
+        wp_config_content = generate_wp_config_content(
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password,
+            db_host=db_host,
+        )
+        wp_config_path.write_text(wp_config_content, encoding="utf-8")
+
+    # Clean up temp extraction
+    shutil.rmtree(str(extract_tmp), ignore_errors=True)
+
+    respond({"success": True})
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1566,6 +1708,8 @@ COMMANDS = {
     "wordpress-install": cmd_wordpress_install,
     "wordpress-upload": cmd_wordpress_upload,
     "wordpress-status": cmd_wordpress_status,
+    "wordpress-export": cmd_wordpress_export,
+    "wordpress-import": cmd_wordpress_import,
     "dockerfile-get": cmd_dockerfile_get,
     "dockerfile-save": cmd_dockerfile_save,
 }

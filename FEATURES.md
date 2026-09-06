@@ -2,7 +2,7 @@
 
 > **Project:** Vexlyx
 > **Type:** Open-Source Hybrid Hosting Control Panel
-> **Last Updated:** 2026-08-28
+> **Last Updated:** 2026-09-06
 
 ---
 
@@ -28,13 +28,13 @@ This document is the **single source of truth** for all Vexlyx features.
 |-------|--------|----------|
 | Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
 | Phase 1: Project Deployment | 🟢 COMPLETED | 100% (7/7) |
-| Phase 2: Multi-Runtime Support | 🟢 COMPLETED | 100% (7/7) |
-| Phase 3: Domain & DNS | 🟡 IN PROGRESS | 43% (3/7) |
-| Phase 4: Email Server | 🔴 NOT STARTED | 0% |
-| Phase 5: System & Admin | 🔴 NOT STARTED | 0% |
-| Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% |
+| Phase 2: Multi-Runtime Support | 🟢 COMPLETED | 100% (8/8) |
+| Phase 3: Domain & DNS | 🟢 COMPLETED | 100% (4/4) |
+| Phase 4: Email Server | 🟢 COMPLETED | 100% (7/7) |
+| Phase 5: System & Administration | 🔴 NOT STARTED | 0% (0/6) |
+| Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% (0/4) |
 
-**Overall Completion:** 50% (24/48 features)
+**Overall Completion:** 77% (33/43 features)
 
 ---
 
@@ -881,7 +881,95 @@ Automatically redeploy projects when code is pushed to connected GitHub reposito
 
 ---
 
+### F2.8 — File Manager & SFTP Access
+**Status:** 🟢 COMPLETED
+
+**Description:**
+Web-based file manager embedded in the project detail page and a dedicated full-screen editor. Users can browse, edit, upload, download, rename, move, copy and delete their project files directly from the dashboard. A CodeMirror 6 editor handles in-browser editing with syntax highlighting. WordPress projects gain one-click export (files + DB as `.tar.gz`) and import (extract + SQL restore + wp-config update). Each Vexlyx user can provision a chrooted SFTP account (one per user, scoped to all their projects) with password-based and SSH-key-based authentication.
+
+**Acceptance Criteria:**
+- [x] `GET  /api/files/:id/list` — lazy-load directory tree (depth 1–3)
+- [x] `GET  /api/files/:id/read` — read file content (≤ 2 MB)
+- [x] `POST /api/files/:id/write` — atomic save (temp-file + rename)
+- [x] `DELETE /api/files/:id/delete` — delete file or folder recursively
+- [x] `POST /api/files/:id/rename` — rename / move within project
+- [x] `POST /api/files/:id/mkdir` — create directory
+- [x] `POST /api/files/:id/copy` — copy file or directory
+- [x] `POST /api/files/:id/move` — move file or directory
+- [x] `GET  /api/files/:id/download` — stream file as download
+- [x] `POST /api/files/:id/create` — create file without overwriting (returns 409 on collision)
+- [x] `POST /api/files/:id/upload` — multipart upload, max 100 MB per file
+- [x] Path-traversal protection: `safePath()` + symlink escape guard
+- [x] Blocks writes to `.env` / `wp-config.php` via extension blocklist
+- [x] `GET  /api/projects/:id/wordpress/export` — tar.gz stream (files + mysqldump)
+- [x] `POST /api/projects/:id/wordpress/import` — upload + extract + SQL + wp-config
+- [x] `POST /api/sftp/provision` — create chrooted Linux user + sshd_config Match block
+- [x] `GET  /api/sftp/credentials` — return stored (decrypted) connection details with dynamic host
+- [x] `POST /api/sftp/rotate-password` — generate new password, update chpasswd
+- [x] `POST /api/sftp/add-ssh-key` — append to authorized_keys
+- [x] `DELETE /api/sftp/disable` — lock the Linux account (`usermod --lock`)
+- [x] `POST /api/sftp/enable` — unlock the Linux account (`usermod --unlock`) & sync projects
+- [x] Passwords encrypted at rest with AES-256-GCM
+- [x] `FileManagerCard` compact widget on project detail page (5 recent files + Open button)
+- [x] Full-screen two-pane file manager at `/projects/:id/files`
+- [x] CodeMirror 6 editor with auto language detection + Ctrl+S save
+- [x] Drag-and-drop upload dropzone (100 MB limit enforced client-side)
+- [x] `SftpPanel` card: provision, show credentials, rotate password, add SSH key, disable, enable
+
+**Test Plan:**
+1. Browse project directory → tree loads lazily on folder expand
+2. Click a `.php` / `.ts` / `.yaml` file → opens in CodeMirror with correct syntax highlighting
+3. Edit file → Ctrl+S → toast "File saved"
+4. Upload a 1 MB file via drag-and-drop → file appears in tree after refresh
+5. Attempt path like `../../etc/passwd` → API returns 403
+6. Attempt write to `.env` → API returns 403
+7. WordPress export → `wp-export-*.tar.gz` downloads with SQL dump inside
+8. WordPress import (valid archive) → files extracted, SQL restored, wp-config updated
+9. Provision SFTP → credentials shown; `sftp username@host` connects, chroot holds
+10. Add SSH key → key appears; password-less login works
+11. Rotate password → old password rejected, new one works
+12. Disable SFTP → `usermod --lock` prevents all logins
+
+**Developer Docs:**
+- **Location:** `docs/dev/file-manager-sftp.md`
+
+**Files Created:**
+- `packages/shared/src/schemas/files.ts`
+- `apps/api/src/modules/files/schema.ts`
+- `apps/api/src/modules/files/service.ts`
+- `apps/api/src/modules/files/routes.ts`
+- `apps/api/src/modules/sftp/schema.ts`
+- `apps/api/src/modules/sftp/service.ts`
+- `apps/api/src/modules/sftp/routes.ts`
+- `system/python/sftp_manager.py`
+- `apps/dashboard/src/components/files/FileTree.tsx`
+- `apps/dashboard/src/components/files/FileEditor.tsx`
+- `apps/dashboard/src/components/files/UploadDropzone.tsx`
+- `apps/dashboard/src/components/projects/FileManagerCard.tsx`
+- `apps/dashboard/src/components/projects/SftpPanel.tsx`
+- `apps/dashboard/src/components/ui/dropdown-menu.tsx`
+- `apps/dashboard/src/app/(standalone)/layout.tsx`
+- `apps/dashboard/src/app/(standalone)/projects/[id]/files/page.tsx`
+- `apps/api/src/types/stream.d.ts`
+- `tests/test_file_manager_sftp.py`
+- `docs/dev/file-manager-sftp.md`
+
+**Files Modified:**
+- `packages/shared/src/index.ts`
+- `apps/api/prisma/schema.prisma` — added `SftpUser` model
+- `apps/api/src/config/env.ts` — added `FILE_UPLOAD_MAX_MB`, `SFTP_HOST`, `SFTP_PORT`
+- `apps/api/src/index.ts` — registered `@fastify/multipart`, `fileRoutes`, `sftpRoutes`
+- `apps/api/src/modules/wordpress/schema.ts` — added `WordPressImportSchema`
+- `apps/api/src/modules/wordpress/service.ts` — added `exportSite`, `importSite`, `saveTempUpload`
+- `apps/api/src/modules/wordpress/routes.ts` — added export + import routes
+- `system/python/build_manager.py` — added `wordpress-export`, `wordpress-import` commands
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx` — renders `FileManagerCard`, `SftpPanel`
+- `apps/dashboard/src/components/projects/WordPressPanel.tsx` — export/import buttons + dialog
+
+---
+
 ## Phase 3: Domain & DNS
+
 
 ### F3.1 — Custom Domain Management
 **Status:** 🟢 COMPLETED

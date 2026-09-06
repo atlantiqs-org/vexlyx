@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import formbody from "@fastify/formbody";
+import multipart from "@fastify/multipart";
 import { APP_NAME, VEXLYX_VERSION } from "@vexlyx/shared";
 import { env } from "./config/env.js";
 import { databasePlugin } from "./config/database.js";
@@ -26,6 +27,8 @@ import { mailRoutes } from "./modules/mail/routes.js";
 import { mailboxRoutes } from "./modules/mailboxes/routes.js";
 import { aliasRoutes } from "./modules/aliases/routes.js";
 import { vacationRoutes } from "./modules/vacation/routes.js";
+import { fileRoutes } from "./modules/files/routes.js";
+import { sftpRoutes } from "./modules/sftp/routes.js";
 
 
 /**
@@ -58,6 +61,9 @@ async function buildApp() {
   });
 
   await app.register(formbody);
+  await app.register(multipart, {
+    limits: { fileSize: env.FILE_UPLOAD_MAX_MB * 1024 * 1024 },
+  });
   await app.register(databasePlugin);
   await app.register(redisClientPlugin);
   await app.register(queuePlugin_);
@@ -83,6 +89,8 @@ async function buildApp() {
   await app.register(mailboxRoutes, { prefix: "/api/mailboxes" });
   await app.register(aliasRoutes, { prefix: "/api/aliases" });
   await app.register(vacationRoutes, { prefix: "/api/mailboxes" });
+  await app.register(fileRoutes, { prefix: "/api/files" });
+  await app.register(sftpRoutes, { prefix: "/api/sftp" });
 
   return app;
 }
