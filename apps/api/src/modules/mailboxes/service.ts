@@ -41,7 +41,7 @@ export class MailboxService {
         userId,
         ...(query.domainId ? { domainId: query.domainId } : {}),
       },
-      include: { domain: true },
+      include: { domain: true, vacationResponder: true },
       orderBy: { createdAt: "desc" },
     });
 
@@ -60,6 +60,7 @@ export class MailboxService {
       status: m.status,
       usedBytes: usageRes.usage[m.address] ?? 0,
       createdAt: m.createdAt.toISOString(),
+      vacationEnabled: m.vacationResponder?.enabled ?? false,
     }));
   }
 
@@ -128,6 +129,7 @@ export class MailboxService {
         status: mailbox.status,
         usedBytes: 0,
         createdAt: mailbox.createdAt.toISOString(),
+        vacationEnabled: false,
       },
       password,
     };

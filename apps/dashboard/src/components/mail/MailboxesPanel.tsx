@@ -15,7 +15,9 @@ import {
   Inbox,
   Send,
   ShieldAlert,
+  Palmtree,
 } from "lucide-react";
+import { VacationResponderDialog } from "./VacationResponderDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,6 +111,7 @@ export function MailboxesPanel() {
   const {
     mailboxes,
     isLoading,
+    refresh,
     createMailbox,
     deleteMailbox,
     updateQuota,
@@ -135,6 +138,9 @@ export function MailboxesPanel() {
   // Delete confirm state
   const [deleteTarget, setDeleteTarget] = useState<MailboxResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Vacation responder dialog state
+  const [vacationTarget, setVacationTarget] = useState<MailboxResponse | null>(null);
 
   const [updatingQuotaId, setUpdatingQuotaId] = useState<string | null>(null);
 
@@ -309,7 +315,16 @@ export function MailboxesPanel() {
                       <TableCell>
                         <div className="flex items-center gap-2 font-medium text-foreground">
                           <MailboxIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                          {mailbox.address}
+                          <span>{mailbox.address}</span>
+                          {mailbox.vacationEnabled && (
+                            <Badge
+                              variant="outline"
+                              className="gap-1 border-indigo-500/20 bg-indigo-500/10 text-[10px] text-indigo-600 dark:text-indigo-400 py-0 px-1.5"
+                            >
+                              <Palmtree className="h-2.5 w-2.5" />
+                              Auto-reply
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -360,6 +375,20 @@ export function MailboxesPanel() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-8 w-8",
+                              mailbox.vacationEnabled
+                                ? "text-indigo-600 hover:text-indigo-600 dark:text-indigo-400"
+                                : "text-muted-foreground",
+                            )}
+                            aria-label="Vacation auto-responder"
+                            onClick={() => setVacationTarget(mailbox)}
+                          >
+                            <Palmtree className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -647,6 +676,13 @@ export function MailboxesPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Vacation Responder Dialog */}
+      <VacationResponderDialog
+        mailbox={vacationTarget}
+        open={!!vacationTarget}
+        onOpenChange={(open) => !open && setVacationTarget(null)}
+        onSuccess={refresh}
+      />
     </div>
   );
 }

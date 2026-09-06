@@ -67,6 +67,7 @@ export const MailboxSchema = z.object({
   status: MailboxStatusSchema,
   usedBytes: z.number().int().nonnegative(),
   createdAt: z.string(),
+  vacationEnabled: z.boolean().default(false),
 });
 
 export type MailboxResponse = z.infer<typeof MailboxSchema>;

@@ -13,7 +13,9 @@ inet_protocols = ipv4
 virtual_mailbox_domains = /etc/postfix/virtual_domains
 virtual_mailbox_maps = lmdb:/etc/postfix/virtual_mailbox_maps
 virtual_alias_maps = lmdb:/etc/postfix/virtual_alias_maps
-# Base directory for virtual mailbox delivery (required by virtual delivery agent)
+# Deliver virtual mailboxes via Dovecot LMTP with Pigeonhole Sieve processing (F4.7)
+virtual_transport = lmtp:dovecot:24
+# Base directory for virtual mailbox delivery (fallback / shared with Dovecot)
 # Shared with Dovecot (F4.2) via a bind-mounted host directory so both
 # containers read/write the same Maildir tree.
 virtual_mailbox_base = /var/mail/vhosts

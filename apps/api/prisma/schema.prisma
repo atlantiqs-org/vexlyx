@@ -325,6 +325,7 @@ model Mailbox {
 
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   domain    Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  vacationResponder VacationResponder?
 
   @@index([userId])
   @@index([domainId])
@@ -349,4 +350,23 @@ model VirtualAlias {
   @@index([userId])
   @@index([domainId])
   @@map("virtual_aliases")
+}
+
+/// A vacation / out-of-office automated responder configured for a mailbox.
+/// Generates Dovecot Pigeonhole Sieve scripts on incoming delivery (F4.7).
+model VacationResponder {
+  id           String    @id @default(cuid())
+  mailboxId    String    @unique @map("mailbox_id")
+  enabled      Boolean   @default(false)
+  subject      String    @default("Out of office: Auto-reply")
+  message      String    @db.Text
+  intervalDays Int       @default(1) @map("interval_days")
+  startDate    DateTime? @map("start_date")
+  endDate      DateTime? @map("end_date")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@map("vacation_responders")
 }
