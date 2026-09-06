@@ -1453,7 +1453,7 @@ Per-mailbox vacation/out-of-office auto-reply, powered by Dovecot Pigeonhole (Si
 Create an automated installation script that sets up Vexlyx on a fresh Ubuntu 24.04 server.
 
 **Acceptance Criteria:**
-- [ ] `curl -fsSL https://get.vexlyx.dev | bash` installs everything
+- [ ] `curl -fsSL https://get.vexlyx.com | bash` installs everything
 - [ ] Installs Docker, Docker Compose, Node.js, Python
 - [ ] Configures PostgreSQL, Redis, Traefik
 - [ ] Sets up Postfix, Dovecot, BIND9
@@ -1616,7 +1616,7 @@ VitePress documentation site covering installation, development, and API referen
 - [ ] Feature documentation (all 48 features)
 - [ ] Troubleshooting guide
 - [ ] Changelog
-- [ ] Hosted at `docs.vexlyx.dev`
+- [ ] Hosted at `docs.vexlyx.com`
 
 **Test Plan:**
 1. New developer reads guide → sets up local env successfully
