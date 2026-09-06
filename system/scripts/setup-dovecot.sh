@@ -16,9 +16,9 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-echo "[1/6] Installing Dovecot IMAP and SSL tools..."
+echo "[1/6] Installing Dovecot IMAP, LMTP, Sieve and SSL tools..."
 apt-get update -y
-apt-get install -y dovecot-imapd dovecot-lmtpd ssl-cert
+apt-get install -y dovecot-imapd dovecot-lmtpd dovecot-sieve ssl-cert
 
 echo "[2/6] Creating the shared virtual mailbox uid/gid..."
 # Fixed numeric ids shared with Postfix's virtual_uid_maps/virtual_gid_maps
@@ -36,7 +36,7 @@ chmod 640 /etc/dovecot/users
 
 echo "[4/6] Applying Dovecot configuration..."
 cat <<'EOF' > /etc/dovecot/conf.d/99-vexlyx.conf
-protocols = imap
+protocols = imap lmtp
 mail_location = maildir:/var/mail/vhosts/%d/%n/Maildir
 mail_home = /var/mail/vhosts/%d/%n
 mail_uid = 5000
@@ -59,8 +59,19 @@ ssl_cert = </etc/dovecot/certs/cert.pem
 ssl_key = </etc/dovecot/certs/key.pem
 
 mail_plugins = $mail_plugins quota
+
+# Outgoing SMTP relay for Pigeonhole Sieve vacation auto-replies (F4.7)
+submission_host = 127.0.0.1:25
+
+protocol lmtp {
+  mail_plugins = $mail_plugins sieve
+}
+
 plugin {
   quota = maildir:User quota
+  sieve = /var/mail/vhosts/%d/%n/.dovecot.sieve
+  sieve_default = /var/mail/vhosts/%d/%n/.dovecot.sieve
+  sieve_vacation_send_from_recipient = yes
 }
 
 service imap-login {

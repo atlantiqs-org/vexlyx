@@ -1,8 +1,10 @@
 FROM alpine:3.20
 
-# Install Dovecot (IMAP + auth + doveadm), OpenSSL, and utilities
+# Install Dovecot (IMAP + LMTP + auth + doveadm + Pigeonhole Sieve), OpenSSL, and utilities
 RUN apk add --no-cache \
     dovecot \
+    dovecot-lmtpd \
+    dovecot-pigeonhole-plugin \
     openssl \
     ca-certificates \
     bash
@@ -16,7 +18,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Expose IMAP (143), IMAPS (993), and the internal SASL auth port (12345)
-EXPOSE 143 993 12345
+# Expose IMAP (143), IMAPS (993), LMTP (24), and the internal SASL auth port (12345)
+EXPOSE 143 993 24 12345
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

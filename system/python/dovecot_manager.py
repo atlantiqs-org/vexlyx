@@ -253,6 +253,148 @@ def get_dovecot_status(host: str = "127.0.0.1") -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Vacation Auto-Responder (F4.7 Pigeonhole Sieve)
+# ---------------------------------------------------------------------------
+
+def generate_sieve_script(
+    subject: str,
+    message: str,
+    interval_days: int = 1,
+    start_date: str = None,
+    end_date: str = None,
+) -> str:
+    """Generates an RFC 5228/5230/5260 compliant Sieve vacation script."""
+    safe_subject = subject.replace("\\", "\\\\").replace('"', '\\"')
+    interval_days = max(1, min(30, int(interval_days)))
+
+    # Dot-stuffing for Sieve text: literal (RFC 5228 section 2.4.2)
+    lines = message.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    stuffed_lines = ["." + line if line.startswith(".") else line for line in lines]
+    text_block = "text:\n" + "\n".join(stuffed_lines) + "\n.\n;"
+
+    # If start_date and/or end_date are given (format YYYY-MM-DD or ISO), use RFC 5260 date extension
+    date_conditions = []
+    if start_date:
+        s_date = str(start_date)[:10]  # Ensure YYYY-MM-DD
+        date_conditions.append(f'currentdate :value "ge" "date" "{s_date}"')
+    if end_date:
+        e_date = str(end_date)[:10]  # Ensure YYYY-MM-DD
+        date_conditions.append(f'currentdate :value "le" "date" "{e_date}"')
+
+    if date_conditions:
+        req_ext = 'require ["vacation", "date", "relational"];'
+        cond_str = (
+            "allof (\n  " + ",\n  ".join(date_conditions) + "\n)"
+            if len(date_conditions) > 1
+            else date_conditions[0]
+        )
+        script = (
+            f"{req_ext}\n\n"
+            f"if {cond_str} {{\n"
+            f"  vacation\n"
+            f"    :days {interval_days}\n"
+            f'    :subject "{safe_subject}"\n'
+            f"    {text_block}\n"
+            f"}}\n"
+        )
+    else:
+        script = (
+            'require ["vacation"];\n\n'
+            f"vacation\n"
+            f"  :days {interval_days}\n"
+            f'  :subject "{safe_subject}"\n'
+            f"  {text_block}\n"
+        )
+
+    return script
+
+
+def sync_vacation(
+    address: str,
+    enabled: bool,
+    subject: str = "Out of office: Auto-reply",
+    message: str = "",
+    interval_days: int = 1,
+    start_date: str = None,
+    end_date: str = None,
+) -> dict:
+    """
+    Creates or removes the .dovecot.sieve script for a mailbox.
+    When enabled=True, writes the script and sets ownership to 5000:5000.
+    When enabled=False, deletes .dovecot.sieve and .dovecot.svbin.
+    """
+    address = address.strip().lower()
+    if "@" not in address:
+        return {"success": False, "error": "Invalid address", "code": "INVALID_ADDRESS"}
+
+    local_part, domain = address.split("@", 1)
+    user_home = get_vhosts_dir() / domain / local_part
+    user_home.mkdir(parents=True, exist_ok=True)
+
+    sieve_file = user_home / ".dovecot.sieve"
+    svbin_file = user_home / ".dovecot.svbin"
+
+    if not enabled:
+        if sieve_file.exists():
+            try:
+                sieve_file.unlink()
+            except OSError:
+                pass
+        if svbin_file.exists():
+            try:
+                svbin_file.unlink()
+            except OSError:
+                pass
+        return {
+            "success": True,
+            "address": address,
+            "enabled": False,
+            "sieveFileExists": False,
+        }
+
+    script_content = generate_sieve_script(
+        subject=subject or "Out of office: Auto-reply",
+        message=message or "I am currently away from the office.",
+        interval_days=interval_days,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    sieve_file.write_text(script_content, encoding="utf-8", newline="\n")
+
+    # Invalidate old compiled binary so Dovecot re-compiles the new script on next delivery
+    if svbin_file.exists():
+        try:
+            svbin_file.unlink()
+        except OSError:
+            pass
+
+    if hasattr(os, "chown"):
+        try:
+            os.chown(str(sieve_file), VMAIL_UID, VMAIL_GID)
+        except Exception:
+            pass
+
+    try:
+        container_path = f"/var/mail/vhosts/{domain}/{local_part}/.dovecot.sieve"
+        subprocess.run(
+            ["docker", "exec", "vexlyx-dovecot", "chown", "5000:5000", container_path],
+            capture_output=True,
+            timeout=3,
+        )
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "address": address,
+        "enabled": True,
+        "sieveFileExists": True,
+        "scriptLength": len(script_content),
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI Command Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -287,6 +429,15 @@ def main():
         elif cmd == "get_usage":
             addresses = payload.get("addresses", [])
             respond(get_all_usage(addresses))
+        elif cmd == "sync_vacation":
+            address = payload.get("address", "")
+            enabled = payload.get("enabled", False)
+            subject = payload.get("subject", "Out of office: Auto-reply")
+            message = payload.get("message", "")
+            interval_days = payload.get("intervalDays", payload.get("interval_days", 1))
+            start_date = payload.get("startDate", payload.get("start_date"))
+            end_date = payload.get("endDate", payload.get("end_date"))
+            respond(sync_vacation(address, enabled, subject, message, interval_days, start_date, end_date))
         else:
             respond({"error": f"Unknown command: {cmd}", "code": "UNKNOWN_COMMAND"})
             sys.exit(1)

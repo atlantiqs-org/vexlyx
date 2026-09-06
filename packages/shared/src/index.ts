@@ -193,6 +193,15 @@ export type {
   AliasResponse,
 } from "./schemas/alias.js";
 
+export {
+  VacationResponderSchema,
+  UpdateVacationResponderSchema,
+} from "./schemas/vacation.js";
+export type {
+  VacationResponderResponse,
+  UpdateVacationResponderInput,
+} from "./schemas/vacation.js";
+
 export type {
   User,
   Role,

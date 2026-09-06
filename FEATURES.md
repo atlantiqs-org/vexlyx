@@ -1313,15 +1313,15 @@ Support email forwarding and alias creation.
 ---
 
 ### F4.7 — Vacation Auto-Responder
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Per-mailbox vacation/out-of-office auto-reply, split out from F4.6 pending Dovecot Pigeonhole/Sieve installation.
+Per-mailbox vacation/out-of-office auto-reply, powered by Dovecot Pigeonhole (Sieve) and LMTP delivery handoff from Postfix.
 
 **Acceptance Criteria:**
-- [ ] Dovecot Pigeonhole (Sieve) installed and wired into the mail stack
-- [ ] Per-mailbox vacation message configuration UI
-- [ ] Auto-reply sent once per sender within a configurable interval
+- [x] Dovecot Pigeonhole (Sieve) installed and wired into the mail stack
+- [x] Per-mailbox vacation message configuration UI
+- [x] Auto-reply sent once per sender within a configurable interval
 
 **Test Plan:**
 1. Enable vacation responder on a mailbox → sender receives one auto-reply
@@ -1329,6 +1329,30 @@ Per-mailbox vacation/out-of-office auto-reply, split out from F4.6 pending Dovec
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/vacation-responder.md`
+
+**Files Created:**
+- `packages/shared/src/schemas/vacation.ts`
+- `apps/api/src/modules/vacation/schema.ts`
+- `apps/api/src/modules/vacation/service.ts`
+- `apps/api/src/modules/vacation/routes.ts`
+- `apps/dashboard/src/hooks/useVacationResponder.ts`
+- `apps/dashboard/src/components/mail/VacationResponderDialog.tsx`
+- `docs/dev/email/vacation-responder.md`
+- `tests/test_vacation_responder.py`
+
+**Files Modified:**
+- `apps/api/prisma/schema.prisma`
+- `packages/shared/src/schemas/mailbox.ts`
+- `packages/shared/src/index.ts`
+- `docker/dovecot/Dockerfile`
+- `docker/dovecot/dovecot.conf`
+- `docker/postfix/main.cf`
+- `system/python/dovecot_manager.py`
+- `system/scripts/setup-dovecot.sh`
+- `apps/api/src/index.ts`
+- `apps/api/src/modules/mailboxes/service.ts`
+- `apps/dashboard/src/components/mail/MailboxesPanel.tsx`
+- `FEATURES.md`
 
 ---
 
