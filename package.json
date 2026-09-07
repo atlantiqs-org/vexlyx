@@ -5,7 +5,7 @@
   "description": "Open-source hybrid hosting control panel",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "pnpm@11.24.0",
   "scripts": {

@@ -1,0 +1,41 @@
+# Traefik v3 — Production Static Configuration (F5.1)
+# Rendered from this template by system/scripts/install/steps/06-render-config.sh,
+# which substitutes __ACME_EMAIL__ with the real admin email collected during
+# install. The rendered file (traefik.prod.yml) is gitignored — see
+# docker/traefik/traefik.yml for the dev equivalent this is based on.
+
+api:
+  dashboard: true
+  insecure: false
+
+ping: {}
+
+log:
+  level: INFO
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "__ACME_EMAIL__"
+      storage: "/etc/traefik/acme.json"
+      httpChallenge:
+        entryPoint: "web"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true

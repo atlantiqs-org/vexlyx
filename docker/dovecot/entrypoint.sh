@@ -6,9 +6,9 @@ echo "[Vexlyx] Initializing Dovecot IMAP Server..."
 # 1. TLS Certificates
 mkdir -p /etc/dovecot/certs
 if [ ! -f /etc/dovecot/certs/cert.pem ] || [ ! -f /etc/dovecot/certs/key.pem ]; then
-    echo "[Vexlyx] Generating self-signed TLS certificates for development..."
+    echo "[Vexlyx] Generating self-signed TLS certificates..."
     openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
-        -subj "/C=US/ST=State/L=City/O=Vexlyx/CN=mail.vexlyx.local" \
+        -subj "/C=US/ST=State/L=City/O=Vexlyx/CN=${MYHOSTNAME:-mail.vexlyx.local}" \
         -keyout /etc/dovecot/certs/key.pem -out /etc/dovecot/certs/cert.pem
     chmod 600 /etc/dovecot/certs/key.pem
     chmod 644 /etc/dovecot/certs/cert.pem
@@ -39,7 +39,9 @@ chmod 640 /etc/dovecot/users
 # Checked by address (not file emptiness) so a real dovecot_manager.py
 # sync_mailboxes run — which rewrites entries for DB-known domains — never
 # permanently wipes these two dev fixtures on a later container restart.
-if ! grep -q "^test@vexlyx.local:" /etc/dovecot/users 2>/dev/null; then
+# Disabled in production (F5.1 sets VEXLYX_SEED_DEV_FIXTURES=false) so a
+# fresh install never ships a mailbox with a known, hardcoded password.
+if [ "${VEXLYX_SEED_DEV_FIXTURES:-true}" = "true" ] && ! grep -q "^test@vexlyx.local:" /etc/dovecot/users 2>/dev/null; then
     echo "[Vexlyx] Seeding dev test mailboxes (test@vexlyx.local / admin@vexlyx.local)..."
     HASH=$(doveadm pw -s ARGON2ID -p "vexlyx-dev")
     mkdir -p /var/mail/vhosts/vexlyx.local/test/Maildir/cur /var/mail/vhosts/vexlyx.local/test/Maildir/new /var/mail/vhosts/vexlyx.local/test/Maildir/tmp

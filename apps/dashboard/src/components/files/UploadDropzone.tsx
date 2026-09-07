@@ -2,21 +2,12 @@
 
 import { useRef } from "react";
 import { toast } from "sonner";
-import { Upload, Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface UploadFile {
-  id: string;
-  file: File;
-  status: "pending" | "uploading" | "done" | "error";
-  progress: number;
-  error?: string;
-}
 
 interface UploadDropzoneProps {
   projectId: string;

@@ -4,11 +4,21 @@
 
 Deploy modern apps (Next.js, Node.js, Python, React, static, WordPress) and manage traditional hosting services (email, DNS, domains, databases) — all from a single server.
 
+## Production Install
+
+On a fresh Ubuntu 24.04 server:
+
+```bash
+VEXLYX_DOMAIN=panel.yourdomain.com curl -fsSL https://get.vexlyx.com | bash
+```
+
+Installs Docker, Node.js, Python, and Nixpacks; brings up Postgres, Redis, Traefik (with a real Let's Encrypt certificate), CoreDNS, Postfix/Dovecot, and the panel itself; creates the admin user; and configures UFW. Safe to re-run at any time. See [docs/dev/installer.md](./docs/dev/installer.md) for how it works.
+
 ## Quick Start
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v20+
+- [Node.js](https://nodejs.org/) v22+ (pnpm 11 requires Node's `node:sqlite` built-in, added in 22)
 - [pnpm](https://pnpm.io/) v9+
 - [Docker](https://www.docker.com/) & Docker Compose
 - [Git](https://git-scm.com/)
@@ -17,7 +27,7 @@ Deploy modern apps (Next.js, Node.js, Python, React, static, WordPress) and mana
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/vexlyx.git
+git clone https://github.com/aliahmed-codes/vexlyx.git
 cd vexlyx
 
 # Install dependencies

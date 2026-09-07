@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
 import { FolderOpen, ExternalLink, RefreshCw, Loader2, File } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";

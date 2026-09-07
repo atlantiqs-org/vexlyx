@@ -107,6 +107,7 @@ export async function createSession(
     secure: env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: SESSION_TTL_SECONDS,
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
   });
 
   return sessionId;
@@ -127,5 +128,11 @@ export async function destroySession(
     // Session may already have been cleaned up
   });
 
-  reply.clearCookie(SESSION_COOKIE, { path: "/" });
+  // Must match the Domain the cookie was set with (createSession above) —
+  // otherwise this clears a different (host-only) cookie and leaves the
+  // real, domain-scoped session cookie in the browser untouched.
+  reply.clearCookie(SESSION_COOKIE, {
+    path: "/",
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
+  });
 }

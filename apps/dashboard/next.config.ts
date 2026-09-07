@@ -6,6 +6,10 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   transpilePackages: ["@vexlyx/shared"],
+  // Produces .next/standalone — a minimal, self-contained server bundle used
+  // by the production Docker image (F5.1) so the runtime image doesn't need
+  // the full node_modules tree.
+  output: "standalone",
 };
 
 export default nextConfig;

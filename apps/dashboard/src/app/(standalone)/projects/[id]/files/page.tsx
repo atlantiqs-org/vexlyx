@@ -11,7 +11,6 @@ import {
   Download,
   Loader2,
   FolderOpen,
-  FileCode,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -106,8 +105,8 @@ export default function StandaloneFileManagerPage() {
     if (!trimmed) return;
     setIsSubmitting(true);
     try {
-      const cleanDir = currentDirPath ? currentDirPath.replace(/^[\/\\]+|[\/\\]+$/g, "") : "";
-      const cleanName = trimmed.replace(/^[\/\\]+/, "");
+      const cleanDir = currentDirPath ? currentDirPath.replace(/^[/\\]+|[/\\]+$/g, "") : "";
+      const cleanName = trimmed.replace(/^[/\\]+/, "");
       const relPath = cleanDir ? `${cleanDir}/${cleanName}` : cleanName;
 
       await fetchAPI(`/api/files/${projectId}/create`, {
@@ -139,8 +138,8 @@ export default function StandaloneFileManagerPage() {
     if (!trimmed) return;
     setIsSubmitting(true);
     try {
-      const cleanDir = currentDirPath ? currentDirPath.replace(/^[\/\\]+|[\/\\]+$/g, "") : "";
-      const cleanName = trimmed.replace(/^[\/\\]+/, "");
+      const cleanDir = currentDirPath ? currentDirPath.replace(/^[/\\]+|[/\\]+$/g, "") : "";
+      const cleanName = trimmed.replace(/^[/\\]+/, "");
       const relPath = cleanDir ? `${cleanDir}/${cleanName}` : cleanName;
 
       await fetchAPI(`/api/files/${projectId}/mkdir`, {
