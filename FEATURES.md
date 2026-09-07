@@ -1447,29 +1447,57 @@ Per-mailbox vacation/out-of-office auto-reply, powered by Dovecot Pigeonhole (Si
 ## Phase 5: System & Administration
 
 ### F5.1 — One-Line Server Installer
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Create an automated installation script that sets up Vexlyx on a fresh Ubuntu 24.04 server.
+Automated, idempotent installation script that sets up Vexlyx on a fresh Ubuntu 24.04 server via `curl -fsSL https://get.vexlyx.com | bash`. `install.sh` is a thin bootstrap that clones/updates the repo into `/opt/vexlyx` and hands off to `system/scripts/install/run.sh`, which runs 16 numbered, independently-idempotent steps covering package/Docker/Node/Python installation, config collection, secret generation, building the panel, and bringing up every service (Postgres/MySQL/Redis, Traefik with real Let's Encrypt certs, CoreDNS, Postfix/Dovecot/Roundcube, and the dashboard/API themselves) behind a hardened `docker-compose.prod.yml` overlay, finishing with UFW configuration. DNS is served via CoreDNS (not BIND9 — see F3.3, which already made that call) as Docker containers rather than bare-metal services, since the existing mail-management code (`postfix_manager.py`/`dovecot_manager.py`) is hardwired to `docker exec` against containers.
 
 **Acceptance Criteria:**
-- [ ] `curl -fsSL https://get.vexlyx.com | bash` installs everything
-- [ ] Installs Docker, Docker Compose, Node.js, Python
-- [ ] Configures PostgreSQL, Redis, Traefik
-- [ ] Sets up Postfix, Dovecot, BIND9
-- [ ] Creates admin user
-- [ ] Generates SSL certificate for panel domain
-- [ ] Configures firewall (UFW)
-- [ ] Idempotent (can run multiple times safely)
+- [x] `curl -fsSL https://get.vexlyx.com | bash` installs everything
+- [x] Installs Docker, Docker Compose, Node.js, Python
+- [x] Configures PostgreSQL, Redis, Traefik
+- [x] Sets up Postfix, Dovecot, CoreDNS (supersedes BIND9 per F3.3's implementation choice)
+- [x] Creates admin user
+- [x] Generates SSL certificate for panel domain
+- [x] Configures firewall (UFW)
+- [x] Idempotent (can run multiple times safely)
 
 **Test Plan:**
-1. Fresh Ubuntu 24.04 VM → script completes without errors
-2. Visit `https://panel.domain.com` → login page loads
-3. All services running → `systemctl status` shows active
-4. Re-run script → no errors, no duplicate config
+1. Fresh Ubuntu server → script completes without errors
+2. Visit `https://panel.domain.com` → login page loads over a real Let's Encrypt cert, login works
+3. All services running → `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps` shows all healthy
+4. Re-run script → no errors, no duplicate config/rules/containers
+
+Validated end-to-end on a real Ubuntu EC2 instance through to a working login, a deployed WordPress project, and a verified custom domain. See `docs/dev/installer.md`'s Testing section for the full list of bugs this surfaced (in the installer itself, in Dockerfiles, and a few pre-existing application bugs unrelated to F5.1) and how each was fixed.
 
 **Developer Docs:**
 - **Location:** `docs/dev/installer.md`
+
+**Files Created:**
+- `install.sh`
+- `system/scripts/install/{lib.sh,config.sh,run.sh}`
+- `system/scripts/install/steps/01-preflight.sh` … `16-summary.sh`
+- `docker-compose.prod.yml`
+- `docker/traefik/traefik.prod.yml.tmpl`
+- `apps/api/Dockerfile`
+- `apps/dashboard/Dockerfile`
+- `apps/api/prisma/create-admin.ts`
+- `apps/dashboard/public/.gitkeep`
+- `.dockerignore`
+- `docs/dev/installer.md`
+
+**Files Modified:**
+- `docker-compose.yml` (Traefik `v3.4` → `v3.6` for Docker 29+ API compatibility; removed the ineffective `DOCKER_API_VERSION` env var)
+- `docker/postfix/entrypoint.sh`, `docker/dovecot/entrypoint.sh` (production hostname override, `VEXLYX_SEED_DEV_FIXTURES` gate on dev-only mailbox seeding)
+- `apps/dashboard/next.config.ts` (`output: "standalone"`)
+- `apps/api/src/config/env.ts`, `apps/api/src/plugins/auth.ts` (`COOKIE_DOMAIN` for cross-subdomain session sharing)
+- `apps/api/package.json`, `apps/api/.env.example`
+- `package.json` (`engines.node` → `>=22`)
+- `.gitignore`
+- `README.md`, `DEV.md` (Node 22+ prerequisite, real repo URL)
+- `system/python/build_manager.py` (pre-existing `null`/`None` Python bug, unrelated to F5.1, surfaced by first real-world use)
+- `apps/dashboard/src/components/projects/EnvVarEditor.tsx` (autocomplete attributes, unrelated to F5.1, surfaced by first real-world use)
+- `apps/dashboard/src/app/(standalone)/projects/[id]/files/page.tsx`, `apps/dashboard/src/components/files/UploadDropzone.tsx`, `apps/dashboard/src/components/projects/FileManagerCard.tsx` (pre-existing F2.8 ESLint errors blocking the first-ever production `next build`)
 
 ---
 

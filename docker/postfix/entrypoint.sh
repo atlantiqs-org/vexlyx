@@ -3,12 +3,21 @@ set -e
 
 echo "[Vexlyx] Initializing Postfix SMTP & OpenDKIM..."
 
+# 0. Production hostname override (F5.1) — falls back to the baked-in
+# main.cf defaults (mail.vexlyx.local) when unset, so dev is unaffected.
+if [ -n "$MYHOSTNAME" ]; then
+    postconf -e "myhostname = $MYHOSTNAME"
+fi
+if [ -n "$MYDOMAIN" ]; then
+    postconf -e "mydomain = $MYDOMAIN"
+fi
+
 # 1. TLS Certificates
 mkdir -p /etc/postfix/certs
 if [ ! -f /etc/postfix/certs/cert.pem ] || [ ! -f /etc/postfix/certs/key.pem ]; then
-    echo "[Vexlyx] Generating self-signed TLS certificates for development..."
+    echo "[Vexlyx] Generating self-signed TLS certificates..."
     openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
-        -subj "/C=US/ST=State/L=City/O=Vexlyx/CN=mail.vexlyx.local" \
+        -subj "/C=US/ST=State/L=City/O=Vexlyx/CN=${MYHOSTNAME:-mail.vexlyx.local}" \
         -keyout /etc/postfix/certs/key.pem -out /etc/postfix/certs/cert.pem
     chmod 600 /etc/postfix/certs/key.pem
     chmod 644 /etc/postfix/certs/cert.pem
@@ -30,8 +39,10 @@ chmod 640 /etc/postfix/virtual_alias_maps
 mkdir -p /var/mail/vhosts/vexlyx.local/test
 chown -R 5000:5000 /var/mail/vhosts 2>/dev/null || true
 
-# Seed a test mailbox so virtual delivery succeeds in dev (Dovecot handles this in prod)
-if [ ! -s /etc/postfix/virtual_mailbox_maps ]; then
+# Seed a test mailbox so virtual delivery succeeds in dev. Disabled in
+# production (F5.1 sets VEXLYX_SEED_DEV_FIXTURES=false) so a fresh install's
+# mail routing table isn't pre-populated with fake dev addresses.
+if [ "${VEXLYX_SEED_DEV_FIXTURES:-true}" = "true" ] && [ ! -s /etc/postfix/virtual_mailbox_maps ]; then
     echo "test@vexlyx.local vexlyx.local/test/Maildir/" > /etc/postfix/virtual_mailbox_maps
     echo "admin@vexlyx.local vexlyx.local/test/Maildir/" >> /etc/postfix/virtual_mailbox_maps
 fi

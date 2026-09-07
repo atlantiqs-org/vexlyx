@@ -63,3 +63,10 @@ docker/traefik/acme.json
 docker/traefik/certs/*.crt
 docker/traefik/certs/*.key
 !docker/traefik/certs/.gitkeep
+
+# Rendered production Traefik config (F5.1) — generated from
+# traefik.prod.yml.tmpl by the installer, contains the real admin email.
+docker/traefik/traefik.prod.yml
+
+# Production installer (F5.1)
+docker-compose.prod.env

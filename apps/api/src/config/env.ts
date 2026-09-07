@@ -15,6 +15,13 @@ const envSchema = z.object({
   REDIS_URL: z.string().default("redis://localhost:6379"),
   SESSION_SECRET: z.string().min(32),
   ENCRYPTION_KEY: z.string().min(32).optional(),
+  // Session cookie Domain attribute (F5.1). Needed whenever the dashboard
+  // and API are served from different subdomains (e.g. panel.example.com /
+  // api.panel.example.com) — without it, the cookie defaults to a host-only
+  // scope on whichever origin set it, so the other subdomain's server-side
+  // auth check never sees it. Leave unset for local dev (dashboard/api both
+  // on localhost, where a Domain attribute doesn't apply the same way).
+  COOKIE_DOMAIN: z.string().min(1).optional(),
   ALLOW_REGISTRATION: z
     .enum(["true", "false"])
     .default("true")

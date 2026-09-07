@@ -1,0 +1,152 @@
+# Vexlyx — Production Overlay (F5.1)
+#
+# Applied on top of docker-compose.yml (the dev environment, left
+# unmodified) via:
+#   docker compose --env-file /etc/vexlyx/vexlyx.env \
+#     -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Only carries the prod-specific diffs: locking down ports that dev exposes
+# to 0.0.0.0, wiring in generated secrets and the real panel domain/ACME
+# email, disabling dev-only fixtures, and adding the panel itself (dashboard
+# + api) as containers. `!reset` clears a base list (ports/volumes) instead
+# of appending to it — see https://github.com/compose-spec/compose-spec/blob/master/13-merge.md
+# — so overriding those keys here fully replaces the dev bindings rather
+# than exposing both.
+#
+# Rendered by system/scripts/install/steps/*.sh; all ${VARS} below come from
+# /etc/vexlyx/vexlyx.env (generated once, never rotated by re-running the
+# installer — see docs/dev/installer.md).
+
+services:
+  postgres:
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  mysql:
+    ports: !reset []
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+  redis:
+    ports: !reset []
+
+  adminer:
+    # Unauthenticated raw DB browser — never started by a plain
+    # `docker compose up -d` in production. Bring it up deliberately with
+    # `--profile debug` for one-off troubleshooting only.
+    profiles: ["debug"]
+
+  traefik:
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes: !override
+      - ./docker/traefik/traefik.prod.yml:/etc/traefik/traefik.yml:ro
+      - ./docker/traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./docker/traefik/certs:/etc/traefik/certs:ro
+      - ./docker/traefik/acme.json:/etc/traefik/acme.json
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  coredns:
+    # Loopback-only by default: docker/coredns/Corefile forwards unmatched
+    # queries to public resolvers, so publishing this on 0.0.0.0 would stand
+    # up an open recursive resolver. Operators who want this server to be a
+    # public authoritative nameserver for their zones need to change this
+    # binding themselves — see docs/dev/installer.md.
+    ports: !override
+      - "127.0.0.1:${DNS_PORT:-53}:53/udp"
+      - "127.0.0.1:${DNS_PORT:-53}:53/tcp"
+
+  postfix:
+    environment:
+      MYHOSTNAME: ${VEXLYX_MAIL_HOSTNAME}
+      MYDOMAIN: ${VEXLYX_MAIL_DOMAIN}
+      # Never seed the known-password dev test mailboxes in production.
+      VEXLYX_SEED_DEV_FIXTURES: "false"
+
+  dovecot:
+    environment:
+      VEXLYX_SEED_DEV_FIXTURES: "false"
+
+  # ---------------------------------------------------------------------------
+  # The panel itself
+  # ---------------------------------------------------------------------------
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.${VEXLYX_DOMAIN}
+    image: vexlyx-dashboard:latest
+    container_name: vexlyx-dashboard
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - default
+      - traefik-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vexlyx-dashboard.rule=Host(`${VEXLYX_DOMAIN}`)"
+      - "traefik.http.routers.vexlyx-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.vexlyx-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.services.vexlyx-dashboard.loadbalancer.server.port=3000"
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: vexlyx-api:latest
+    container_name: vexlyx-api
+    restart: unless-stopped
+    # See apps/api/Dockerfile — this image ships only the runtime toolchain.
+    # The actual app (already `pnpm install`'d / `pnpm build`'d / `prisma
+    # generate`'d on the host by the installer) is bind-mounted in below at
+    # the same absolute path the host uses, so the Python subprocesses this
+    # process spawns — and the `docker compose` commands THEY spawn against
+    # the host daemon via the mounted socket — resolve identical paths on
+    # both sides.
+    volumes:
+      - ${VEXLYX_HOME:-/opt/vexlyx}:${VEXLYX_HOME:-/opt/vexlyx}
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      HOST: 0.0.0.0
+      CORS_ORIGIN: https://${VEXLYX_DOMAIN}
+      # Shares the session cookie between the dashboard (${VEXLYX_DOMAIN})
+      # and the API (api.${VEXLYX_DOMAIN}) — without this, apps/dashboard's
+      # server-side auth guards ((panel)/layout.tsx, (standalone)/layout.tsx)
+      # never see the cookie and always redirect to /login even when logged in.
+      COOKIE_DOMAIN: ${VEXLYX_DOMAIN}
+      DATABASE_URL: postgresql://vexlyx:${POSTGRES_PASSWORD}@postgres:5432/vexlyx_dev
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ALLOW_REGISTRATION: "false"
+      API_BASE_URL: https://api.${VEXLYX_DOMAIN}
+      BASE_DOMAIN: ${VEXLYX_DOMAIN}
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      IMAP_HOST: dovecot
+      WEBMAIL_URL: https://webmail.${VEXLYX_DOMAIN}
+      PROJECTS_DIR: ${VEXLYX_HOME:-/opt/vexlyx}/apps/api/workspaces/projects
+      SSH_KEYS_DIR: ${VEXLYX_HOME:-/opt/vexlyx}/apps/api/workspaces/keys
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - default
+      - traefik-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vexlyx-api.rule=Host(`api.${VEXLYX_DOMAIN}`)"
+      - "traefik.http.routers.vexlyx-api.entrypoints=websecure"
+      - "traefik.http.routers.vexlyx-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.vexlyx-api.loadbalancer.server.port=5000"

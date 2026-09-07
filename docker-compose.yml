@@ -82,15 +82,17 @@ services:
       - "traefik.http.services.adminer.loadbalancer.server.port=8080"
 
   traefik:
-    image: traefik:v3.4
+    # v3.6.1+ required: Docker 29 raised its minimum accepted API version,
+    # and Traefik <=3.5's docker provider hardcodes API 1.24 (ignoring
+    # DOCKER_API_VERSION entirely), which the daemon then rejects outright —
+    # v3.6.1 added Docker API auto-negotiation to fix this.
+    image: traefik:v3.6
     container_name: vexlyx-traefik
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
       - "8080:8080"
-    environment:
-      - DOCKER_API_VERSION=1.45
     volumes:
       - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./docker/traefik/dynamic:/etc/traefik/dynamic:ro

@@ -878,7 +878,7 @@ def safe_extract_zip(zip_path: Path, target_dir: Path) -> int:
 # Commands
 # ---------------------------------------------------------------------------
 
-def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, str | null, str | null, str | null]:
+def detect_framework_and_commands(project_dir: Path, plan: dict) -> tuple[str, str | None, str | None, str | None]:
     """
     Detect the project framework, suggested build command, start command,
     and normalized project type based on file heuristics and Nixpacks plan.

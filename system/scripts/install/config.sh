@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Vexlyx Installer — configuration collection (F5.1)
+# Sourced by run.sh after lib.sh. Populates the VEXLYX_* variables every step
+# script needs. Values already persisted in /etc/vexlyx/vexlyx.env (from a
+# previous run) are reused automatically; an explicit env var passed this run
+# always takes priority over both the persisted file and any prompt/default.
+# ==============================================================================
+
+ADMIN_PASSWORD_WAS_GENERATED=false
+
+collect_config() {
+  load_secrets_file
+
+  env_or_prompt VEXLYX_DOMAIN "Panel domain (e.g. panel.example.com)" ""
+  if [[ -z "${VEXLYX_DOMAIN}" ]]; then
+    die "VEXLYX_DOMAIN is required. Re-run with: VEXLYX_DOMAIN=panel.example.com curl -fsSL https://get.vexlyx.com | bash"
+  fi
+
+  env_or_prompt VEXLYX_ADMIN_EMAIL "Admin email" "admin@${VEXLYX_DOMAIN}"
+  env_or_prompt VEXLYX_ADMIN_NAME "Admin display name" "Admin"
+
+  if [[ -z "${VEXLYX_ADMIN_PASSWORD:-}" ]]; then
+    if is_tty; then
+      local typed_password=""
+      read -r -s -p "Admin password (leave blank to auto-generate): " typed_password
+      echo
+      VEXLYX_ADMIN_PASSWORD="${typed_password}"
+    fi
+    if [[ -z "${VEXLYX_ADMIN_PASSWORD:-}" ]]; then
+      VEXLYX_ADMIN_PASSWORD="$(rand_hex 12)"
+      ADMIN_PASSWORD_WAS_GENERATED=true
+    fi
+  fi
+
+  env_or_prompt VEXLYX_MAIL_HOSTNAME "Mail server hostname" "mail.${VEXLYX_DOMAIN}"
+  env_or_prompt VEXLYX_MAIL_DOMAIN "Mail domain" "${VEXLYX_DOMAIN}"
+
+  VEXLYX_ENABLE_PUBLIC_DNS="${VEXLYX_ENABLE_PUBLIC_DNS:-false}"
+  VEXLYX_REPO_URL="${VEXLYX_REPO_URL:-https://github.com/aliahmed-codes/vexlyx.git}"
+  VEXLYX_REPO_REF="${VEXLYX_REPO_REF:-main}"
+
+  export VEXLYX_DOMAIN VEXLYX_ADMIN_EMAIL VEXLYX_ADMIN_NAME VEXLYX_ADMIN_PASSWORD
+  export VEXLYX_MAIL_HOSTNAME VEXLYX_MAIL_DOMAIN VEXLYX_ENABLE_PUBLIC_DNS
+  export VEXLYX_REPO_URL VEXLYX_REPO_REF VEXLYX_HOME
+}
+
+# Generates the long-lived application secrets exactly once. Safe to call on
+# every run — skips generation entirely once the secrets file exists, so a
+# re-run never rotates a live SESSION_SECRET or database password out from
+# under a running install.
+generate_secrets() {
+  if [[ -f "${VEXLYX_SECRETS_FILE}" ]]; then
+    log_ok "Secrets already present at ${VEXLYX_SECRETS_FILE} — leaving them untouched."
+    load_secrets_file
+    return 0
+  fi
+
+  log_info "Generating application secrets (first run only)..."
+  SESSION_SECRET="$(rand_hex 32)"
+  ENCRYPTION_KEY="$(rand_hex 32)"
+  POSTGRES_PASSWORD="$(rand_hex 16)"
+  MYSQL_ROOT_PASSWORD="$(rand_hex 16)"
+  MYSQL_PASSWORD="$(rand_hex 16)"
+  export SESSION_SECRET ENCRYPTION_KEY POSTGRES_PASSWORD MYSQL_ROOT_PASSWORD MYSQL_PASSWORD
+
+  install -d -m 0700 "${VEXLYX_SECRETS_DIR}"
+  umask 077
+  cat > "${VEXLYX_SECRETS_FILE}" <<EOF
+# Vexlyx generated secrets and install configuration — DO NOT COMMIT.
+# Created by the installer on $(date -u +%Y-%m-%dT%H:%M:%SZ). Re-running the
+# installer reuses this file; delete it only if you intend to rotate every
+# secret below and accept that existing sessions/encrypted data become invalid.
+VEXLYX_DOMAIN=${VEXLYX_DOMAIN}
+VEXLYX_ADMIN_EMAIL=${VEXLYX_ADMIN_EMAIL}
+VEXLYX_MAIL_HOSTNAME=${VEXLYX_MAIL_HOSTNAME}
+VEXLYX_MAIL_DOMAIN=${VEXLYX_MAIL_DOMAIN}
+SESSION_SECRET=${SESSION_SECRET}
+ENCRYPTION_KEY=${ENCRYPTION_KEY}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
+EOF
+  chmod 0600 "${VEXLYX_SECRETS_FILE}"
+  log_ok "Secrets written to ${VEXLYX_SECRETS_FILE} (mode 0600)."
+}

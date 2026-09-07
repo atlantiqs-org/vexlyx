@@ -43,7 +43,7 @@ Every feature follows this exact cycle:
 ### 1. Set Up Your Environment
 
 You need:
-- **Node.js 20+** and **pnpm** (package manager)
+- **Node.js 22+** and **pnpm** (package manager) — pnpm 11 requires Node 22 for the `node:sqlite` built-in
 - **Docker** and **Docker Compose**
 - **Git** with your GitHub account configured
 - **Claude** (claude.ai or Claude Desktop App)
@@ -73,7 +73,7 @@ git init
 git add .
 git commit -m "chore: initialize vexlyx repository"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/vexlyx.git
+git remote add origin https://github.com/aliahmed-codes/vexlyx.git
 git push -u origin main
 ```
 

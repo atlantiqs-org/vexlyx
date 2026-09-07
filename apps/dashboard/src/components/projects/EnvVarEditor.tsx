@@ -368,6 +368,7 @@ export function EnvVarEditor({ projectId, onDeployTrigger }: EnvVarEditorProps) 
             <div className="sm:col-span-4 space-y-1">
               <Input
                 id="env-var-new-key"
+                name="env-var-new-key"
                 placeholder="KEY_NAME"
                 value={newKey}
                 onChange={(e) => handleKeyChange(e.target.value)}
@@ -376,6 +377,9 @@ export function EnvVarEditor({ projectId, onDeployTrigger }: EnvVarEditorProps) 
                   keyError && "border-rose-500 focus-visible:ring-rose-500",
                 )}
                 disabled={isSaving}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
               />
               {keyError && <p className="text-[11px] text-rose-500">{keyError}</p>}
             </div>
@@ -384,12 +388,16 @@ export function EnvVarEditor({ projectId, onDeployTrigger }: EnvVarEditorProps) 
             <div className="sm:col-span-6 relative">
               <Input
                 id="env-var-new-value"
+                name="env-var-new-value"
                 type={newIsSecret ? "password" : "text"}
                 placeholder="Value..."
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
                 className="h-9 font-mono text-xs pr-9"
                 disabled={isSaving}
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
               />
               <Button
                 type="button"
