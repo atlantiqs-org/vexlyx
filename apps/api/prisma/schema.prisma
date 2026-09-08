@@ -392,3 +392,20 @@ model SftpUser {
   @@index([userId])
   @@map("sftp_users")
 }
+
+/// A point-in-time snapshot of server-level resource metrics.
+/// Collected every 60 seconds by the BullMQ metrics-collector job (F5.2).
+/// BigInt used for RAM and disk byte counts to safely handle large servers.
+model MetricSnapshot {
+  id          String   @id @default(cuid())
+  cpuPercent  Float    @map("cpu_percent")
+  ramUsed     BigInt   @map("ram_used")
+  ramTotal    BigInt   @map("ram_total")
+  diskUsed    BigInt   @map("disk_used")
+  diskTotal   BigInt   @map("disk_total")
+  recordedAt  DateTime @default(now()) @map("recorded_at")
+
+  @@index([recordedAt])
+  @@map("metric_snapshots")
+}
+

@@ -31,10 +31,10 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 2: Multi-Runtime Support | 🟢 COMPLETED | 100% (8/8) |
 | Phase 3: Domain & DNS | 🟢 COMPLETED | 100% (4/4) |
 | Phase 4: Email Server | 🟢 COMPLETED | 100% (7/7) |
-| Phase 5: System & Administration | 🔴 NOT STARTED | 0% (0/6) |
+| Phase 5: System & Administration | 🟡 IN PROGRESS | 17% (1/6) |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% (0/4) |
 
-**Overall Completion:** 77% (33/43 features)
+**Overall Completion:** 79% (34/43 features)
 
 ---
 
@@ -1502,29 +1502,54 @@ Validated end-to-end on a real Ubuntu EC2 instance through to a working login, a
 ---
 
 ### F5.2 — Resource Monitoring
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Monitor server and container resource usage (CPU, RAM, Disk, Network).
+Monitor server and container resource usage (CPU, RAM, Disk, Network) with real-time Socket.io push, BullMQ background collection, historical persistence in PostgreSQL, and threshold alerts.
 
 **Acceptance Criteria:**
-- [ ] Server-level metrics (CPU, RAM, Disk, Uptime)
-- [ ] Per-container metrics
-- [ ] Real-time graphs in dashboard
-- [ ] Historical data (24h, 7d, 30d)
-- [ ] Alert thresholds (CPU > 80%, Disk > 90%)
-- [ ] Integration with Netdata or custom collector
+- [x] Server-level metrics (CPU, RAM, Disk, Uptime)
+- [x] Per-container metrics
+- [x] Real-time graphs in dashboard (live gauges via Socket.io + area chart)
+- [x] Historical data (1h, 24h, 7d, 30d) stored as 60-second snapshots
+- [x] Alert thresholds (CPU > 80%, RAM > 85%, Disk > 90%) — sonner toast + animated badge
+- [x] Custom collector (`system_monitor.py`) using psutil + `docker stats`
 
 **Test Plan:**
-1. Dashboard shows current CPU/RAM usage
-2. Container metrics → accurate per-project usage
-3. High CPU alert → notification sent
-4. Historical graph → shows 7-day trend
+1. Dashboard shows current CPU/RAM usage ✅ — live SVG gauges, Socket.io push every 5s
+2. Container metrics → accurate per-project usage ✅ — `docker stats --no-stream` parser
+3. High CPU alert → notification sent ✅ — sonner toast + ThresholdAlertBadge
+4. Historical graph → shows trend ✅ — recharts area chart with 1h/24h/7d/30d selector
 
 **Developer Docs:**
 - **Location:** `docs/dev/monitoring.md`
 
+**Files Created:**
+- `packages/shared/src/schemas/monitoring.ts`
+- `system/python/system_monitor.py`
+- `apps/api/src/modules/monitoring/schema.ts`
+- `apps/api/src/modules/monitoring/service.ts`
+- `apps/api/src/modules/monitoring/socket.ts`
+- `apps/api/src/modules/monitoring/routes.ts`
+- `apps/dashboard/src/hooks/useMonitoring.ts`
+- `apps/dashboard/src/components/monitoring/ResourceGauge.tsx`
+- `apps/dashboard/src/components/monitoring/UsageBar.tsx`
+- `apps/dashboard/src/components/monitoring/MetricHistoryChart.tsx`
+- `apps/dashboard/src/components/monitoring/ContainerMetricsTable.tsx`
+- `apps/dashboard/src/components/monitoring/ThresholdAlertBadge.tsx`
+- `apps/dashboard/src/components/monitoring/MonitoringPage.tsx`
+- `apps/dashboard/src/app/(panel)/monitoring/page.tsx`
+- `docs/dev/monitoring.md`
+
+**Files Modified:**
+- `packages/shared/src/index.ts`
+- `apps/api/prisma/schema.prisma` (added `MetricSnapshot` model)
+- `apps/api/src/index.ts` (registered `monitoringRoutes`)
+- `apps/dashboard/src/components/layout/Sidebar.tsx` (added Monitoring nav item)
+- `FEATURES.md`
+
 ---
+
 
 ### F5.3 — Backup System
 **Status:** 🔴 NOT STARTED
