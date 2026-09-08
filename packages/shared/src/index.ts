@@ -202,6 +202,25 @@ export type {
   UpdateVacationResponderInput,
 } from "./schemas/vacation.js";
 
+export {
+  ServerMetricsSchema,
+  ContainerMetricSchema,
+  MetricSnapshotSchema,
+  AlertThresholdSchema,
+  MetricsRangeSchema,
+  MetricsQuerySchema,
+  ThresholdConfigSchema,
+} from "./schemas/monitoring.js";
+export type {
+  ServerMetrics,
+  ContainerMetric,
+  MetricSnapshot,
+  AlertThreshold,
+  MetricsRange,
+  MetricsQuery,
+  ThresholdConfig,
+} from "./schemas/monitoring.js";
+
 
 export type {
   User,

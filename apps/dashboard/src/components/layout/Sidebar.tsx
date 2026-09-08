@@ -8,6 +8,7 @@ import {
   Globe,
   Database,
   Mail,
+  Activity,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ const navItems = [
   { label: "Domains", href: "/domains", icon: Globe },
   { label: "Databases", href: "/databases", icon: Database },
   { label: "Mail", href: "/mail", icon: Mail },
+  { label: "Monitoring", href: "/monitoring", icon: Activity },
 ];
 
 const bottomNavItems = [

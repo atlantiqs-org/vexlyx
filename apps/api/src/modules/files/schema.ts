@@ -27,7 +27,7 @@ export function safePath(
   }
 
   // Strip leading and trailing slashes so both "/index.php" and "index.php" resolve safely
-  const stripped = rawPath.replace(/^[\/\\]+/, "").replace(/\\/g, "/");
+  const stripped = rawPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
 
   // Normalize: resolve . and ..
   const normalized = path.posix.normalize(stripped);
