@@ -9,6 +9,7 @@ import {
   Database,
   Mail,
   Activity,
+  Archive,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const navItems = [
   { label: "Databases", href: "/databases", icon: Database },
   { label: "Mail", href: "/mail", icon: Mail },
   { label: "Monitoring", href: "/monitoring", icon: Activity },
+  { label: "Backups", href: "/backups", icon: Archive },
 ];
 
 const bottomNavItems = [

@@ -30,6 +30,7 @@ import { vacationRoutes } from "./modules/vacation/routes.js";
 import { fileRoutes } from "./modules/files/routes.js";
 import { sftpRoutes } from "./modules/sftp/routes.js";
 import { monitoringRoutes } from "./modules/monitoring/routes.js";
+import { backupRoutes } from "./modules/backups/routes.js";
 
 
 /**
@@ -93,6 +94,7 @@ async function buildApp() {
   await app.register(fileRoutes, { prefix: "/api/files" });
   await app.register(sftpRoutes, { prefix: "/api/sftp" });
   await app.register(monitoringRoutes, { prefix: "/api/monitoring" });
+  await app.register(backupRoutes, { prefix: "/api/backups" });
 
   return app;
 }

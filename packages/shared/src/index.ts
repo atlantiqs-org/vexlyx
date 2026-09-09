@@ -252,3 +252,25 @@ export {
 } from "./schemas/files.js";
 export type { FileNode, SftpUser, SftpAddSshKeyBody } from "./schemas/files.js";
 
+export {
+  BackupStatusSchema,
+  BackupTriggerSchema,
+  BackupItemTypeSchema,
+  BackupManifestDnsRecordSchema,
+  BackupManifestSchema,
+  BackupSnapshotSchema,
+  RestoreItemSchema,
+  BackupSettingsSchema,
+  UpdateBackupSettingsSchema,
+} from "./schemas/backups.js";
+export type {
+  BackupStatus,
+  BackupTrigger,
+  BackupItemType,
+  BackupManifest,
+  BackupSnapshotResponse,
+  RestoreItemInput,
+  BackupSettingsResponse,
+  UpdateBackupSettingsInput,
+} from "./schemas/backups.js";
+
