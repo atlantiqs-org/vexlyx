@@ -67,6 +67,12 @@ const envSchema = z.object({
   FILE_UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(500).default(100),
   SFTP_HOST: z.string().min(1).default("0.0.0.0"),
   SFTP_PORT: z.coerce.number().int().default(22),
+  // Backup System (F5.3) — these are only first-boot defaults for the
+  // BackupSettings singleton row; once created, the DB row is authoritative.
+  BACKUPS_DIR: z.string().min(1).default("./workspaces/backups"),
+  BACKUP_SCHEDULE_CRON: z.string().min(1).default("0 3 * * *"),
+  BACKUP_RETENTION_DAILY: z.coerce.number().int().min(1).default(7),
+  BACKUP_RETENTION_WEEKLY: z.coerce.number().int().min(0).default(4),
 });
 
 /**

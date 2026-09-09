@@ -87,6 +87,20 @@ enum CertStatus {
   ERROR
 }
 
+/// Lifecycle status of a full-system backup snapshot.
+enum BackupStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// How a backup snapshot was initiated.
+enum BackupTrigger {
+  SCHEDULED
+  MANUAL
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -407,5 +421,42 @@ model MetricSnapshot {
 
   @@index([recordedAt])
   @@map("metric_snapshots")
+}
+
+/// A full-system backup snapshot (F5.3): projects, databases, mail, and DNS
+/// bundled into one archive on disk under BACKUPS_DIR, with a manifest of
+/// what's inside so individual items can be restored later.
+model BackupSnapshot {
+  id          String        @id @default(cuid())
+  status      BackupStatus  @default(PENDING)
+  trigger     BackupTrigger
+  /// Absolute path to the <id>.tar.gz archive on the host filesystem.
+  archivePath String?       @map("archive_path")
+  sizeBytes   BigInt?       @map("size_bytes")
+  /// Index of archived items (projects/databases/mail/dns) plus the DNS
+  /// records themselves, embedded directly since Postgres is their source
+  /// of truth and they're small enough not to need archive extraction.
+  manifest    Json?
+  error       String?
+  startedAt   DateTime      @default(now()) @map("started_at")
+  completedAt DateTime?     @map("completed_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("backup_snapshots")
+}
+
+/// Singleton row (id is always "default") holding the configurable backup
+/// schedule and retention policy, editable from the dashboard without a
+/// redeploy.
+model BackupSettings {
+  id              String   @id @default("default")
+  scheduleCron    String   @default("0 3 * * *") @map("schedule_cron")
+  retentionDaily  Int      @default(7) @map("retention_daily")
+  retentionWeekly Int      @default(4) @map("retention_weekly")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("backup_settings")
 }
 

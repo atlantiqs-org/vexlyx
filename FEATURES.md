@@ -2,7 +2,7 @@
 
 > **Project:** Vexlyx
 > **Type:** Open-Source Hybrid Hosting Control Panel
-> **Last Updated:** 2026-09-06
+> **Last Updated:** 2026-09-09
 
 ---
 
@@ -31,10 +31,10 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase 2: Multi-Runtime Support | 🟢 COMPLETED | 100% (8/8) |
 | Phase 3: Domain & DNS | 🟢 COMPLETED | 100% (4/4) |
 | Phase 4: Email Server | 🟢 COMPLETED | 100% (7/7) |
-| Phase 5: System & Administration | 🟡 IN PROGRESS | 17% (1/6) |
+| Phase 5: System & Administration | 🟡 IN PROGRESS | 43% (3/7) |
 | Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% (0/4) |
 
-**Overall Completion:** 79% (34/43 features)
+**Overall Completion:** 82% (36/44 features)
 
 ---
 
@@ -1552,28 +1552,53 @@ Monitor server and container resource usage (CPU, RAM, Disk, Network) with real-
 
 
 ### F5.3 — Backup System
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Automated and on-demand backups for projects, databases, and email.
+Automated and on-demand full-system backups (projects, databases, mail, DNS) with configurable schedule, retention, and per-item restore.
 
 **Acceptance Criteria:**
-- [ ] Daily automated backups at configurable time
-- [ ] On-demand backup trigger
-- [ ] Backup includes: files, databases, mailboxes, DNS zones
-- [ ] Backup compression (tar.gz)
-- [ ] Retention policy (keep last 7 daily, 4 weekly)
-- [ ] Remote backup to S3/MinIO (optional)
-- [ ] One-click restore from backup
+- [x] Daily automated backups at configurable time — `BackupSettings` singleton row, editable from the dashboard, re-schedules the BullMQ job immediately
+- [x] On-demand backup trigger — "Backup Now" button, `POST /api/backups`
+- [x] Backup includes: files, databases, mailboxes, DNS zones — full-system snapshot per run
+- [x] Backup compression (tar.gz) — one `<snapshotId>.tar.gz` per snapshot
+- [x] Retention policy (keep last 7 daily, 4 weekly) — configurable, defaults match; `applyRetention()` runs after every backup
+- [ ] Remote backup to S3/MinIO (optional) — deferred; local disk (`BACKUPS_DIR`) only in this pass
+- [x] One-click restore from backup — per-item restore (project/database/mail domain/DNS zone) from any completed snapshot, behind a destructive confirmation dialog
 
 **Test Plan:**
-1. Trigger backup → archive created successfully
-2. Scheduled backup → runs automatically at set time
-3. Restore backup → project fully restored
-4. Retention → old backups auto-deleted
+1. Trigger backup → archive created successfully ✅ — verified end-to-end via live API (manual trigger → `COMPLETED` snapshot → archive file on disk)
+2. Scheduled backup → runs automatically at set time ✅ — BullMQ `upsertJobScheduler` with cron pattern, re-armed on settings change
+3. Restore backup → project fully restored ✅ — verified round-trip: seeded a DB row, backed up, corrupted the row, restored, confirmed original value came back
+4. Retention → old backups auto-deleted ✅ — `applyRetention()` grandfather-father-son rotation, deletes both DB row and archive file
 
 **Developer Docs:**
-- **Location:** `docs/dev/backups.md`
+- **Location:** `docs/dev/backup-system.md`
+
+**Files Created:**
+- `packages/shared/src/schemas/backups.ts`
+- `system/python/backup_manager.py`
+- `apps/api/src/modules/backups/schema.ts`
+- `apps/api/src/modules/backups/service.ts`
+- `apps/api/src/modules/backups/socket.ts`
+- `apps/api/src/modules/backups/routes.ts`
+- `apps/dashboard/src/hooks/useBackups.ts`
+- `apps/dashboard/src/components/backups/BackupsPage.tsx`
+- `apps/dashboard/src/components/backups/BackupList.tsx`
+- `apps/dashboard/src/components/backups/BackupDetail.tsx`
+- `apps/dashboard/src/components/backups/RestoreConfirmDialog.tsx`
+- `apps/dashboard/src/components/backups/TriggerBackupButton.tsx`
+- `apps/dashboard/src/components/backups/BackupSettingsCard.tsx`
+- `apps/dashboard/src/app/(panel)/backups/page.tsx`
+- `docs/dev/backup-system.md`
+
+**Files Modified:**
+- `packages/shared/src/index.ts`
+- `apps/api/prisma/schema.prisma` (added `BackupSnapshot`, `BackupSettings` models + `BackupStatus`/`BackupTrigger` enums)
+- `apps/api/src/config/env.ts` (added `BACKUPS_DIR`, `BACKUP_SCHEDULE_CRON`, `BACKUP_RETENTION_DAILY`, `BACKUP_RETENTION_WEEKLY`)
+- `apps/api/src/index.ts` (registered `backupRoutes`)
+- `apps/dashboard/src/components/layout/Sidebar.tsx` (added Backups nav item)
+- `FEATURES.md`
 
 ---
 
@@ -1651,6 +1676,43 @@ Real-time status of all system services.
 
 **Developer Docs:**
 - **Location:** `docs/dev/service-status.md`
+
+---
+
+### F5.7 — Fast Static & WordPress Serving (No-Build Deploy Path)
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+STATIC/REACT and WORDPRESS project types currently deploy through the exact same path as Node/Python apps: a full Nixpacks build produces a custom Docker image per deploy (`system/templates/docker-compose/static.yml` and `wordpress.yml` both use `image: "{{image_name}}"`, a Nixpacks-built image — confirmed by reading the current templates and `docker_manager.py`). For a plain HTML/static site this means running a full image build (slow, and a heavier image than needed) just to serve files that need no compilation at all — noticed directly while testing F5.3 backups against `backup-test-app` (a single `index.html`).
+
+**Competitor research (2026):** Coolify's dedicated "Static" buildpack packages files straight into a plain Nginx image with **no framework build step**, and for pure static content its docs recommend an even lighter path — a minimal `nginx-static` image with the project directory bind-mounted in, no build stage at all. CapRover follows the same idea: static sites are served by bundling files into a lightweight Nginx image rather than going through its normal app-build pipeline. Neither Coolify nor CapRover run WordPress through a custom per-deploy build either — WordPress ships as a one-click catalog template built on the official `wordpress` Docker Hub image, parameterized with DB credentials, not compiled per install. Across all three major self-hosted PaaS competitors (Coolify, CapRover, Dokploy), the pattern is consistent: **build once (or never) for content that doesn't need it; only run a real build step for projects that actually declare one** (e.g. a Vite `buildCmd`).
+
+**Proposed plan for Vexlyx:**
+1. **STATIC/REACT with no `buildCmd`:** skip Nixpacks entirely. Serve directly from a fixed, pre-pulled `nginx:alpine` image with the project's `PROJECTS_DIR/<id>` directory bind-mounted read-only as the web root. No image build step — deploy becomes "start a container," not "build then start."
+2. **STATIC/REACT with a `buildCmd` (e.g. Vite):** run the build in an ephemeral Nixpacks/Node builder container that writes its output (e.g. `dist/`) back to disk, then discard the builder and serve the result the same fixed-`nginx:alpine` way as (1). The custom image is never the long-lived container.
+3. **WORDPRESS:** replace the Nixpacks-built PHP-FPM image with the official `wordpress:php8.3-fpm-alpine` + `nginx:alpine` pair, wired to the database already provisioned by F2.6 via env vars — same idea as competitors' one-click WordPress templates. No per-install build step.
+4. Keep the existing per-project container + Traefik router model (matches Vexlyx's multi-tenant isolation story) — this only replaces the "build a custom image" step with "start a fixed image" step for these two project types. A shared static-file container serving multiple projects via vhosts (lower footprint at scale, weaker isolation) is a further optimization competitors also use, but is out of scope here — flagged as a possible future iteration, not required for this feature.
+5. Update `system/templates/docker-compose/static.yml` and `wordpress.yml` to reference the fixed images instead of `{{image_name}}`, and update `docker_manager.py`'s `cmd_deploy` to skip the Nixpacks build call for these two paths.
+
+**Acceptance Criteria:**
+- [ ] STATIC/REACT project with no `buildCmd` deploys without any Nixpacks build step (bind-mounted `nginx:alpine`)
+- [ ] STATIC/REACT project with a `buildCmd` still runs the build, but the served container uses the fixed lightweight image, not the Nixpacks output image
+- [ ] WORDPRESS deploys using the official `wordpress` + `nginx:alpine` images, wired to an F2.6-provisioned database, with no custom build step
+- [ ] Deploy time for a plain static site drops from a full Nixpacks build to low single-digit seconds
+- [ ] Resulting container image size for static sites drops to roughly the size of `nginx:alpine` plus site content, not a full Nixpacks-built image
+- [ ] Existing SPA fallback (index.html routing) and env-var-at-build-time behavior from F2.3 still work
+- [ ] Existing WordPress one-click installer, plugin/theme upload, and export/import from F2.4/F2.8 still work against the new image pair
+
+**Test Plan:**
+1. Deploy a plain HTML project → no Nixpacks build runs, container starts in seconds
+2. Deploy a Vite React project with `buildCmd` set → build still runs once, served container is the lightweight image
+3. Time a static deploy before/after → confirm meaningful reduction
+4. `docker images` before/after → confirm static site images are near `nginx:alpine` size, not a full Nixpacks image
+5. One-click WordPress install → still works end-to-end (site loads, admin accessible, DB connected)
+6. Re-run F2.8's WordPress export/import test → still passes against the new image pair
+
+**Developer Docs:**
+- **Location:** `docs/dev/fast-static-wordpress-serving.md`
 
 ---
 
