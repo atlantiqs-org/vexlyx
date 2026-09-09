@@ -532,7 +532,7 @@ export class BuildService {
 
     if (!project.gitUrl && !hasLocalFiles) {
       throw new BuildError(
-        "Project has no connected git repository or local source files. Connect a repository, add a Dockerfile, or install WordPress first.",
+        "This project has no source yet. Connect a git repository, upload files via the File Manager, or install WordPress before deploying.",
         "PROJECT_NOT_CLONED",
         400,
       );
@@ -540,7 +540,7 @@ export class BuildService {
 
     if (!existsSync(projectDir)) {
       throw new BuildError(
-        "Project source directory not found on disk. Connect a repository, add a Dockerfile, or install WordPress first.",
+        "Project source directory not found on disk. Connect a git repository, upload files via the File Manager, or install WordPress before deploying.",
         "PROJECT_DIR_MISSING",
         400,
       );

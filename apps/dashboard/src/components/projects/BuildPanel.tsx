@@ -22,12 +22,13 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { LogViewer } from "@/components/projects/LogViewer";
 import { useBuildLogs } from "@/hooks/useLogs";
+import { ApiRequestError } from "@/lib/api";
 import {
   useTriggerBuild,
   useDeploymentPolling,
   useDeployments,
 } from "@/hooks/useBuild";
-import type { Deployment, ProjectType } from "@vexlyx/shared";
+import type { Deployment } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
 // Status display config
@@ -205,8 +206,6 @@ function DeploymentRow({ projectId, deployment, isActive }: DeploymentRowProps) 
 interface BuildPanelProps {
   projectId: string;
   buildCmd: string | null | undefined;
-  gitUrl: string | null | undefined;
-  projectType?: ProjectType;
   onDeploySuccess?: () => void;
   refreshTrigger?: number;
 }
@@ -214,8 +213,6 @@ interface BuildPanelProps {
 export function BuildPanel({
   projectId,
   buildCmd,
-  gitUrl,
-  projectType,
   onDeploySuccess,
   refreshTrigger,
 }: BuildPanelProps) {
@@ -270,10 +267,11 @@ export function BuildPanel({
   }, [deployments, activePollId]);
 
   const handleDeploy = async () => {
-    if (!gitUrl && projectType !== "WORDPRESS" && projectType !== "DOCKER") {
-      toast.error("Connect a git repository, install WordPress, or configure a Dockerfile before deploying.");
-      return;
-    }
+    // No client-side git/type gate here — the backend already accepts any
+    // project with either a connected git repo OR local source files (e.g.
+    // uploaded via the File Manager), so let it decide and surface its own
+    // error message rather than duplicating (and getting out of sync with)
+    // that check on the client.
     try {
       const deployment = await triggerBuild(buildCmd ?? undefined);
       if (deployment) {
@@ -281,8 +279,12 @@ export function BuildPanel({
         toast.success("Build queued — logs will appear below.");
         await refetch();
       }
-    } catch {
-      toast.error("Failed to trigger build. Check that the project is installed or connected.");
+    } catch (err) {
+      const message =
+        err instanceof ApiRequestError
+          ? err.message
+          : "Failed to trigger build. Check that the project is installed or connected.";
+      toast.error(message);
     }
   };
 

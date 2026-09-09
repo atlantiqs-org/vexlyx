@@ -393,8 +393,6 @@ export default function ProjectDetailPage() {
       <BuildPanel
         projectId={project.id}
         buildCmd={project.buildCmd}
-        gitUrl={project.gitUrl}
-        projectType={project.type}
         onDeploySuccess={fetchProject}
         refreshTrigger={deployTriggerCount}
       />
