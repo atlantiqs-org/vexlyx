@@ -1833,16 +1833,16 @@ Neither the installer nor the dashboard ever tells the installing admin what DNS
 ---
 
 ### F5.10 — Fix Production Subdomain Routing (Traefik HTTPS)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟡 IN PROGRESS — code complete + locally verified; live-server HTTPS/DNS test pending (batched with F5.9's Phase 2)
 
 **Description:**
 Deployed project subdomains don't work in production (reported against `panel.mindgera.site`). Root cause confirmed by code audit: `docker/traefik/traefik.prod.yml.tmpl` sets a **global** HTTP→HTTPS redirect on the `web` entrypoint, but the deployed-project compose templates (`system/templates/docker-compose/{next,node,php,static,python,wordpress,docker}.yml`) only define a router on the `web` entrypoint — no `websecure` router, no TLS/certresolver. So every request to a default `{slug}.<BASE_DOMAIN>` subdomain gets redirected to HTTPS, where no matching router exists, and the connection dead-ends (this is very likely also the "redirects me to localhost" symptom, since the browser is left with no working route and falls back to whatever it was last showing). Only custom `Domain` records (F3.1/F3.2, which do get `docker/traefik/dynamic/domain-*.yml` with both entrypoints + TLS) work today. Separately, `ContainerControls.tsx:257` and `WordPressPanel.tsx:205` hardcode a `http://localhost:${internalPort}` "view" link, which is actively misleading once the project is reachable at a real subdomain on a remote server.
 
 **Acceptance Criteria:**
-- [ ] Every deployed-project compose template gets a `websecure` router with TLS/certresolver, mirroring what `Domain` records already receive, so the default `{slug}.<BASE_DOMAIN>` subdomain works over HTTPS out of the box
-- [ ] `docker_manager.py`'s router-label generation is updated consistently across all project types (NODEJS/NEXTJS/PYTHON/REACT/STATIC/PHP/WORDPRESS/DOCKER)
-- [ ] The "view project" link in the dashboard uses the real `deployedDomain` (or the custom `Domain`, if one is attached) instead of `localhost:<internalPort>`
-- [ ] Existing custom-`Domain` routing (F3.1/F3.2) is unaffected
+- [x] Every deployed-project compose template gets a `websecure` router with TLS/certresolver, mirroring what `Domain` records already receive, so the default `{slug}.<BASE_DOMAIN>` subdomain works over HTTPS out of the box — **live Let's Encrypt issuance not yet verified on a real server**
+- [x] `docker_manager.py`'s router-label generation is updated consistently across all project types (NODEJS/NEXTJS/PYTHON/REACT/STATIC/PHP/WORDPRESS/DOCKER) — template-only change (`docker_manager.py` does plain string substitution, no per-type Python logic); rendering verified locally for node/next/python/php/static/wordpress/docker templates
+- [x] The "view project" link in the dashboard uses the real `deployedDomain` (or the custom `Domain`, if one is attached) instead of `localhost:<internalPort>`
+- [x] Existing custom-`Domain` routing (F3.1/F3.2) is unaffected — `domains/service.ts`'s dynamic-config generation was not touched; not yet re-verified live
 
 **Test Plan:**
 1. Deploy a fresh project with no custom domain attached → its default subdomain loads over HTTPS with a valid cert

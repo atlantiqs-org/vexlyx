@@ -33,6 +33,9 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.{{service_name}}.rule=Host(`{{hostname}}`)"
       - "traefik.http.routers.{{service_name}}.entrypoints=web"
+      - "traefik.http.routers.{{service_name}}-secure.rule=Host(`{{hostname}}`)"
+      - "traefik.http.routers.{{service_name}}-secure.entrypoints=websecure"
+      - "traefik.http.routers.{{service_name}}-secure.tls.certresolver=letsencrypt"
       - "traefik.http.services.{{service_name}}.loadbalancer.server.port={{container_port}}"
 
 networks:
