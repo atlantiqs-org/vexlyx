@@ -1811,7 +1811,7 @@ Closes gaps found while testing F5.5: there was no way to log out of the dashboa
 ---
 
 ### F5.9 — Onboarding: DNS Records & Public IP Visibility
-**Status:** 🟡 IN PROGRESS — code complete (installer, backend, dashboard); live DNS propagation/HTTPS test pending on a real server
+**Status:** 🟢 COMPLETED — verified live on `panel.mindgera.site`: fresh install detected the correct public IP, printed all four records, and the dashboard/API reflected them correctly
 
 **Description:**
 Neither the installer nor the dashboard ever tells the installing admin what DNS records to create or what IP to point them at. Confirmed by code audit: `system/scripts/install/config.sh` only prompts for the single panel domain (`VEXLYX_DOMAIN`); `steps/16-summary.sh` prints a generic "make sure your domain points here" warning without stating the server's actual public IP or listing the other hostnames that need records (`webmail.<domain>` for Roundcube, a wildcard `*.<domain>` for deployed project subdomains since `BASE_DOMAIN` defaults to the same zone as the panel — see `docker-compose.prod.yml`'s `BASE_DOMAIN: ${VEXLYX_DOMAIN}`). No code anywhere in the repo currently detects/exposes the server's public IP.
@@ -1823,9 +1823,9 @@ Neither the installer nor the dashboard ever tells the installing admin what DNS
 - [x] Works whether the panel domain and the deployed-app base domain are the same zone (default) or configured separately (`VEXLYX_BASE_DOMAIN`)
 
 **Test Plan:**
-1. Run the installer against a fresh server → output clearly lists the IP and every required DNS record before finishing
-2. Skip DNS setup, finish install anyway → dashboard Settings page still shows the same records/IP for later reference
-3. Point DNS as instructed → panel, api, webmail, and a deployed test project's subdomain all resolve and load correctly
+1. Run the installer against a fresh server → output clearly lists the IP and every required DNS record before finishing — ✅ verified on `panel.mindgera.site`
+2. Skip DNS setup, finish install anyway → dashboard Settings page still shows the same records/IP for later reference — ✅ verified
+3. Point DNS as instructed → panel, api, webmail, and a deployed test project's subdomain all resolve and load correctly — ✅ verified (`panel.mindgera.site`, `api.panel.mindgera.site`, `static-app.panel.mindgera.site` all serve real, trusted HTTPS)
 
 **Developer Docs:**
 - **Location:** `docs/dev/dns-onboarding.md`
@@ -1833,21 +1833,21 @@ Neither the installer nor the dashboard ever tells the installing admin what DNS
 ---
 
 ### F5.10 — Fix Production Subdomain Routing (Traefik HTTPS)
-**Status:** 🟡 IN PROGRESS — code complete + locally verified; live-server HTTPS/DNS test pending (batched with F5.9's Phase 2)
+**Status:** 🟢 COMPLETED — verified live on `panel.mindgera.site`: a fresh deploy with no custom domain gets a working `-secure` router and serves trusted HTTPS on its default subdomain
 
 **Description:**
 Deployed project subdomains don't work in production (reported against `panel.mindgera.site`). Root cause confirmed by code audit: `docker/traefik/traefik.prod.yml.tmpl` sets a **global** HTTP→HTTPS redirect on the `web` entrypoint, but the deployed-project compose templates (`system/templates/docker-compose/{next,node,php,static,python,wordpress,docker}.yml`) only define a router on the `web` entrypoint — no `websecure` router, no TLS/certresolver. So every request to a default `{slug}.<BASE_DOMAIN>` subdomain gets redirected to HTTPS, where no matching router exists, and the connection dead-ends (this is very likely also the "redirects me to localhost" symptom, since the browser is left with no working route and falls back to whatever it was last showing). Only custom `Domain` records (F3.1/F3.2, which do get `docker/traefik/dynamic/domain-*.yml` with both entrypoints + TLS) work today. Separately, `ContainerControls.tsx:257` and `WordPressPanel.tsx:205` hardcode a `http://localhost:${internalPort}` "view" link, which is actively misleading once the project is reachable at a real subdomain on a remote server.
 
 **Acceptance Criteria:**
-- [x] Every deployed-project compose template gets a `websecure` router with TLS/certresolver, mirroring what `Domain` records already receive, so the default `{slug}.<BASE_DOMAIN>` subdomain works over HTTPS out of the box — **live Let's Encrypt issuance not yet verified on a real server**
-- [x] `docker_manager.py`'s router-label generation is updated consistently across all project types (NODEJS/NEXTJS/PYTHON/REACT/STATIC/PHP/WORDPRESS/DOCKER) — template-only change (`docker_manager.py` does plain string substitution, no per-type Python logic); rendering verified locally for node/next/python/php/static/wordpress/docker templates
+- [x] Every deployed-project compose template gets a `websecure` router with TLS/certresolver, mirroring what `Domain` records already receive, so the default `{slug}.<BASE_DOMAIN>` subdomain works over HTTPS out of the box — verified live: `static-app.panel.mindgera.site` (STATIC) and `test-wordpress.panel.mindgera.site` (WORDPRESS) both serve trusted HTTPS with real Let's Encrypt certs
+- [x] `docker_manager.py`'s router-label generation is updated consistently across all project types (NODEJS/NEXTJS/PYTHON/REACT/STATIC/PHP/WORDPRESS/DOCKER) — template-only change (`docker_manager.py` does plain string substitution, no per-type Python logic); rendering verified locally for node/next/python/php/static/wordpress/docker templates, and live for STATIC + WORDPRESS
 - [x] The "view project" link in the dashboard uses the real `deployedDomain` (or the custom `Domain`, if one is attached) instead of `localhost:<internalPort>`
-- [x] Existing custom-`Domain` routing (F3.1/F3.2) is unaffected — `domains/service.ts`'s dynamic-config generation was not touched; not yet re-verified live
+- [x] Existing custom-`Domain` routing (F3.1/F3.2) is unaffected — verified live: `html.mindgera.site` (a custom `Domain` attached to the static-app project) serves trusted HTTPS correctly alongside the project's own default subdomain
 
 **Test Plan:**
-1. Deploy a fresh project with no custom domain attached → its default subdomain loads over HTTPS with a valid cert
-2. Click "View" in the dashboard from a non-local machine → opens the real subdomain, not `localhost`
-3. Attach a custom `Domain` to a project → still works exactly as before
+1. Deploy a fresh project with no custom domain attached → its default subdomain loads over HTTPS with a valid cert — ✅ verified
+2. Click "View" in the dashboard from a non-local machine → opens the real subdomain, not `localhost` — ✅ verified
+3. Attach a custom `Domain` to a project → still works exactly as before — ✅ verified (`html.mindgera.site`)
 
 **Developer Docs:**
 - **Location:** `docs/dev/domain-routing.md`
@@ -1855,7 +1855,7 @@ Deployed project subdomains don't work in production (reported against `panel.mi
 ---
 
 ### F5.11 — Panel Settings Page
-**Status:** 🟡 IN PROGRESS — code complete, backend fully tested; browser/UI check pending (no headless-browser tooling in this environment)
+**Status:** 🟢 COMPLETED — verified live on `panel.mindgera.site`: Account, Change Password, and DNS Records & Public IP cards all confirmed working in-browser, including Verify DNS
 
 **Description:**
 The Sidebar has always linked to `/settings` (`apps/dashboard/src/components/layout/Sidebar.tsx`), but no page was ever built — it 404s today. Build the real page: account info (name/email), change-password, and (once F5.9 lands) the DNS records/public-IP reference info so an admin can look it up again after the installer output has scrolled away.
@@ -1868,9 +1868,9 @@ The Sidebar has always linked to `/settings` (`apps/dashboard/src/components/lay
 - [x] Linked correctly from the Sidebar (already wired, just needs a page)
 
 **Test Plan:**
-1. Click "Settings" in the sidebar → real page loads, no 404
-2. Change password → can log in with the new password, old one rejected
-3. After F5.9 ships → DNS/IP reference section shows accurate, current values
+1. Click "Settings" in the sidebar → real page loads, no 404 — ✅ verified live
+2. Change password → can log in with the new password, old one rejected — ✅ verified (both locally via curl and confirmed by the user in-browser)
+3. After F5.9 ships → DNS/IP reference section shows accurate, current values — ✅ verified live on `panel.mindgera.site`
 
 **Developer Docs:**
 - **Location:** `docs/dev/settings-page.md`
