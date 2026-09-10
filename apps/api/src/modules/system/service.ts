@@ -31,6 +31,13 @@ export class SystemService {
     const records: DnsRecordSuggestion[] = [];
     if (domain && publicIp) {
       records.push({ type: "A", host: domain, value: publicIp, purpose: "Panel" });
+      // The dashboard's browser JS calls https://api.<domain> directly
+      // (NEXT_PUBLIC_API_URL, docker-compose.prod.yml) — this only happens to
+      // work without its own record when baseDomain === domain, since the
+      // wildcard below then incidentally covers it too. With a split base
+      // domain (VEXLYX_BASE_DOMAIN != VEXLYX_DOMAIN) the wildcard lives in a
+      // different zone entirely, so the API needs an explicit record either way.
+      records.push({ type: "A", host: `api.${domain}`, value: publicIp, purpose: "API" });
       records.push({ type: "A", host: `webmail.${domain}`, value: publicIp, purpose: "Webmail" });
       records.push({
         type: "A",

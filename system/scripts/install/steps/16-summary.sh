@@ -21,13 +21,15 @@ echo ""
 if [[ -n "${VEXLYX_PUBLIC_IP:-}" ]]; then
   echo "  Server public IP: ${VEXLYX_PUBLIC_IP}"
   echo ""
-  echo "  Point these DNS records at it before the panel/webmail/deployed"
+  echo "  Point these DNS records at it before the panel/api/webmail/deployed"
   echo "  projects will be reachable:"
   echo "    A     ${VEXLYX_DOMAIN}              -> ${VEXLYX_PUBLIC_IP}"
+  echo "    A     api.${VEXLYX_DOMAIN}          -> ${VEXLYX_PUBLIC_IP}"
   echo "    A     webmail.${VEXLYX_DOMAIN}      -> ${VEXLYX_PUBLIC_IP}"
   echo "    A     *.${VEXLYX_BASE_DOMAIN}       -> ${VEXLYX_PUBLIC_IP}  (deployed project subdomains)"
   if [[ "${VEXLYX_BASE_DOMAIN}" != "${VEXLYX_DOMAIN}" ]]; then
-    echo "    (base domain for deployed projects is configured separately from the panel domain)"
+    echo "    (base domain for deployed projects is configured separately from the panel domain —"
+    echo "     the api. record above is required in this case, not just covered by the wildcard)"
   fi
   echo ""
   echo "  This same info is available later in the dashboard under Settings."
@@ -35,6 +37,7 @@ else
   echo "  Could not auto-detect this server's public IP — point the following"
   echo "  at whatever your server's public IP turns out to be:"
   echo "    A     ${VEXLYX_DOMAIN}"
+  echo "    A     api.${VEXLYX_DOMAIN}"
   echo "    A     webmail.${VEXLYX_DOMAIN}"
   echo "    A     *.${VEXLYX_BASE_DOMAIN}   (deployed project subdomains)"
 fi
