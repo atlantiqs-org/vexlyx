@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import * as argon2 from "argon2";
-import type { RegisterInput, LoginInput } from "./schema.js";
+import type { RegisterInput, LoginInput, ChangePasswordInput } from "./schema.js";
 
 const PUBLIC_USER_SELECT = {
   id: true,
@@ -66,6 +66,32 @@ export class AuthService {
 
     const { password: _password, ...publicUser } = user;
     return publicUser;
+  }
+
+  // F5.11 — self-service password change. The current session stays valid;
+  // only the stored hash changes, so the old password simply stops working
+  // (including for anyone else's sessions, since login re-verifies on the
+  // fly rather than caching a password check).
+  async changePassword(userId: string, data: ChangePasswordInput) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new AuthError("User not found", "USER_NOT_FOUND", 404);
+    }
+
+    const validPassword = await argon2.verify(user.password, data.currentPassword);
+    if (!validPassword) {
+      throw new AuthError("Current password is incorrect", "INVALID_CREDENTIALS", 401);
+    }
+
+    const hashedPassword = await argon2.hash(data.newPassword, {
+      type: argon2.argon2id,
+    });
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
   }
 
   async getCurrentUser(userId: string) {

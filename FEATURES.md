@@ -1855,16 +1855,17 @@ Deployed project subdomains don't work in production (reported against `panel.mi
 ---
 
 ### F5.11 — Panel Settings Page
-**Status:** 🔴 NOT STARTED
+**Status:** 🟡 IN PROGRESS — code complete, backend fully tested; browser/UI check pending (no headless-browser tooling in this environment)
 
 **Description:**
 The Sidebar has always linked to `/settings` (`apps/dashboard/src/components/layout/Sidebar.tsx`), but no page was ever built — it 404s today. Build the real page: account info (name/email), change-password, and (once F5.9 lands) the DNS records/public-IP reference info so an admin can look it up again after the installer output has scrolled away.
 
 **Acceptance Criteria:**
-- [ ] `/settings` renders instead of 404ing
-- [ ] Shows the logged-in user's name/email and lets them change their password
-- [ ] Once F5.9 ships, shows the server's public IP and the required DNS records for reference
-- [ ] Linked correctly from the Sidebar (already wired, just needs a page)
+- [x] `/settings` renders instead of 404ing
+- [x] Shows the logged-in user's name/email and lets them change their password — `POST /api/auth/change-password` fully tested (wrong current password, mismatched confirm, no auth, success + old password rejected + new password works)
+- [x] Once F5.9 ships, shows the server's public IP and the required DNS records for reference — ADMIN-only card, reuses F5.9's `GET /api/system/dns-info`
+- [x] UX follow-up (user-requested): a setup blurb explains what to do with the records, and a "Verify DNS" button live-checks propagation via `POST /api/system/dns-info/verify` (cross-resolver DNS lookups, same pattern as F3.3's domain propagation check) — verified locally against a real resolvable hostname (`one.one.one.one` → `1.1.1.1`)
+- [x] Linked correctly from the Sidebar (already wired, just needs a page)
 
 **Test Plan:**
 1. Click "Settings" in the sidebar → real page loads, no 404

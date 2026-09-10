@@ -23,3 +23,34 @@ export const DnsOnboardingInfoSchema = z.object({
   records: z.array(DnsRecordSuggestionSchema),
 });
 export type DnsOnboardingInfoResponse = z.infer<typeof DnsOnboardingInfoSchema>;
+
+// ---------------------------------------------------------------------------
+// Live DNS verification for the records above (F5.11 UX follow-up) — lets an
+// admin check "has this actually propagated yet?" from the Settings page
+// instead of shelling out to `dig`.
+// ---------------------------------------------------------------------------
+
+export const DnsResolverCheckSchema = z.object({
+  resolver: z.string(),
+  status: z.enum(["MATCH", "MISMATCH", "NOT_FOUND", "ERROR"]),
+  detectedValues: z.array(z.string()),
+});
+export type DnsResolverCheckResult = z.infer<typeof DnsResolverCheckSchema>;
+
+export const DnsRecordVerificationSchema = z.object({
+  host: z.string(),
+  // The hostname actually queried — differs from `host` for a wildcard
+  // record (`*.example.com`), since a literal `*` isn't resolvable; a probe
+  // subdomain under the same zone is queried instead.
+  checkedHost: z.string(),
+  expected: z.string(),
+  isPropagated: z.boolean(),
+  resolvers: z.array(DnsResolverCheckSchema),
+});
+export type DnsRecordVerification = z.infer<typeof DnsRecordVerificationSchema>;
+
+export const DnsVerificationResponseSchema = z.object({
+  checkedAt: z.string().datetime(),
+  results: z.array(DnsRecordVerificationSchema),
+});
+export type DnsVerificationResponse = z.infer<typeof DnsVerificationResponseSchema>;
