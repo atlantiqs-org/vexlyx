@@ -1,5 +1,22 @@
-import type { DnsOnboardingInfoResponse, DnsRecordSuggestion } from "@vexlyx/shared";
+import dns from "node:dns";
+import type {
+  DnsOnboardingInfoResponse,
+  DnsRecordSuggestion,
+  DnsResolverCheckResult,
+  DnsRecordVerification,
+  DnsVerificationResponse,
+} from "@vexlyx/shared";
 import { env } from "../../config/env.js";
+
+// Same public resolvers domains/dns-service.ts's checkPropagation() queries,
+// for the same reason: a single resolver's cache can be stale or geographically
+// biased, so checking a few gives a more honest "has this actually propagated"
+// answer than trusting whichever resolver Node's default happens to pick.
+const PUBLIC_RESOLVERS = [
+  { name: "Cloudflare (1.1.1.1)", ip: "1.1.1.1" },
+  { name: "Google (8.8.8.8)", ip: "8.8.8.8" },
+  { name: "Quad9 (9.9.9.9)", ip: "9.9.9.9" },
+];
 
 export class SystemService {
   // Builds the DNS/IP reference info an admin needs to point their domain(s)
@@ -24,5 +41,58 @@ export class SystemService {
     }
 
     return { publicIp, domain, baseDomain, records };
+  }
+
+  // Live-checks each onboarding record against a few public resolvers (F5.11
+  // UX follow-up) — "is this actually pointed at the server yet?" instead of
+  // just listing what's needed. A wildcard record (`*.example.com`) can't be
+  // queried literally, so a fixed probe subdomain under the same zone is
+  // queried instead — if the wildcard is live, the probe resolves the same way.
+  async verifyDnsRecords(): Promise<DnsVerificationResponse> {
+    const { records } = this.getDnsOnboardingInfo();
+
+    const results = await Promise.all(
+      records.map((record) => this.verifyOneRecord(record)),
+    );
+
+    return { checkedAt: new Date().toISOString(), results };
+  }
+
+  private async verifyOneRecord(record: DnsRecordSuggestion): Promise<DnsRecordVerification> {
+    const checkedHost = record.host.startsWith("*.")
+      ? `vexlyx-dns-check.${record.host.slice(2)}`
+      : record.host;
+
+    const resolverResults: DnsResolverCheckResult[] = await Promise.all(
+      PUBLIC_RESOLVERS.map(async (r): Promise<DnsResolverCheckResult> => {
+        try {
+          const resolver = new dns.promises.Resolver();
+          resolver.setServers([r.ip]);
+          const detectedValues = await resolver.resolve4(checkedHost);
+
+          const isMatch = detectedValues.some((v) => v === record.value);
+          return {
+            resolver: r.name,
+            status: isMatch ? "MATCH" : detectedValues.length > 0 ? "MISMATCH" : "NOT_FOUND",
+            detectedValues,
+          };
+        } catch (err: unknown) {
+          const errCode = (err as { code?: string })?.code;
+          return {
+            resolver: r.name,
+            status: errCode === "ENOTFOUND" || errCode === "ENODATA" ? "NOT_FOUND" : "ERROR",
+            detectedValues: [],
+          };
+        }
+      }),
+    );
+
+    return {
+      host: record.host,
+      checkedHost,
+      expected: record.value,
+      isPropagated: resolverResults.length > 0 && resolverResults.every((r) => r.status === "MATCH"),
+      resolvers: resolverResults,
+    };
   }
 }

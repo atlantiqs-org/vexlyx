@@ -66,6 +66,17 @@ export function useAuth() {
     return data.user;
   };
 
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+    confirmNewPassword: string,
+  ) => {
+    await fetchAPI("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword, confirmNewPassword }),
+    });
+  };
+
   const logout = async () => {
     try {
       await fetchAPI("/api/auth/logout", { method: "POST" });
@@ -81,6 +92,7 @@ export function useAuth() {
     ...state,
     login,
     register,
+    changePassword,
     logout,
     refetch: fetchUser,
   };

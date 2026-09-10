@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
-import { RegisterSchema, LoginSchema } from "./schema.js";
+import { RegisterSchema, LoginSchema, ChangePasswordSchema } from "./schema.js";
 import { AuthService, AuthError } from "./service.js";
 import { createSession, destroySession } from "../../plugins/auth.js";
 import { env } from "../../config/env.js";
@@ -100,6 +100,35 @@ export async function authRoutes(app: FastifyInstance) {
       return { user };
     },
   );
+
+  // POST /api/auth/change-password (F5.11) — self-service, requires the
+  // current password. Rate-limited like login since it re-verifies a secret.
+  app.post("/change-password", {
+    preHandler: [app.requireAuth],
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: "15 minutes",
+      },
+    },
+    handler: async (request, reply) => {
+      try {
+        const data = ChangePasswordSchema.parse(request.body);
+        await service.changePassword(request.userId!, data);
+        return { message: "Password changed" };
+      } catch (err) {
+        if (err instanceof AuthError) {
+          reply.status(err.statusCode).send({
+            error: err.message,
+            code: err.code,
+            details: {},
+          });
+          return;
+        }
+        throw err;
+      }
+    },
+  });
 
   // GET /api/auth/config — public, lets the dashboard know whether to show
   // the self-registration form/link (F5.8).
