@@ -1603,18 +1603,18 @@ Automated and on-demand full-system backups (projects, databases, mail, DNS) wit
 ---
 
 ### F5.4 — Firewall Management
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Web-based UFW firewall management.
 
 **Acceptance Criteria:**
-- [ ] List current firewall rules
-- [ ] Add new rules (port, protocol, source IP)
-- [ ] Delete rules
-- [ ] Default policy configuration
-- [ ] Rule validation (prevent locking out)
-- [ ] Apply changes with confirmation
+- [x] List current firewall rules
+- [x] Add new rules (port, protocol, source IP)
+- [x] Delete rules
+- [x] Default policy configuration
+- [x] Rule validation (prevent locking out)
+- [x] Apply changes with confirmation
 
 **Test Plan:**
 1. View rules → shows current UFW status

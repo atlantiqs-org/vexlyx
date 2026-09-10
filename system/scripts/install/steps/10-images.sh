@@ -10,4 +10,10 @@ COMPOSE=(docker compose --env-file "${VEXLYX_SECRETS_FILE}" -f docker-compose.ym
 
 "${COMPOSE[@]}" build dashboard api
 
+# vexlyx-ufw-helper (F5.4) -- a throwaway, host-networked image
+# firewall_manager.py launches per-command to reach the HOST's real UFW
+# state (the api container itself has no NET_ADMIN/host networking). Not a
+# compose service -- built directly so `docker run` can find it by tag.
+docker build -t vexlyx-ufw-helper:latest docker/ufw-helper
+
 log_ok "Panel images built."

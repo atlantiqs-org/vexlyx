@@ -73,6 +73,12 @@ const envSchema = z.object({
   BACKUP_SCHEDULE_CRON: z.string().min(1).default("0 3 * * *"),
   BACKUP_RETENTION_DAILY: z.coerce.number().int().min(1).default(7),
   BACKUP_RETENTION_WEEKLY: z.coerce.number().int().min(0).default(4),
+  // Firewall management (F5.4). Ports that add_rule/delete_rule/
+  // set_default_policy in firewall_manager.py refuse to lock out — see
+  // system/scripts/install/steps/15-firewall.sh for the installer's own
+  // (one-time) SSH-lockout guard this mirrors at runtime.
+  FIREWALL_SSH_PORT: z.coerce.number().int().min(1).max(65535).default(22),
+  FIREWALL_HELPER_IMAGE: z.string().min(1).default("vexlyx-ufw-helper:latest"),
 });
 
 /**
