@@ -64,6 +64,12 @@ docker/traefik/certs/*.crt
 docker/traefik/certs/*.key
 !docker/traefik/certs/.gitkeep
 
+# Runtime-generated per-domain Traefik dynamic configs (F3.1) — written by
+# domains/service.ts at runtime, install-specific, never meant to be
+# committed. webmail.yml is the one deliberately-tracked static route (F4.4).
+docker/traefik/dynamic/domain-*.yml
+!docker/traefik/dynamic/.gitkeep
+
 # Rendered production Traefik config (F5.1) — generated from
 # traefik.prod.yml.tmpl by the installer, contains the real admin email.
 docker/traefik/traefik.prod.yml
