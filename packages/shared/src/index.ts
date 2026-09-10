@@ -274,3 +274,24 @@ export type {
   UpdateBackupSettingsInput,
 } from "./schemas/backups.js";
 
+export {
+  FirewallProtocolSchema,
+  FirewallActionSchema,
+  FirewallPolicySchema,
+  FirewallRuleSchema,
+  CreateFirewallRuleSchema,
+  FirewallSettingsSchema,
+  UpdateFirewallSettingsSchema,
+  FirewallStatusSchema,
+} from "./schemas/firewall.js";
+export type {
+  FirewallProtocol,
+  FirewallAction,
+  FirewallPolicy,
+  FirewallRuleResponse,
+  CreateFirewallRuleInput,
+  FirewallSettingsResponse,
+  UpdateFirewallSettingsInput,
+  FirewallStatusResponse,
+} from "./schemas/firewall.js";
+

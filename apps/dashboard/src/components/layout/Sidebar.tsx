@@ -10,6 +10,7 @@ import {
   Mail,
   Activity,
   Archive,
+  Shield,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ const navItems = [
   { label: "Mail", href: "/mail", icon: Mail },
   { label: "Monitoring", href: "/monitoring", icon: Activity },
   { label: "Backups", href: "/backups", icon: Archive },
+  { label: "Firewall", href: "/firewall", icon: Shield },
 ];
 
 const bottomNavItems = [

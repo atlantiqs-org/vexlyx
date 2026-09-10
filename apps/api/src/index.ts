@@ -31,6 +31,7 @@ import { fileRoutes } from "./modules/files/routes.js";
 import { sftpRoutes } from "./modules/sftp/routes.js";
 import { monitoringRoutes } from "./modules/monitoring/routes.js";
 import { backupRoutes } from "./modules/backups/routes.js";
+import { firewallRoutes } from "./modules/firewall/routes.js";
 
 
 /**
@@ -95,6 +96,7 @@ async function buildApp() {
   await app.register(sftpRoutes, { prefix: "/api/sftp" });
   await app.register(monitoringRoutes, { prefix: "/api/monitoring" });
   await app.register(backupRoutes, { prefix: "/api/backups" });
+  await app.register(firewallRoutes, { prefix: "/api/firewall" });
 
   return app;
 }

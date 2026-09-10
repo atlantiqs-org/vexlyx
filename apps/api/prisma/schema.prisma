@@ -101,6 +101,24 @@ enum BackupTrigger {
   MANUAL
 }
 
+/// Transport protocol a firewall rule applies to.
+enum FirewallProtocol {
+  TCP
+  UDP
+}
+
+/// Whether a firewall rule allows or denies matching traffic.
+enum FirewallAction {
+  ALLOW
+  DENY
+}
+
+/// UFW default policy for a traffic direction.
+enum FirewallPolicy {
+  ALLOW
+  DENY
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -115,13 +133,13 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  sessions  Session[]
-  projects  Project[]
-  domains   Domain[]
-  databases Database[]
-  mailboxes Mailbox[]
+  sessions       Session[]
+  projects       Project[]
+  domains        Domain[]
+  databases      Database[]
+  mailboxes      Mailbox[]
   virtualAliases VirtualAlias[]
-  sftpUser  SftpUser?
+  sftpUser       SftpUser?
 
   @@map("users")
 }
@@ -143,40 +161,40 @@ model Session {
 /// A hosted application or website managed by the panel.
 /// Project names are unique per user.
 model Project {
-  id                 String        @id @default(cuid())
-  name               String
-  type               ProjectType
-  status             ProjectStatus @default(CREATING)
-  gitUrl             String?       @map("git_url")
-  branch             String        @default("main")
-  buildCmd           String?       @map("build_cmd")
-  startCmd           String?       @map("start_cmd")
-  port               Int?
+  id                String        @id @default(cuid())
+  name              String
+  type              ProjectType
+  status            ProjectStatus @default(CREATING)
+  gitUrl            String?       @map("git_url")
+  branch            String        @default("main")
+  buildCmd          String?       @map("build_cmd")
+  startCmd          String?       @map("start_cmd")
+  port              Int?
   /// HMAC-SHA256 secret for GitHub/GitLab webhook signature verification (F2.7).
   /// Generated once on first git connect; stored as a 64-char hex string.
-  webhookSecret      String?       @map("webhook_secret")
+  webhookSecret     String?       @map("webhook_secret")
   /// Ed25519 public key in OpenSSH authorized_keys format.
   /// Stored here so the dashboard can display it without touching disk.
-  sshPublicKey       String?       @map("ssh_public_key")
+  sshPublicKey      String?       @map("ssh_public_key")
   /// Absolute path to the Ed25519 private key on the host filesystem.
   /// Used by git_manager.py at clone/pull time via GIT_SSH_COMMAND.
-  sshPrivateKeyPath  String?       @map("ssh_private_key_path")
-  userId             String        @map("user_id")
+  sshPrivateKeyPath String?       @map("ssh_private_key_path")
+  userId            String        @map("user_id")
   /// Docker container ID of the currently running container (short or full hash).
-  containerId        String?       @map("container_id")
+  containerId       String?       @map("container_id")
   /// Last known container status reported by Docker (running, exited, etc.).
-  containerStatus    String?       @map("container_status")
+  containerStatus   String?       @map("container_status")
   /// Host port dynamically allocated for this container (8100–8999).
-  internalPort       Int?          @map("internal_port")
+  internalPort      Int?          @map("internal_port")
   /// Traefik-resolved hostname for this project (e.g. myapp.vexlyx.local).
-  deployedDomain     String?       @map("deployed_domain")
+  deployedDomain    String?       @map("deployed_domain")
   /// Timestamp of the most recent successful deployment.
-  deployedAt         DateTime?     @map("deployed_at")
-  deletedAt          DateTime?     @map("deleted_at")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  deployedAt        DateTime?     @map("deployed_at")
+  deletedAt         DateTime?     @map("deleted_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   deployments Deployment[]
   envVars     EnvVar[]
   domains     Domain[]
@@ -189,17 +207,17 @@ model Project {
 
 /// A single deployment attempt for a project (build + deploy lifecycle).
 model Deployment {
-  id          String           @id @default(cuid())
-  status      DeploymentStatus @default(QUEUED)
-  commitHash  String?          @map("commit_hash")
-  commitMsg   String?          @map("commit_msg")
-  buildLogs   String?          @map("build_logs")
-  duration    Int?
-  projectId   String           @map("project_id")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id         String           @id @default(cuid())
+  status     DeploymentStatus @default(QUEUED)
+  commitHash String?          @map("commit_hash")
+  commitMsg  String?          @map("commit_msg")
+  buildLogs  String?          @map("build_logs")
+  duration   Int?
+  projectId  String           @map("project_id")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
 
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("deployments")
@@ -215,7 +233,7 @@ model EnvVar {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, key])
   @@index([projectId])
@@ -240,14 +258,14 @@ model Domain {
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  parent     Domain?      @relation("DomainSubdomains", fields: [parentId], references: [id], onDelete: Cascade)
-  subdomains Domain[]     @relation("DomainSubdomains")
-  dnsRecords  DnsRecord[]
-  mailboxes   Mailbox[]
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  parent         Domain?        @relation("DomainSubdomains", fields: [parentId], references: [id], onDelete: Cascade)
+  subdomains     Domain[]       @relation("DomainSubdomains")
+  dnsRecords     DnsRecord[]
+  mailboxes      Mailbox[]
   virtualAliases VirtualAlias[]
-  certificate Certificate?
+  certificate    Certificate?
 
   @@index([userId])
   @@index([parentId])
@@ -256,28 +274,28 @@ model Domain {
 
 /// An SSL/TLS certificate attached to a custom domain.
 model Certificate {
-  id            String      @id @default(cuid())
-  domainId      String      @unique @map("domain_id")
-  type          CertType    @default(LETS_ENCRYPT)
-  status        CertStatus  @default(PENDING)
+  id            String     @id @default(cuid())
+  domainId      String     @unique @map("domain_id")
+  type          CertType   @default(LETS_ENCRYPT)
+  status        CertStatus @default(PENDING)
   issuer        String?
-  commonName    String      @map("common_name")
-  sans          String[]    @default([])
-  validFrom     DateTime?   @map("valid_from")
-  validTo       DateTime?   @map("valid_to")
-  autoRenew     Boolean     @default(true) @map("auto_renew")
-  forceHttps    Boolean     @default(true) @map("force_https")
-  certPath      String?     @map("cert_path")
-  keyPath       String?     @map("key_path")
-  encryptedKey  String?     @map("encrypted_key")
-  serialNumber  String?     @map("serial_number")
-  errorMessage  String?     @map("error_message")
-  lastCheckedAt DateTime?   @map("last_checked_at")
-  lastRenewedAt DateTime?   @map("last_renewed_at")
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  commonName    String     @map("common_name")
+  sans          String[]   @default([])
+  validFrom     DateTime?  @map("valid_from")
+  validTo       DateTime?  @map("valid_to")
+  autoRenew     Boolean    @default(true) @map("auto_renew")
+  forceHttps    Boolean    @default(true) @map("force_https")
+  certPath      String?    @map("cert_path")
+  keyPath       String?    @map("key_path")
+  encryptedKey  String?    @map("encrypted_key")
+  serialNumber  String?    @map("serial_number")
+  errorMessage  String?    @map("error_message")
+  lastCheckedAt DateTime?  @map("last_checked_at")
+  lastRenewedAt DateTime?  @map("last_renewed_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  domain        Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([validTo])
@@ -298,7 +316,7 @@ model DnsRecord {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
 
   @@index([domainId])
   @@map("dns_records")
@@ -318,8 +336,8 @@ model Database {
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
 
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@unique([userId, name])
   @@index([userId])
@@ -338,8 +356,8 @@ model Mailbox {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  domain    Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain            Domain             @relation(fields: [domainId], references: [id], onDelete: Cascade)
   vacationResponder VacationResponder?
 
   @@index([userId])
@@ -411,13 +429,13 @@ model SftpUser {
 /// Collected every 60 seconds by the BullMQ metrics-collector job (F5.2).
 /// BigInt used for RAM and disk byte counts to safely handle large servers.
 model MetricSnapshot {
-  id          String   @id @default(cuid())
-  cpuPercent  Float    @map("cpu_percent")
-  ramUsed     BigInt   @map("ram_used")
-  ramTotal    BigInt   @map("ram_total")
-  diskUsed    BigInt   @map("disk_used")
-  diskTotal   BigInt   @map("disk_total")
-  recordedAt  DateTime @default(now()) @map("recorded_at")
+  id         String   @id @default(cuid())
+  cpuPercent Float    @map("cpu_percent")
+  ramUsed    BigInt   @map("ram_used")
+  ramTotal   BigInt   @map("ram_total")
+  diskUsed   BigInt   @map("disk_used")
+  diskTotal  BigInt   @map("disk_total")
+  recordedAt DateTime @default(now()) @map("recorded_at")
 
   @@index([recordedAt])
   @@map("metric_snapshots")
@@ -460,3 +478,31 @@ model BackupSettings {
   @@map("backup_settings")
 }
 
+/// A single UFW allow/deny rule (F5.4), mirrored to the host firewall via
+/// firewall_manager.py every time it's created or deleted. Postgres is the
+/// audit trail (who added what, when); UFW itself is the enforcement point.
+model FirewallRule {
+  id        String           @id @default(cuid())
+  port      Int
+  protocol  FirewallProtocol
+  /// CIDR or single IP the rule matches; null means "anywhere".
+  source    String?
+  action    FirewallAction
+  comment   String?
+  createdBy String           @map("created_by")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([port, protocol])
+  @@map("firewall_rules")
+}
+
+/// Singleton row (id is always "default") holding UFW's default policy for
+/// incoming/outgoing traffic, editable from the dashboard.
+model FirewallSettings {
+  id              String         @id @default("default")
+  defaultIncoming FirewallPolicy @default(DENY) @map("default_incoming")
+  defaultOutgoing FirewallPolicy @default(ALLOW) @map("default_outgoing")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@map("firewall_settings")
+}
