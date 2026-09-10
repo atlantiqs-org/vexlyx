@@ -1,16 +1,18 @@
 # Onboarding: DNS Records & Public IP Visibility (F5.9)
 
 > **Status:** 🟢 COMPLETED
-> **Feature:** The installer detects the server's public IP and prints every DNS record the admin needs to create; the same info is exposed via `GET /api/system/dns-info` for the dashboard (F5.11 Settings page) to display later.
+> **Feature:** The installer detects the server's public IP and prints every DNS record the admin needs to create; the same info is exposed via `GET /api/system/dns-info` and shown on the dashboard's `/settings` page (F5.11).
 
 ---
 
 ## What It Does
 
 - The installer auto-detects the server's public IPv4 address (external IP-echo services, falling back to the local route's source address) and persists it to `/etc/vexlyx/vexlyx.env` as `VEXLYX_PUBLIC_IP`, re-detecting on every run since it can legitimately change (e.g. after migrating hosts).
-- The final install-summary step prints every DNS record the admin needs: `A <domain> -> <ip>`, `A webmail.<domain> -> <ip>`, and `A *.<base-domain> -> <ip>` for deployed project subdomains.
+- The final install-summary step prints every DNS record the admin needs: `A <domain> -> <ip>`, `A api.<domain> -> <ip>`, `A webmail.<domain> -> <ip>`, and `A *.<base-domain> -> <ip>` for deployed project subdomains.
 - A new `VEXLYX_BASE_DOMAIN` install variable (defaults to `VEXLYX_DOMAIN`) lets the panel domain and the deployed-project base domain live in separate DNS zones — the wildcard record follows whichever is configured.
-- `GET /api/system/dns-info` (ADMIN-only) returns the same `{ publicIp, domain, baseDomain, records }` shape so it can be looked up again after the installer output has scrolled away, once F5.11 wires it into `/settings`.
+- `GET /api/system/dns-info` (ADMIN-only) returns the same `{ publicIp, domain, baseDomain, records }` shape, surfaced on `/settings` with a live "Verify DNS" propagation check (F5.11).
+
+**Found during live-server testing:** the `api.<domain>` record was missing from the original list. The dashboard's browser JS calls `https://api.<domain>` directly (`NEXT_PUBLIC_API_URL` in `docker-compose.prod.yml`), and that only "worked" without its own record by accident — when `VEXLYX_BASE_DOMAIN` equals `VEXLYX_DOMAIN` (the default), the wildcard record incidentally covers `api.<domain>` too. With a split base domain, the wildcard lives in a different zone and doesn't cover it at all, so the API would be unreachable. It's now always listed explicitly.
 
 ---
 
@@ -47,7 +49,7 @@ apps/api/src/modules/system/{service,routes}.ts
 | `apps/api/src/modules/system/routes.ts` | `GET /api/system/dns-info` |
 | `packages/shared/src/schemas/dnsOnboarding.ts` | `DnsOnboardingInfoSchema` / `DnsRecordSuggestionSchema`, shared between API and dashboard |
 
-No dashboard page consumes this endpoint yet — that's F5.11 (Settings page), which was still `🔴 NOT STARTED` when this shipped. `/settings` 404s until it lands.
+See `docs/dev/settings-page.md` for how `/settings` consumes this endpoint (F5.11).
 
 ---
 
@@ -63,16 +65,16 @@ Most cloud VPS network stacks expose a public IP directly on the primary interfa
 
 ## How to Test
 
-1. Run the installer against a fresh server → the final summary lists the detected public IP and the three DNS `A` records (panel, webmail, wildcard) before finishing.
+1. Run the installer against a fresh server → the final summary lists the detected public IP and the four DNS `A` records (panel, api, webmail, wildcard) before finishing.
 2. Block outbound HTTP on a test VM before installing → IP detection falls back to the local route address (or prints a warning if that fails too), install still completes.
-3. Set `VEXLYX_BASE_DOMAIN` to a different domain than `VEXLYX_DOMAIN` → the wildcard record in the summary uses the base domain, the panel/webmail records use the panel domain.
+3. Set `VEXLYX_BASE_DOMAIN` to a different domain than `VEXLYX_DOMAIN` → the wildcard record in the summary uses the base domain; the panel, api, and webmail records use the panel domain regardless.
 4. `curl` (as an authenticated ADMIN) `GET /api/system/dns-info` on a production install → same IP/records as the installer printed. As a non-ADMIN user → `403`.
 5. In local dev (`PANEL_DOMAIN`/`PUBLIC_IP` unset) → the endpoint returns `records: []` rather than guessing.
+6. Deployed and verified live against a real server (`panel.mindgera.site`, fresh install + `git clone` deploy) — confirmed the installer detects the correct public IP and prints all four records.
 
 ---
 
 ## How to Extend
 
-- **F5.11 Settings page:** call `GET /api/system/dns-info` and render the records in a copyable table, matching the pattern any other read-only reference panel uses.
 - **IPv6:** `detect_public_ip()` and the record list are IPv4 (`A`) only today; an `AAAA` equivalent would need a second detection pass (`https://api64.ipify.org` etc.) and a second record type in `DnsRecordSuggestionSchema`.
-- **DNS propagation check:** F3.3's `dns-service.ts` already has DNS-resolution helpers for custom domains — the same approach could power a "verify records are live" button next to this info instead of just listing what's needed.
+- **Reserved-slug collision:** since `api`/`webmail` (and any future reserved prefix) live under the same wildcard-covered zone as deployed projects, a project deployed with the slug `api` or `webmail` would collide with the panel's own subdomain. Worth a slug-reservation check in project creation (`projects/service.ts`) — out of scope here since it's a project-creation validation concern, not a DNS-onboarding one.
