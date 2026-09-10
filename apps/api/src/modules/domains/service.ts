@@ -91,6 +91,13 @@ function buildVerificationInstructions(
     recordType: "TXT",
     recordName: `_vexlyx-challenge.${baseTarget}`,
     recordValue: `vexlyx-verification=${token ?? ""}`,
+    // TXT verification only proves ownership — found live that a "verified"
+    // domain with no A record just shows nothing, with no indication why.
+    routingRecord: {
+      recordType: "A",
+      recordName: baseTarget,
+      publicIp: env.PUBLIC_IP ?? null,
+    },
   };
 }
 

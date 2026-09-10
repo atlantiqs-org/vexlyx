@@ -144,6 +144,15 @@ export interface DomainVerificationInstructions {
   recordType: "TXT";
   recordName: string;
   recordValue: string;
+  // The A record needed to actually route traffic here once ownership is
+  // verified — TXT verification alone proves ownership, it doesn't point
+  // the domain at the server. publicIp is null if the server's public IP
+  // hasn't been detected (mirrors DnsOnboardingInfoResponse, F5.9).
+  routingRecord: {
+    recordType: "A";
+    recordName: string;
+    publicIp: string | null;
+  };
 }
 
 export interface DomainVerificationResult {
