@@ -46,6 +46,46 @@ function getBackupScriptPath(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Startup health check (F5.14) — verifies the Python interpreter and
+// backup_manager.py are both resolvable and runnable, so a misconfiguration
+// is caught loudly at boot instead of silently at the next scheduled backup.
+// ---------------------------------------------------------------------------
+
+export function checkBackupScriptHealth(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const scriptPath = getBackupScriptPath();
+  const pythonBin = env.PYTHON_BIN ?? (process.platform === "win32" ? "python" : "python3");
+
+  if (!existsSync(scriptPath)) {
+    return Promise.resolve({
+      ok: false,
+      error: `backup_manager.py not found at resolved path "${scriptPath}"`,
+    });
+  }
+
+  return new Promise((resolvePromise) => {
+    const child = spawn(pythonBin, ["--version"], { stdio: "ignore" });
+
+    child.on("error", (err) => {
+      resolvePromise({
+        ok: false,
+        error: `Python interpreter "${pythonBin}" is not runnable: ${err.message}`,
+      });
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise({ ok: true });
+      } else {
+        resolvePromise({
+          ok: false,
+          error: `Python interpreter "${pythonBin}" exited with code ${code} when checking --version`,
+        });
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Helper — run a backup_manager.py command, forwarding "log" progress lines
 // ---------------------------------------------------------------------------
 
@@ -58,8 +98,7 @@ function runBackupCommand<T>(
     const scriptPath = getBackupScriptPath();
     const body = JSON.stringify(payload);
 
-    const pythonBin =
-      process.env.PYTHON_BIN ?? (process.platform === "win32" ? "python" : "python3");
+    const pythonBin = env.PYTHON_BIN ?? (process.platform === "win32" ? "python" : "python3");
 
     const child = spawn(pythonBin, [scriptPath], { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -120,6 +159,12 @@ function runBackupCommand<T>(
         logger.debug({ stderr }, "backup_manager.py stderr output");
       }
 
+      // Surface captured stderr in the rejected error so failures are
+      // diagnosable from the dashboard, not just API debug logs (F5.14) —
+      // a process that dies before printing any JSON (e.g. a misresolved
+      // PYTHON_BIN or script path) shows nothing else.
+      const stderrDetail = stderr.trim().slice(0, 2000);
+
       if (
         result &&
         typeof result === "object" &&
@@ -132,12 +177,18 @@ function runBackupCommand<T>(
       }
 
       if (result === null) {
-        reject(new BackupError(`Backup script exited with code ${code} and no output`, "EMPTY_OUTPUT", 500));
+        const message = stderrDetail
+          ? `Backup script exited with code ${code}: ${stderrDetail}`
+          : `Backup script exited with code ${code} and no output`;
+        reject(new BackupError(message, "EMPTY_OUTPUT", 500));
         return;
       }
 
       if (code !== 0) {
-        reject(new BackupError(`Backup script exited with code ${code}`, "SCRIPT_ERROR", 500));
+        const message = stderrDetail
+          ? `Backup script exited with code ${code}: ${stderrDetail}`
+          : `Backup script exited with code ${code}`;
+        reject(new BackupError(message, "SCRIPT_ERROR", 500));
         return;
       }
 

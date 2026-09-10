@@ -100,6 +100,11 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v ? v : undefined)),
+  // Python interpreter used to spawn system/python/*.py scripts (F5.14).
+  // Defaults to "python" on win32 / "python3" elsewhere when unset — only
+  // set this to override that default (e.g. a venv interpreter, or a
+  // non-standard binary name/path on the host).
+  PYTHON_BIN: z.string().min(1).optional(),
 });
 
 /**

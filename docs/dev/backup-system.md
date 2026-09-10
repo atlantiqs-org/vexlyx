@@ -180,3 +180,24 @@ await backupQueue.upsertJobScheduler(
 ### Support full-server (all-or-nothing) restore
 
 Add a `POST /api/backups/:id/restore-all` route that iterates every manifest entry and calls the same per-item restore paths — the per-item building blocks in `BackupService` are already there.
+
+---
+
+## Troubleshooting
+
+### "Backup script exited with code 2 and no output"
+
+Exit code 2 with **zero** stdout means the Python interpreter died before any of `backup_manager.py`'s own code ran — its only intentional exit path is `sys.exit(1)` inside `fail()`, always preceded by a JSON line on stdout. This is almost always the OS-level "can't open file: No such file or directory" (errno 2) from either:
+
+- A misresolved script path — `getBackupScriptPath()` in `service.ts` searches a few candidate paths relative to the compiled `dist/` output and falls back to guessing if none exist.
+- A missing/wrong Python interpreter — `PYTHON_BIN` (see below) pointing at a binary that isn't installed.
+
+As of F5.14, the rejected `BackupError` includes the captured stderr when present (`service.ts`'s `runBackupCommand()`), so the dashboard/API response shows the actual OS error instead of just "no output" — check that message first.
+
+### PYTHON_BIN
+
+The API spawns `system/python/*.py` scripts using `env.PYTHON_BIN` if set, otherwise `python` on Windows / `python3` elsewhere (see `apps/api/.env.example`). Only set `PYTHON_BIN` if that default isn't the right interpreter on your host — e.g. a virtualenv, or a distro that ships neither `python` nor `python3` under those exact names.
+
+### Startup health check
+
+On every API boot, `checkBackupScriptHealth()` (`backups/service.ts`) verifies `backup_manager.py` resolves to a real file and that the configured Python interpreter actually runs (`--version`). If either fails, the API logs a loud error (`Backup system misconfigured: ...`) at startup instead of only surfacing the problem the next time a scheduled or manual backup runs. This check is diagnostic only — it doesn't block the API from starting, since the rest of the panel doesn't depend on backups working.
