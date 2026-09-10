@@ -630,15 +630,32 @@ http:
         baseTarget,
       ];
 
+      // Query a few public resolvers directly rather than trusting whatever
+      // resolver this server happens to have configured. Observed live: a
+      // premature "Verify" click (before DNS had propagated) got this
+      // server's cloud-provider VPC resolver to negative-cache the lookup —
+      // the record was genuinely published minutes later, confirmed against
+      // Cloudflare/Google/the zone's own nameserver, but the server's local
+      // resolver kept reporting NXDOMAIN for the zone's full negative-cache
+      // TTL (up to an hour, per its SOA). Any one public resolver actually
+      // seeing the record is solid evidence it's live — no need for all of
+      // them to agree before activating the domain.
+      const PUBLIC_RESOLVER_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"];
+
       for (const target of targets) {
-        try {
-          const rawEntries = await dns.resolveTxt(target);
-          const flattened = rawEntries.map((chunks) => chunks.join(""));
-          detectedRecords.push(...flattened);
-        } catch {
-          // Domain / TXT record not found or DNS lookup error
+        for (const resolverIp of PUBLIC_RESOLVER_IPS) {
+          try {
+            const resolver = new dns.Resolver();
+            resolver.setServers([resolverIp]);
+            const rawEntries = await resolver.resolveTxt(target);
+            const flattened = rawEntries.map((chunks) => chunks.join(""));
+            detectedRecords.push(...flattened);
+          } catch {
+            // Domain / TXT record not found or DNS lookup error on this resolver
+          }
         }
       }
+      detectedRecords = [...new Set(detectedRecords)];
 
       isMatched = detectedRecords.some(
         (val) => val === expectedValue || val.includes(expectedValue),
