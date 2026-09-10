@@ -2,7 +2,7 @@
     # Auto-load all RFC 1035 zone files placed in /etc/coredns/zones/
     # Files matching {zone}.db will be served authoritatively
     auto {
-        directory /etc/coredns/zones (.*)\.db
+        directory /etc/coredns/zones (.*)\.db {1}
         reload 5s
     }
 

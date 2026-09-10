@@ -86,6 +86,15 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      # Next.js standalone's server.js binds to `process.env.HOSTNAME` if
+      # set, and Docker always auto-sets HOSTNAME to the container ID. On a
+      # container attached to two networks (default + traefik-net), that
+      # self-hostname can resolve to either IP depending on attach order —
+      # if it resolves to the non-traefik-net IP, Traefik gets a connection
+      # refused (502) even though the container is healthy. Pinning HOSTNAME
+      # to 0.0.0.0 makes it listen on every interface, not just one.
+      HOSTNAME: "0.0.0.0"
     networks:
       - default
       - traefik-net
