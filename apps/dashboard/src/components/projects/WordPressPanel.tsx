@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { fetchAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useDomains } from "@/hooks/useDomains";
 import type { Project, DatabaseDetail } from "@vexlyx/shared";
 
 interface WordPressStatus {
@@ -74,6 +75,10 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   const [isImporting, setIsImporting] = useState(false);
   const [importDatabaseId, setImportDatabaseId] = useState("");
   const importFileRef = useRef<HTMLInputElement | null>(null);
+
+  // F5.10: prefer an attached, verified custom Domain over the default
+  // deployedDomain — both now resolve over real HTTPS.
+  const { domains } = useDomains({ projectId: project.id });
 
   const loadDatabases = useCallback(async () => {
     try {
@@ -198,11 +203,9 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
     }
   };
 
-  const siteUrl = project.deployedDomain
-    ? `http://${project.deployedDomain}`
-    : project.internalPort
-    ? `http://localhost:${project.internalPort}`
-    : null;
+  const activeDomain = domains.find((d) => d.status === "ACTIVE");
+  const viewDomain = activeDomain?.hostname ?? project.deployedDomain;
+  const siteUrl = viewDomain ? `https://${viewDomain}` : null;
 
   const handleExport = async () => {
     setIsExporting(true);

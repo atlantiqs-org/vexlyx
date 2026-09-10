@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { LogViewer } from "@/components/projects/LogViewer";
 import { useRuntimeLogs } from "@/hooks/useLogs";
 import { useContainerAction, useContainerStatus } from "@/hooks/useDeploy";
+import { useDomains } from "@/hooks/useDomains";
 import type { Project } from "@vexlyx/shared";
 
 interface ContainerControlsProps {
@@ -44,6 +45,13 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
   );
   const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+
+  // F5.10: default subdomains now get real HTTPS routing, so prefer an
+  // attached custom Domain (if verified) over the default deployedDomain —
+  // both are reachable, but the custom one is what the operator meant.
+  const { domains } = useDomains({ projectId: project.id });
+  const activeDomain = domains.find((d) => d.status === "ACTIVE");
+  const viewDomain = activeDomain?.hostname ?? project.deployedDomain;
 
   const handleRefreshStatus = async () => {
     setIsRefreshingStatus(true);
@@ -233,14 +241,14 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
           <div className="rounded-lg border border-border bg-card p-3">
             <span className="text-xs text-muted-foreground">Endpoint / Domain</span>
             <div className="mt-1 flex items-center gap-1.5">
-              {project.deployedDomain ? (
+              {viewDomain ? (
                 <a
-                  href={`http://${project.deployedDomain}`}
+                  href={`https://${viewDomain}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline truncate"
                 >
-                  {project.deployedDomain}
+                  {viewDomain}
                   <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               ) : (
@@ -251,20 +259,8 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
 
           <div className="rounded-lg border border-border bg-card p-3">
             <span className="text-xs text-muted-foreground">Host Port</span>
-            <div className="mt-1 flex items-center gap-1.5">
-              {project.internalPort ? (
-                <a
-                  href={`http://localhost:${project.internalPort}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 font-mono text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  :{project.internalPort}
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
-              ) : (
-                <span className="text-xs text-muted-foreground font-mono">Not allocated</span>
-              )}
+            <div className="mt-1 font-mono text-xs text-muted-foreground">
+              {project.internalPort ? `:${project.internalPort}` : "Not allocated"}
             </div>
           </div>
 
