@@ -1811,16 +1811,16 @@ Closes gaps found while testing F5.5: there was no way to log out of the dashboa
 ---
 
 ### F5.9 — Onboarding: DNS Records & Public IP Visibility
-**Status:** 🔴 NOT STARTED
+**Status:** 🟡 IN PROGRESS — installer + backend done; dashboard display deferred to F5.11
 
 **Description:**
 Neither the installer nor the dashboard ever tells the installing admin what DNS records to create or what IP to point them at. Confirmed by code audit: `system/scripts/install/config.sh` only prompts for the single panel domain (`VEXLYX_DOMAIN`); `steps/16-summary.sh` prints a generic "make sure your domain points here" warning without stating the server's actual public IP or listing the other hostnames that need records (`webmail.<domain>` for Roundcube, a wildcard `*.<domain>` for deployed project subdomains since `BASE_DOMAIN` defaults to the same zone as the panel — see `docker-compose.prod.yml`'s `BASE_DOMAIN: ${VEXLYX_DOMAIN}`). No code anywhere in the repo currently detects/exposes the server's public IP.
 
 **Acceptance Criteria:**
-- [ ] Installer detects the server's public IP (e.g. via a simple external lookup, or the primary route's source address) and prints it plainly at the end of setup
-- [ ] Installer lists every DNS record the admin needs to create: `A <domain> -> <ip>`, `A webmail.<domain> -> <ip>` (if mail is enabled), `A *.<domain> -> <ip>` (wildcard, for deployed project subdomains)
-- [ ] The same information is available post-install in the dashboard (see F5.11 Settings page), not just scrolled past in installer output
-- [ ] Works whether the panel domain and the deployed-app base domain are the same zone (default) or configured separately
+- [x] Installer detects the server's public IP (e.g. via a simple external lookup, or the primary route's source address) and prints it plainly at the end of setup
+- [x] Installer lists every DNS record the admin needs to create: `A <domain> -> <ip>`, `A webmail.<domain> -> <ip>` (if mail is enabled), `A *.<domain> -> <ip>` (wildcard, for deployed project subdomains)
+- [ ] The same information is available post-install in the dashboard (see F5.11 Settings page), not just scrolled past in installer output — **backend ready** (`GET /api/system/dns-info`), no dashboard UI yet since F5.11 hasn't been built
+- [x] Works whether the panel domain and the deployed-app base domain are the same zone (default) or configured separately (`VEXLYX_BASE_DOMAIN`)
 
 **Test Plan:**
 1. Run the installer against a fresh server → output clearly lists the IP and every required DNS record before finishing

@@ -313,6 +313,15 @@ export type {
 } from "./schemas/serviceStatus.js";
 
 export {
+  DnsRecordSuggestionSchema,
+  DnsOnboardingInfoSchema,
+} from "./schemas/dnsOnboarding.js";
+export type {
+  DnsRecordSuggestion,
+  DnsOnboardingInfoResponse,
+} from "./schemas/dnsOnboarding.js";
+
+export {
   RoleSchema,
   UserResponseSchema,
   QuotaUsageSchema,

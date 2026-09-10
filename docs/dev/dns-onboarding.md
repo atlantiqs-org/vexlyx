@@ -1,0 +1,78 @@
+# Onboarding: DNS Records & Public IP Visibility (F5.9)
+
+> **Status:** 🟢 COMPLETED
+> **Feature:** The installer detects the server's public IP and prints every DNS record the admin needs to create; the same info is exposed via `GET /api/system/dns-info` for the dashboard (F5.11 Settings page) to display later.
+
+---
+
+## What It Does
+
+- The installer auto-detects the server's public IPv4 address (external IP-echo services, falling back to the local route's source address) and persists it to `/etc/vexlyx/vexlyx.env` as `VEXLYX_PUBLIC_IP`, re-detecting on every run since it can legitimately change (e.g. after migrating hosts).
+- The final install-summary step prints every DNS record the admin needs: `A <domain> -> <ip>`, `A webmail.<domain> -> <ip>`, and `A *.<base-domain> -> <ip>` for deployed project subdomains.
+- A new `VEXLYX_BASE_DOMAIN` install variable (defaults to `VEXLYX_DOMAIN`) lets the panel domain and the deployed-project base domain live in separate DNS zones — the wildcard record follows whichever is configured.
+- `GET /api/system/dns-info` (ADMIN-only) returns the same `{ publicIp, domain, baseDomain, records }` shape so it can be looked up again after the installer output has scrolled away, once F5.11 wires it into `/settings`.
+
+---
+
+## Architecture
+
+```
+Installer (system/scripts/install/)
+  config.sh          — prompts VEXLYX_BASE_DOMAIN (defaults to VEXLYX_DOMAIN)
+  lib.sh             — detect_public_ip(), upsert_secret()
+  steps/08-network.sh — detects IP every run, upserts VEXLYX_PUBLIC_IP into vexlyx.env
+  steps/16-summary.sh — prints IP + required DNS records
+
+docker-compose.prod.yml (api service)
+  PANEL_DOMAIN=${VEXLYX_DOMAIN}
+  PUBLIC_IP=${VEXLYX_PUBLIC_IP:-}
+  BASE_DOMAIN=${VEXLYX_BASE_DOMAIN}
+       │
+       ▼
+apps/api/src/modules/system/{service,routes}.ts
+  GET /api/system/dns-info  →  DnsOnboardingInfoResponse
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `system/scripts/install/lib.sh` | `detect_public_ip()` (external services + local route fallback), `upsert_secret()` (update-in-place for values that change across re-runs) |
+| `system/scripts/install/config.sh` | Prompts + persists `VEXLYX_BASE_DOMAIN` |
+| `system/scripts/install/steps/08-network.sh` | Detects and persists `VEXLYX_PUBLIC_IP` on every run |
+| `system/scripts/install/steps/16-summary.sh` | Prints the IP + DNS records at the end of install |
+| `docker-compose.prod.yml` | Wires `PANEL_DOMAIN` / `PUBLIC_IP` / `BASE_DOMAIN` into the `api` container |
+| `apps/api/src/config/env.ts` | `PANEL_DOMAIN`, `PUBLIC_IP` (both optional — unset in dev) |
+| `apps/api/src/modules/system/service.ts` | Builds the record list; returns an empty list rather than guessing if domain/IP are unknown |
+| `apps/api/src/modules/system/routes.ts` | `GET /api/system/dns-info` |
+| `packages/shared/src/schemas/dnsOnboarding.ts` | `DnsOnboardingInfoSchema` / `DnsRecordSuggestionSchema`, shared between API and dashboard |
+
+No dashboard page consumes this endpoint yet — that's F5.11 (Settings page), which was still `🔴 NOT STARTED` when this shipped. `/settings` 404s until it lands.
+
+---
+
+## Why Re-Detect the IP Every Run
+
+`generate_secrets()` in `config.sh` is deliberately write-once — it never touches `SESSION_SECRET`, `ENCRYPTION_KEY`, or the DB passwords again once they exist, since rotating them out from under a running install would invalidate every session and encrypted env var. A public IP has no such constraint and *can* legitimately change (server migration, cloud provider reassigning addresses), so `upsert_secret()` gives it different semantics: update the persisted value in place on every run instead of leaving a stale one behind.
+
+## Why Local-Route Fallback
+
+Most cloud VPS network stacks expose a public IP directly on the primary interface, so an external echo service (`api.ipify.org`, `icanhazip.com`, `ifconfig.me`) is reliable in the common case. But an offline/air-gapped install has no outbound HTTP at all — `ip route get 1.1.1.1`'s source address is a reasonable best-effort guess in that case (it won't be correct behind NAT/a load balancer, but it's strictly better than nothing, and the admin can always override `VEXLYX_PUBLIC_IP` by hand in `/etc/vexlyx/vexlyx.env`).
+
+---
+
+## How to Test
+
+1. Run the installer against a fresh server → the final summary lists the detected public IP and the three DNS `A` records (panel, webmail, wildcard) before finishing.
+2. Block outbound HTTP on a test VM before installing → IP detection falls back to the local route address (or prints a warning if that fails too), install still completes.
+3. Set `VEXLYX_BASE_DOMAIN` to a different domain than `VEXLYX_DOMAIN` → the wildcard record in the summary uses the base domain, the panel/webmail records use the panel domain.
+4. `curl` (as an authenticated ADMIN) `GET /api/system/dns-info` on a production install → same IP/records as the installer printed. As a non-ADMIN user → `403`.
+5. In local dev (`PANEL_DOMAIN`/`PUBLIC_IP` unset) → the endpoint returns `records: []` rather than guessing.
+
+---
+
+## How to Extend
+
+- **F5.11 Settings page:** call `GET /api/system/dns-info` and render the records in a copyable table, matching the pattern any other read-only reference panel uses.
+- **IPv6:** `detect_public_ip()` and the record list are IPv4 (`A`) only today; an `AAAA` equivalent would need a second detection pass (`https://api64.ipify.org` etc.) and a second record type in `DnsRecordSuggestionSchema`.
+- **DNS propagation check:** F3.3's `dns-service.ts` already has DNS-resolution helpers for custom domains — the same approach could power a "verify records are live" button next to this info instead of just listing what's needed.

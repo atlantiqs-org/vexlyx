@@ -17,6 +17,12 @@ collect_config() {
     die "VEXLYX_DOMAIN is required. Re-run with: VEXLYX_DOMAIN=panel.example.com curl -fsSL https://get.vexlyx.com | bash"
   fi
 
+  # Base domain deployed projects get subdomains under: {slug}.<base-domain>
+  # (F5.9). Defaults to the panel domain itself — the common case — but can
+  # be set to a separate zone (e.g. panel on panel.example.com, deployed
+  # apps on apps.example.net) if the admin wants them split.
+  env_or_prompt VEXLYX_BASE_DOMAIN "Base domain for deployed project subdomains" "${VEXLYX_DOMAIN}"
+
   env_or_prompt VEXLYX_ADMIN_EMAIL "Admin email" "admin@${VEXLYX_DOMAIN}"
   env_or_prompt VEXLYX_ADMIN_NAME "Admin display name" "Admin"
 
@@ -40,7 +46,7 @@ collect_config() {
   VEXLYX_REPO_URL="${VEXLYX_REPO_URL:-https://github.com/aliahmed-codes/vexlyx.git}"
   VEXLYX_REPO_REF="${VEXLYX_REPO_REF:-main}"
 
-  export VEXLYX_DOMAIN VEXLYX_ADMIN_EMAIL VEXLYX_ADMIN_NAME VEXLYX_ADMIN_PASSWORD
+  export VEXLYX_DOMAIN VEXLYX_BASE_DOMAIN VEXLYX_ADMIN_EMAIL VEXLYX_ADMIN_NAME VEXLYX_ADMIN_PASSWORD
   export VEXLYX_MAIL_HOSTNAME VEXLYX_MAIL_DOMAIN VEXLYX_ENABLE_PUBLIC_DNS
   export VEXLYX_REPO_URL VEXLYX_REPO_REF VEXLYX_HOME
 }
@@ -72,6 +78,7 @@ generate_secrets() {
 # installer reuses this file; delete it only if you intend to rotate every
 # secret below and accept that existing sessions/encrypted data become invalid.
 VEXLYX_DOMAIN=${VEXLYX_DOMAIN}
+VEXLYX_BASE_DOMAIN=${VEXLYX_BASE_DOMAIN}
 VEXLYX_ADMIN_EMAIL=${VEXLYX_ADMIN_EMAIL}
 VEXLYX_MAIL_HOSTNAME=${VEXLYX_MAIL_HOSTNAME}
 VEXLYX_MAIL_DOMAIN=${VEXLYX_MAIL_DOMAIN}

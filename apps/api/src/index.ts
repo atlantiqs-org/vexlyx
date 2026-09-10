@@ -34,6 +34,7 @@ import { backupRoutes } from "./modules/backups/routes.js";
 import { firewallRoutes } from "./modules/firewall/routes.js";
 import { servicesRoutes } from "./modules/services/routes.js";
 import { userRoutes } from "./modules/users/routes.js";
+import { systemRoutes } from "./modules/system/routes.js";
 
 
 /**
@@ -101,6 +102,7 @@ async function buildApp() {
   await app.register(firewallRoutes, { prefix: "/api/firewall" });
   await app.register(servicesRoutes, { prefix: "/api/services" });
   await app.register(userRoutes, { prefix: "/api/users" });
+  await app.register(systemRoutes, { prefix: "/api/system" });
 
   return app;
 }

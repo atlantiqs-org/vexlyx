@@ -94,6 +94,50 @@ env_or_prompt() {
   fi
 }
 
+# Detects this server's public IPv4 address (F5.9), for DNS-onboarding
+# guidance. Tries a couple of external echo services first, since most cloud
+# VPS network stacks put a private/NAT address on the primary interface, not
+# the actual public one. Falls back to the local route's source address (a
+# best-effort guess) if outbound HTTP is blocked, e.g. an offline/air-gapped
+# install. Prints the detected IP on success and returns 1 with no output if
+# nothing worked — callers must handle the empty case themselves.
+detect_public_ip() {
+  local ip svc
+  local ip_regex='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+  for svc in "https://api.ipify.org" "https://icanhazip.com" "https://ifconfig.me/ip"; do
+    ip="$(curl -fsSL --max-time 5 "${svc}" 2>/dev/null | tr -d '[:space:]')"
+    if [[ "${ip}" =~ ${ip_regex} ]]; then
+      echo "${ip}"
+      return 0
+    fi
+  done
+  ip="$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -n1)"
+  if [[ "${ip}" =~ ${ip_regex} ]]; then
+    echo "${ip}"
+    return 0
+  fi
+  return 1
+}
+
+# upsert_secret VAR_NAME VALUE — sets VAR_NAME=VALUE in the persisted secrets
+# file, replacing an existing line for that key or appending one, then
+# updates the current shell's copy too. Unlike generate_secrets() (write
+# once, on first install only), this is meant to be called on every run for
+# values that can legitimately change between runs — e.g. the server's
+# public IP after a migration, or an operator-updated base domain — where
+# generate_secrets' "leave untouched if the file already exists" behavior
+# would go stale.
+upsert_secret() {
+  local var_name="$1" value="$2"
+  if [[ -f "${VEXLYX_SECRETS_FILE}" ]] && grep -q "^${var_name}=" "${VEXLYX_SECRETS_FILE}"; then
+    sed -i "s|^${var_name}=.*|${var_name}=${value}|" "${VEXLYX_SECRETS_FILE}"
+  elif [[ -f "${VEXLYX_SECRETS_FILE}" ]]; then
+    echo "${var_name}=${value}" >> "${VEXLYX_SECRETS_FILE}"
+  fi
+  printf -v "${var_name}" '%s' "${value}"
+  export "${var_name?}"
+}
+
 # Reads KEY=VALUE from the persisted secrets file into the current shell, if
 # it already exists — but only for variables not already set, so an operator
 # passing an explicit env var override this run always wins over a value
