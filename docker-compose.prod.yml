@@ -138,7 +138,10 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       ALLOW_REGISTRATION: "false"
       API_BASE_URL: https://api.${VEXLYX_DOMAIN}
-      BASE_DOMAIN: ${VEXLYX_DOMAIN}
+      BASE_DOMAIN: ${VEXLYX_BASE_DOMAIN}
+      # DNS Records & Public IP Onboarding (F5.9)
+      PANEL_DOMAIN: ${VEXLYX_DOMAIN}
+      PUBLIC_IP: ${VEXLYX_PUBLIC_IP:-}
       POSTGRES_HOST: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MYSQL_HOST: mysql

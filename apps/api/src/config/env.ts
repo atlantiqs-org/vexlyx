@@ -89,6 +89,17 @@ const envSchema = z.object({
   DOVECOT_CONTAINER_NAME: z.string().min(1).default("vexlyx-dovecot"),
   COREDNS_CONTAINER_NAME: z.string().min(1).default("vexlyx-coredns"),
   REDIS_CONTAINER_NAME: z.string().min(1).default("vexlyx-redis"),
+  // DNS Records & Public IP Onboarding (F5.9) — set by the installer in
+  // production (docker-compose.prod.yml). PANEL_DOMAIN is VEXLYX_DOMAIN;
+  // PUBLIC_IP is auto-detected by the installer and may be absent if
+  // detection failed, in which case docker-compose.prod.yml still sets the
+  // env var but to an empty string — coerce that to undefined rather than
+  // failing validation. Both unset in local dev, where DNS onboarding is moot.
+  PANEL_DOMAIN: z.string().min(1).optional(),
+  PUBLIC_IP: z
+    .string()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
 });
 
 /**

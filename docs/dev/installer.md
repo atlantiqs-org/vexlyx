@@ -62,6 +62,7 @@ Every value can be set as an environment variable ahead of time (for scripted/CI
 | Variable | Required | Default |
 |---|---|---|
 | `VEXLYX_DOMAIN` | **Yes** | none — the installer exits with instructions if unset and non-interactive |
+| `VEXLYX_BASE_DOMAIN` | No | `$VEXLYX_DOMAIN` — set separately if deployed-project subdomains should live in a different zone than the panel (F5.9) |
 | `VEXLYX_ADMIN_EMAIL` | No | `admin@$VEXLYX_DOMAIN` |
 | `VEXLYX_ADMIN_PASSWORD` | No | randomly generated, printed once at the end |
 | `VEXLYX_MAIL_HOSTNAME` | No | `mail.$VEXLYX_DOMAIN` |
@@ -71,6 +72,8 @@ Every value can be set as an environment variable ahead of time (for scripted/CI
 | `VEXLYX_REPO_URL` / `VEXLYX_REPO_REF` | No | the Vexlyx repo / `main` |
 
 The API also receives `COOKIE_DOMAIN=$VEXLYX_DOMAIN` (set directly in `docker-compose.prod.yml`, not user-configurable) — see [Cross-subdomain session cookie](#cross-subdomain-session-cookie) below.
+
+`VEXLYX_PUBLIC_IP` is not a config prompt — the installer auto-detects it on every run (external IP-echo services, falling back to the local route's source address) and persists it to `/etc/vexlyx/vexlyx.env`, from where it flows into the api container as `PUBLIC_IP` for DNS-onboarding guidance (F5.9, see `docs/dev/dns-onboarding.md`). Set it manually in that file if detection fails (e.g. an offline install).
 
 ## Secrets
 
