@@ -35,6 +35,7 @@ import { firewallRoutes } from "./modules/firewall/routes.js";
 import { servicesRoutes } from "./modules/services/routes.js";
 import { userRoutes } from "./modules/users/routes.js";
 import { systemRoutes } from "./modules/system/routes.js";
+import { checkBackupScriptHealth } from "./modules/backups/service.js";
 
 
 /**
@@ -113,6 +114,16 @@ async function buildApp() {
  */
 async function start() {
   const app = await buildApp();
+
+  // F5.14 — catch a misconfigured Python interpreter/backup_manager.py path
+  // loudly at boot rather than silently at the next scheduled backup. Not
+  // fatal: the rest of the panel doesn't depend on backups working.
+  const backupHealth = await checkBackupScriptHealth();
+  if (!backupHealth.ok) {
+    app.log.error(
+      `Backup system misconfigured: ${backupHealth.error}. Scheduled and manual backups will fail until this is fixed.`,
+    );
+  }
 
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}, shutting down gracefully…`);

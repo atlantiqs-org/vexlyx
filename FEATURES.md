@@ -1929,16 +1929,16 @@ Two related gaps found during review:
 ---
 
 ### F5.14 — Fix Backup Failure Diagnostics ("exited with code 2 and no output")
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Reported live: a backup run shows `Backups: FAILED — Backup script exited with code 2 and no output`. Root-caused by code audit: `system/python/backup_manager.py` never calls `sys.exit(2)` itself — its only intentional exit path is `sys.exit(1)` inside `fail()`, always preceded by a JSON print to stdout. Exit code 2 with **zero** stdout means the Python interpreter/process died *before* any Python code ran — almost certainly the OS-level "can't open file '<path>': No such file or directory" (errno 2) from a misresolved `PYTHON_BIN`/script path (`apps/api/src/modules/backups/service.ts`'s `getBackupScriptPath()` falls back to a guessed path if none of its candidates exist), or a wrong/missing Python interpreter. Separately, `service.ts` *does* capture the child process's stderr but only logs it at `logger.debug` — it's never included in the `BackupError` message actually shown to the user (`"Backup script exited with code ${code} and no output"`), so the real cause is invisible to whoever's looking at the failure in the dashboard.
 
 **Acceptance Criteria:**
-- [ ] `service.ts`'s error message includes captured stderr when present, instead of the generic "no output" message
-- [ ] Confirm (in the actual failing environment) whether `PYTHON_BIN`/the resolved script path is correct; fix the path-resolution fallback or document the required `PYTHON_BIN` setting if not
-- [ ] Add a startup/health check (e.g. on API boot, or as part of the installer) that verifies the configured Python interpreter and `backup_manager.py` path are both resolvable, failing loudly at startup rather than silently at the next scheduled backup
-- [ ] Re-run a scheduled and a manual backup successfully after the fix
+- [x] `service.ts`'s error message includes captured stderr when present, instead of the generic "no output" message
+- [x] Confirm (in the actual failing environment) whether `PYTHON_BIN`/the resolved script path is correct; fix the path-resolution fallback or document the required `PYTHON_BIN` setting if not — confirmed live on 13.51.200.65 (post-reinstall) that both resolve correctly; couldn't reproduce the original misconfig, so `PYTHON_BIN` was added to `env.ts`/`.env.example` as documented override rather than changing the (working) fallback logic
+- [x] Add a startup/health check (e.g. on API boot, or as part of the installer) that verifies the configured Python interpreter and `backup_manager.py` path are both resolvable, failing loudly at startup rather than silently at the next scheduled backup
+- [x] Re-run a scheduled and a manual backup successfully after the fix — triggered `POST /api/backups` on the live server (13.51.200.65) as ADMIN, snapshot `cmtw2ej7r000xn11s21x7ummp` reached `COMPLETED` in ~2s with a full manifest (2 projects, 1 MySQL DB, 1 DNS zone) and no error
 
 **Test Plan:**
 1. Reproduce locally by pointing `PYTHON_BIN` at a nonexistent path → confirm the new error message shows the real stderr instead of "no output"
