@@ -1750,7 +1750,7 @@ Real-time status of all system services.
 ---
 
 ### F5.7 — Fast Static & WordPress Serving (No-Build Deploy Path)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 STATIC/REACT and WORDPRESS project types currently deploy through the exact same path as Node/Python apps: a full Nixpacks build produces a custom Docker image per deploy (`system/templates/docker-compose/static.yml` and `wordpress.yml` both use `image: "{{image_name}}"`, a Nixpacks-built image — confirmed by reading the current templates and `docker_manager.py`). For a plain HTML/static site this means running a full image build (slow, and a heavier image than needed) just to serve files that need no compilation at all — noticed directly while testing F5.3 backups against `backup-test-app` (a single `index.html`).
@@ -1765,13 +1765,13 @@ STATIC/REACT and WORDPRESS project types currently deploy through the exact same
 5. Update `system/templates/docker-compose/static.yml` and `wordpress.yml` to reference the fixed images instead of `{{image_name}}`, and update `docker_manager.py`'s `cmd_deploy` to skip the Nixpacks build call for these two paths.
 
 **Acceptance Criteria:**
-- [ ] STATIC/REACT project with no `buildCmd` deploys without any Nixpacks build step (bind-mounted `nginx:alpine`)
-- [ ] STATIC/REACT project with a `buildCmd` still runs the build, but the served container uses the fixed lightweight image, not the Nixpacks output image
-- [ ] WORDPRESS deploys using the official `wordpress` + `nginx:alpine` images, wired to an F2.6-provisioned database, with no custom build step
-- [ ] Deploy time for a plain static site drops from a full Nixpacks build to low single-digit seconds
-- [ ] Resulting container image size for static sites drops to roughly the size of `nginx:alpine` plus site content, not a full Nixpacks-built image
-- [ ] Existing SPA fallback (index.html routing) and env-var-at-build-time behavior from F2.3 still work
-- [ ] Existing WordPress one-click installer, plugin/theme upload, and export/import from F2.4/F2.8 still work against the new image pair
+- [x] STATIC/REACT project with no `buildCmd` deploys without any Nixpacks build step (bind-mounted `nginx:alpine`)
+- [x] STATIC/REACT project with a `buildCmd` still runs the build, but the served container uses the fixed lightweight image, not the Nixpacks output image
+- [x] WORDPRESS deploys using the official `wordpress` + `nginx:alpine` images, wired to an F2.6-provisioned database, with no custom build step
+- [x] Deploy time for a plain static site drops from a full Nixpacks build to low single-digit seconds
+- [x] Resulting container image size for static sites drops to roughly the size of `nginx:alpine` plus site content, not a full Nixpacks-built image
+- [x] Existing SPA fallback (index.html routing) and env-var-at-build-time behavior from F2.3 still work (SPA fallback is now a first-party generated `nginx.conf`, since Nixpacks never exposed one)
+- [x] Existing WordPress one-click installer, plugin/theme upload, and export/import from F2.4/F2.8 still work against the new image pair (reworked to a wp-content-only persistence model — see dev docs)
 
 **Test Plan:**
 1. Deploy a plain HTML project → no Nixpacks build runs, container starts in seconds
@@ -2088,6 +2088,44 @@ Competitor audit: WHM's "Overselling" feature lets a reseller nominally assign s
 
 ---
 
+### F5.21 — No-Build PHP Hosting (File-Manager-First, Traditional-Panel Style)
+
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+F5.7 gave STATIC/REACT and WORDPRESS a no-build deploy path, but plain PHP projects were left out of scope and still go through Nixpacks unconditionally — even for a project that's just a handful of `.php` files with no Composer dependencies, which is architecturally identical to a no-`buildCmd` static site. This surfaced directly while helping a user deploy a Duplicator (WordPress migration) backup: it's an `installer.php` + a site archive `.zip`, no `composer.json`, no `index.php`. Nixpacks' own PHP provider detects a project as PHP only when it finds a `composer.json` **or** an `index.php` (confirmed against the official docs — see sources), so `nixpacks build` failed outright with "unable to generate a build plan" even though Vexlyx's own (more lenient) framework detection had already classified it as PHP. As an immediate stopgap (not a real fix), `build_manager.py`'s `cmd_build` now auto-writes an empty `composer.json` when a PHP/WordPress project has none, purely so Nixpacks' detection succeeds — this should be reconsidered/removed once real no-build PHP hosting ships, since the correct fix is skipping the build entirely, not tricking Nixpacks into running one.
+
+The user's underlying ask: why can't a plain PHP site work the way it does on Hestia/CyberPanel/cPanel — drop files in the File Manager, no build step, just running PHP immediately?
+
+**Competitor research (2026):**
+- **CapRover**: `captain-definition` supports an `imageName` field that points straight at a pre-built image (e.g. `php:apache`) and skips the build step entirely — CapRover's own docs frame this as the standard way to deploy an app "using a pre-built image," no Dockerfile or build config needed. ([One-Click Apps | CapRover](https://caprover.com/docs/one-click-apps))
+- **Coolify**: has an explicit "Static Site" toggle (served by Nginx, no build) for SPA/HTML content, but plain PHP without a `composer.json` is a known rough edge — the community workaround is a custom Dockerfile with a conditional `composer install` rather than any first-party no-build PHP mode. ([Deploy A PHP Application With Coolify](https://www.raqmedia.com/deploy-a-php-application-with-coolify/), [Applications | Coolify Docs](https://coolify.io/docs/applications))
+- **Dokploy**: offers Nixpacks, Buildpacks, and Dockerfile build types, but its own docs caution that Nixpacks/buildpacks are resource-heavy to run on the server and recommend a Dockerfile with a pre-built image for production — i.e. even Dokploy's own guidance leans toward "don't build on every deploy" for anything that doesn't need to. ([Build Type | Dokploy](https://docs.dokploy.com/docs/core/applications/build-type))
+- **HestiaCP / CyberPanel** (the actual reference point the user compared us to): neither has a "build" concept at all for PHP. Both run a persistent nginx/OpenLiteSpeed + PHP-FPM pool per domain on the host; the File Manager just writes files into the docroot and the already-running PHP-FPM pool picks them up immediately. This is a fundamentally different architecture (shared host-level runtime, not per-project containers) but it's the UX bar being compared against. ([HestiaCP vs CyberPanel 2026](https://panelica.com/blog/cyberpanel-vs-hestiacp-2026))
+- **Nixpacks PHP provider detection**: officially documented as composer.json-or-index.php only — confirms the root cause above. ([PHP | Nixpacks](https://nixpacks.com/docs/providers/php))
+
+**Proposed plan (for whoever picks this up):**
+1. Extend F5.7's already-built no-build pattern to plain PHP: when a PHP project has no `buildCmd` and no `composer.json`, skip Nixpacks entirely and bind-mount the project directory read-only into a fixed `php:8.3-fpm-alpine` + `nginx:alpine` pair — the same two-container shape F5.7 already built for WordPress (`system/templates/docker-compose/wordpress.yml`, `primary_service_name()` in `docker_manager.py`, the `system/templates/nginx/*.template` generation machinery), generalized instead of WordPress-specific.
+2. PHP projects that do have a `composer.json`/real dependencies keep going through Nixpacks exactly as today — same "build only when there's actually something to build" distinction F5.7 already draws for static sites with vs without a `buildCmd`.
+3. Remove the stopgap auto-`composer.json` injection in `cmd_build` once this ships (or keep it only as a last-resort fallback for the Nixpacks-build path, not the primary fix).
+4. Open design question to resolve during planning: does this replace the PHP project type's behavior outright (auto-detected), or is it a separate mode/toggle? Lean toward auto-detected (mirrors the STATIC/REACT buildCmd-presence check) unless research turns up a reason users need to force one path or the other.
+
+**Acceptance Criteria:**
+- [ ] PHP project with no `composer.json` and no `buildCmd` deploys without any Nixpacks build step
+- [ ] PHP project with a `composer.json`/dependencies still builds via Nixpacks as today
+- [ ] A Duplicator-style migration package (arbitrary `.php` entry file + assets, no `composer.json`) deploys and runs correctly with zero manual intervention
+- [ ] Stopgap `composer.json` auto-injection in `cmd_build` is removed or demoted to a fallback
+
+**Test Plan:**
+1. Upload a single `index.php` with no `composer.json` → deploys in low single-digit seconds, no Nixpacks build logged
+2. Upload a Duplicator backup (`installer.php` + archive `.zip`, no `composer.json`) → deploys without needing a manually-added `composer.json`; `installer.php` runs
+3. Deploy an existing PHP project with `composer.json` (e.g. Laravel) → still builds via Nixpacks, unaffected
+
+**Developer Docs:**
+- **Location:** `docs/dev/no-build-php-hosting.md`
+
+---
+
 ## Phase 6: Ecosystem & Launch
 
 ### F6.1 — Complete Documentation
@@ -2103,7 +2141,8 @@ VitePress documentation site covering installation, development, and API referen
 - [ ] Feature documentation (all 48 features)
 - [ ] Troubleshooting guide
 - [ ] Changelog
-- [ ] Hosted at `docs.vexlyx.com` I know that the car is a bit of an oddity, but I want to be honest. I don't know what the car is. I mean, I The first one is the one that was used in And then, the next I I I I I Took the picture and put it on the table, and then he was like, well, I I I I don't know.
+- [ ] Hosted at `docs.vexlyx.com` I know that the car is a bit of an oddity, but I want to be honest. I don't know what the car is. I mean, I The first one is the one that was used in And then, the next I I I I I Took the picture and put it on the table, and then he was like, well, I I I I I I Hello?
+Haan ji. the second day was about, you know, we got to go back together, and you know that you can come back together and reunite.
 
 **Test Plan:**
 1. New developer reads guide → sets up local env successfully

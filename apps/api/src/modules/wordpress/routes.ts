@@ -121,10 +121,7 @@ export async function wordpressRoutes(app: FastifyInstance) {
         const { id } = ProjectIdParamSchema.parse(request.params);
 
         let tarPath: string | undefined;
-        let dbName: string | undefined;
-        let dbUser: string | undefined;
-        let dbPassword: string | undefined;
-        let dbHost: string | undefined;
+        let databaseId: string | undefined;
 
         const parts = request.parts({
           limits: { fileSize: 500 * 1024 * 1024 },
@@ -132,16 +129,13 @@ export async function wordpressRoutes(app: FastifyInstance) {
 
         for await (const part of parts) {
           if (part.type === "field") {
-            if (part.fieldname === "dbName") dbName = part.value as string;
-            if (part.fieldname === "dbUser") dbUser = part.value as string;
-            if (part.fieldname === "dbPassword") dbPassword = part.value as string;
-            if (part.fieldname === "dbHost") dbHost = part.value as string;
+            if (part.fieldname === "databaseId") databaseId = part.value as string;
           } else if (part.type === "file" && part.filename.endsWith(".tar.gz")) {
             tarPath = await service.saveTempUpload(id, part.file, part.filename);
           }
         }
 
-        const body = WordPressImportSchema.parse({ tarPath, dbName, dbUser, dbPassword, dbHost });
+        const body = WordPressImportSchema.parse({ tarPath, databaseId });
         const result = await service.importSite(request.userId!, id, body);
         reply.status(200);
         return result;

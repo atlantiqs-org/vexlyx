@@ -7,12 +7,8 @@ export const ProjectIdParamSchema = z.object({
 export type ProjectIdParam = z.infer<typeof ProjectIdParamSchema>;
 
 export const WordPressInstallSchema = z.object({
-  dbName: z.string().max(100).default("wordpress"),
-  dbUser: z.string().max(100).default("root"),
-  dbPassword: z.string().max(255).default(""),
-  dbHost: z.string().max(255).default("localhost"),
+  databaseId: z.string().min(1, "Database is required"),
   dbPrefix: z.string().max(20).default("wp_"),
-  downloadCore: z.boolean().default(true),
 });
 
 export type WordPressInstallInput = z.infer<typeof WordPressInstallSchema>;
@@ -26,10 +22,7 @@ export type WordPressUploadInput = z.infer<typeof WordPressUploadSchema>;
 
 export const WordPressImportSchema = z.object({
   tarPath: z.string().min(1, "Uploaded tar.gz path is required"),
-  dbName: z.string().max(100).default("wordpress"),
-  dbUser: z.string().max(100).default("root"),
-  dbPassword: z.string().max(255).default(""),
-  dbHost: z.string().max(255).default("localhost"),
+  databaseId: z.string().min(1, "Database is required"),
 });
 
 export type WordPressImportInput = z.infer<typeof WordPressImportSchema>;

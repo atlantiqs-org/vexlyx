@@ -235,6 +235,95 @@ function runBuildImage(
   });
 }
 
+interface ExtractStaticOutputResult {
+  staticOutputDir: string;
+}
+
+// F5.7 — pull a STATIC/REACT project's built output out of a throwaway
+// Nixpacks image (never deployed itself; only its output dir is served by
+// the fixed nginx:alpine image).
+function runExtractStaticOutput(
+  options: { projectDir: string; imageName: string },
+  onLog: (line: string) => Promise<void>,
+): Promise<ExtractStaticOutputResult> {
+  return new Promise((resolveP, rejectP) => {
+    const scriptPath = getBuildManagerScriptPath();
+    const payload = JSON.stringify({
+      command: "extract-static-output",
+      projectDir: options.projectDir,
+      imageName: options.imageName,
+    });
+
+    const child = spawn("python", [scriptPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let buffer = "";
+    let stderrBuffer = "";
+    let result: ExtractStaticOutputResult | null = null;
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBuffer += chunk.toString();
+    });
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        let parsed: BuildManagerLine & { success?: boolean; staticOutputDir?: string };
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          void onLog(trimmed);
+          continue;
+        }
+
+        if (parsed.error) {
+          rejectP(new BuildError(parsed.error, parsed.code ?? "STATIC_EXTRACT_ERROR", 422));
+          return;
+        }
+        if (parsed.log) void onLog(parsed.log);
+        if (parsed.success && parsed.staticOutputDir) {
+          result = { staticOutputDir: parsed.staticOutputDir };
+        }
+      }
+    });
+
+    child.on("close", (code) => {
+      if (buffer.trim()) void onLog(buffer.trim());
+      if (code !== 0) {
+        const errDetails = stderrBuffer.trim() ? `:\n${stderrBuffer.trim()}` : "";
+        rejectP(new BuildError(
+          `build_manager.py (extract-static-output) exited with code ${code}${errDetails}`,
+          "STATIC_EXTRACT_NONZERO_EXIT", 422,
+        ));
+      } else if (result) {
+        resolveP(result);
+      } else {
+        rejectP(new BuildError(
+          "build_manager.py (extract-static-output) finished without returning an output directory",
+          "STATIC_EXTRACT_NO_RESULT", 500,
+        ));
+      }
+    });
+
+    child.on("error", (err) => {
+      rejectP(new BuildError(
+        `Failed to spawn build_manager.py: ${err.message}`,
+        "BUILD_MANAGER_SPAWN_ERROR", 500,
+      ));
+    });
+
+    child.stdin.write(payload);
+    child.stdin.end();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // BullMQ job processor — runs the actual build
 // ---------------------------------------------------------------------------
@@ -417,20 +506,48 @@ export function createBuildProcessor(
         await appendLog(`[vexlyx] Build command: ${effectiveBuildCmd}`);
       }
 
-      // Phase 2 — build Docker image with caching and build-time env vars
-      await appendLog("[vexlyx] Building Docker image with Nixpacks…");
-      await runBuildImage(
-        {
-          projectDir,
-          imageName,
-          buildCmd: effectiveBuildCmd,
-          startCmd: project.startCmd ?? planResult.startCmd,
-          cacheKey: `vexlyx-${projectId}`,
-          envVars,
-        },
-        appendLog,
-      );
-      await appendLog("[vexlyx] Build complete ✓");
+      // F5.7 — no-build deploy path for static sites with no buildCmd, and
+      // for WordPress (which always uses the fixed official image pair).
+      const isStaticNoBuild =
+        (effectiveProjectType === "STATIC" || effectiveProjectType === "REACT") && !effectiveBuildCmd;
+      const isWordPress = effectiveProjectType === "WORDPRESS";
+
+      let deployImageName = imageName;
+      let staticRoot: string | undefined;
+
+      if (isStaticNoBuild) {
+        await appendLog("[vexlyx] Static site with no build command — skipping Nixpacks build");
+        deployImageName = "nginx:alpine";
+        staticRoot = projectDir;
+      } else if (isWordPress) {
+        await appendLog("[vexlyx] WordPress project — skipping Nixpacks build, using official WordPress image");
+      } else {
+        // Phase 2 — build Docker image with caching and build-time env vars
+        await appendLog("[vexlyx] Building Docker image with Nixpacks…");
+        await runBuildImage(
+          {
+            projectDir,
+            imageName,
+            buildCmd: effectiveBuildCmd,
+            startCmd: project.startCmd ?? planResult.startCmd,
+            cacheKey: `vexlyx-${projectId}`,
+            envVars,
+          },
+          appendLog,
+        );
+        await appendLog("[vexlyx] Build complete ✓");
+
+        if (
+          (effectiveProjectType === "STATIC" || effectiveProjectType === "REACT") &&
+          effectiveBuildCmd
+        ) {
+          await appendLog("[vexlyx] Extracting static build output…");
+          const extractResult = await runExtractStaticOutput({ projectDir, imageName }, appendLog);
+          staticRoot = extractResult.staticOutputDir;
+          deployImageName = "nginx:alpine";
+          await appendLog("[vexlyx] Static build output extracted ✓");
+        }
+      }
 
       // Phase 3 — Deploy container via Docker Compose
       await appendLog("[vexlyx] Deploying container via Docker Compose…");
@@ -444,13 +561,14 @@ export function createBuildProcessor(
           projectId,
           projectName: project.name,
           projectDir,
-          imageName,
+          imageName: deployImageName,
           projectType: effectiveProjectType,
           baseDomain: env.BASE_DOMAIN,
           memoryLimit: env.DEPLOY_MEMORY_LIMIT,
           portRangeStart: env.DEPLOY_PORT_RANGE_START,
           portRangeEnd: env.DEPLOY_PORT_RANGE_END,
           containerPort: project.port,
+          staticRoot,
           envVars,
         },
         appendLog,

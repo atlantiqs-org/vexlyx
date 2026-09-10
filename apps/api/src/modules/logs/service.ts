@@ -82,6 +82,7 @@ const activeStreams = new Map<string, RuntimeLogProcess>();
 export function startRuntimeLogStream(
   projectDir: string,
   projectId: string,
+  projectType: string,
   socket: Socket,
   logger: FastifyBaseLogger,
 ): void {
@@ -96,7 +97,7 @@ export function startRuntimeLogStream(
   }
 
   const scriptPath = getDockerManagerScriptPath();
-  const payload = JSON.stringify({ command: "logs_follow", projectDir });
+  const payload = JSON.stringify({ command: "logs_follow", projectDir, projectType });
 
   const child = spawn("python", [scriptPath], {
     stdio: ["pipe", "pipe", "pipe"],
@@ -215,7 +216,7 @@ export function registerSocketHandlers(
 
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        select: { userId: true, deletedAt: true },
+        select: { userId: true, type: true, deletedAt: true },
       });
 
       if (!project || project.deletedAt !== null || project.userId !== userId) {
@@ -230,7 +231,7 @@ export function registerSocketHandlers(
       const { env } = await import("../../config/env.js");
       const projectDir = resolve(env.PROJECTS_DIR, projectId);
 
-      startRuntimeLogStream(projectDir, projectId, socket, logger);
+      startRuntimeLogStream(projectDir, projectId, project.type, socket, logger);
       logger.debug({ socketId: socket.id, projectId }, "Subscribed to runtime logs");
     });
 

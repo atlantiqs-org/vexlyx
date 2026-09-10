@@ -79,6 +79,8 @@ export function runDockerDeploy(
     containerPort?: number | null;
     domain?: string | null;
     envVars?: Record<string, string>;
+    /** F5.7 — host dir to bind-mount as the nginx webroot for STATIC/REACT. */
+    staticRoot?: string;
   },
   onLog?: (line: string) => Promise<void> | void,
 ): Promise<DeployResult> {
@@ -274,10 +276,11 @@ export function runDockerAction(
 
 export function runDockerStatus(
   projectDir: string,
+  projectType: string,
 ): Promise<{ containerStatus: string; containerId: string | null }> {
   return new Promise((resolveP, rejectP) => {
     const scriptPath = getDockerManagerScriptPath();
-    const payload = JSON.stringify({ command: "status", projectDir });
+    const payload = JSON.stringify({ command: "status", projectDir, projectType });
 
     const child = spawn("python", [scriptPath], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -348,11 +351,12 @@ export function runDockerStatus(
 
 export function runDockerLogs(
   projectDir: string,
+  projectType: string,
   tail: number = 100,
 ): Promise<{ logs: string }> {
   return new Promise((resolveP, rejectP) => {
     const scriptPath = getDockerManagerScriptPath();
-    const payload = JSON.stringify({ command: "logs", projectDir, tail });
+    const payload = JSON.stringify({ command: "logs", projectDir, projectType, tail });
 
     const child = spawn("python", [scriptPath], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -434,7 +438,27 @@ export class DeployService {
       );
     }
 
-    const imageName = `${env.NIXPACKS_IMAGE_PREFIX}-${projectId}`;
+    let imageName = `${env.NIXPACKS_IMAGE_PREFIX}-${projectId}`;
+    let staticRoot: string | undefined;
+
+    // F5.7 — redeploy without rebuilding: static/WordPress projects skip
+    // Nixpacks entirely and use the fixed image(s) baked into their templates.
+    if (project.type === "STATIC" || project.type === "REACT") {
+      imageName = "nginx:alpine";
+      if (project.buildCmd) {
+        const staticOutputDir = resolve(projectDir, "deploy", "static-output");
+        if (!existsSync(staticOutputDir)) {
+          throw new DeployError(
+            "This project has a build command but hasn't been built yet. Trigger a build first.",
+            "STATIC_OUTPUT_MISSING",
+            400,
+          );
+        }
+        staticRoot = staticOutputDir;
+      } else {
+        staticRoot = projectDir;
+      }
+    }
 
     // Update project status to CREATING / DEPLOYING
     await this.prisma.project.update({
@@ -458,6 +482,7 @@ export class DeployService {
       portRangeEnd: env.DEPLOY_PORT_RANGE_END,
       containerPort: project.port,
       domain: body.domain,
+      staticRoot,
       envVars,
     });
 
@@ -550,14 +575,14 @@ export class DeployService {
     userId: string,
     projectId: string,
   ): Promise<{ containerStatus: string; containerId: string | null }> {
-    await this.findOwnedProject(userId, projectId);
+    const project = await this.findOwnedProject(userId, projectId);
     const projectDir = resolve(env.PROJECTS_DIR, projectId);
 
     if (!existsSync(projectDir)) {
       return { containerStatus: "not_found", containerId: null };
     }
 
-    const status = await runDockerStatus(projectDir);
+    const status = await runDockerStatus(projectDir, project.type);
 
     // Sync database cache
     await this.prisma.project.update({
@@ -576,7 +601,7 @@ export class DeployService {
     projectId: string,
     tail: number = 100,
   ): Promise<{ logs: string }> {
-    await this.findOwnedProject(userId, projectId);
+    const project = await this.findOwnedProject(userId, projectId);
     const projectDir = resolve(env.PROJECTS_DIR, projectId);
 
     if (!existsSync(projectDir)) {
@@ -587,7 +612,7 @@ export class DeployService {
       );
     }
 
-    return runDockerLogs(projectDir, tail);
+    return runDockerLogs(projectDir, project.type, tail);
   }
 
   private async findOwnedProject(userId: string, projectId: string) {
@@ -600,6 +625,7 @@ export class DeployService {
         userId: true,
         port: true,
         gitUrl: true,
+        buildCmd: true,
         deletedAt: true,
       },
     });
