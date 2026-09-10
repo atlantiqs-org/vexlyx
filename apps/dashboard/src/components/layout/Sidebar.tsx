@@ -11,6 +11,7 @@ import {
   Activity,
   Archive,
   Shield,
+  Server,
   Settings,
   Users,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const navItems = [
   { label: "Monitoring", href: "/monitoring", icon: Activity },
   { label: "Backups", href: "/backups", icon: Archive, roles: ["ADMIN"] },
   { label: "Firewall", href: "/firewall", icon: Shield, roles: ["ADMIN"] },
+  { label: "Services", href: "/services", icon: Server, roles: ["ADMIN"] },
   { label: "Users", href: "/users", icon: Users, roles: ["ADMIN", "RESELLER"] },
 ];
 

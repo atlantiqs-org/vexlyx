@@ -296,6 +296,23 @@ export type {
 } from "./schemas/firewall.js";
 
 export {
+  ServiceNameSchema,
+  ServiceRuntimeStatusSchema,
+  ServiceActionSchema,
+  ServiceStatusSchema,
+  ServicesStatusSchema,
+  ServiceLogsResponseSchema,
+} from "./schemas/serviceStatus.js";
+export type {
+  ServiceName,
+  ServiceRuntimeStatus,
+  ServiceAction,
+  ServiceStatusResponse,
+  ServicesStatusResponse,
+  ServiceLogsResponse,
+} from "./schemas/serviceStatus.js";
+
+export {
   RoleSchema,
   UserResponseSchema,
   QuotaUsageSchema,
