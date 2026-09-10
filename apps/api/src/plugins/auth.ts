@@ -1,17 +1,22 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import crypto from "node:crypto";
+import type { Role } from "@prisma/client";
 import { env } from "../config/env.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     userId: string | null;
+    userRole: Role | null;
   }
   interface FastifyInstance {
     requireAuth: (
       request: FastifyRequest,
       reply: FastifyReply,
     ) => Promise<void>;
+    requireRole: (
+      ...roles: Role[]
+    ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
@@ -31,6 +36,7 @@ async function authPlugin(app: FastifyInstance) {
   await app.register(import("@fastify/cookie"));
 
   app.decorateRequest("userId", null);
+  app.decorateRequest("userRole", null);
 
   // On every request, check for session cookie and populate request.userId
   app.addHook("onRequest", async (request) => {
@@ -66,11 +72,44 @@ async function authPlugin(app: FastifyInstance) {
   };
 
   app.decorate("requireAuth", requireAuth);
+
+  // Shared preHandler factory to require one of a set of roles. Looked up
+  // fresh from Postgres (not the session) on every call so a role change
+  // made via the admin UI takes effect immediately, without needing to
+  // invalidate the caller's existing session.
+  const requireRole =
+    (...roles: Role[]) =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!request.userId) {
+        return reply.status(401).send({
+          error: "Authentication required",
+          code: "UNAUTHORIZED",
+          details: {},
+        });
+      }
+
+      const user = await app.prisma.user.findUnique({
+        where: { id: request.userId },
+        select: { role: true },
+      });
+
+      if (!user || !roles.includes(user.role)) {
+        return reply.status(403).send({
+          error: "You do not have permission to perform this action",
+          code: "FORBIDDEN_ROLE",
+          details: {},
+        });
+      }
+
+      request.userRole = user.role;
+    };
+
+  app.decorate("requireRole", requireRole);
 }
 
 export const authSessionPlugin = fp(authPlugin, {
   name: "auth",
-  dependencies: ["redis"],
+  dependencies: ["redis", "prisma"],
 });
 
 // --- Session helpers used by auth routes ---

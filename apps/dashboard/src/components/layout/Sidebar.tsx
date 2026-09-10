@@ -12,13 +12,16 @@ import {
   Archive,
   Shield,
   Settings,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Navigation items for the sidebar.
  * Each item maps to a route under the (panel) route group.
+ * `roles` restricts an item to specific roles; omit for everyone.
  */
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -27,8 +30,9 @@ const navItems = [
   { label: "Databases", href: "/databases", icon: Database },
   { label: "Mail", href: "/mail", icon: Mail },
   { label: "Monitoring", href: "/monitoring", icon: Activity },
-  { label: "Backups", href: "/backups", icon: Archive },
-  { label: "Firewall", href: "/firewall", icon: Shield },
+  { label: "Backups", href: "/backups", icon: Archive, roles: ["ADMIN"] },
+  { label: "Firewall", href: "/firewall", icon: Shield, roles: ["ADMIN"] },
+  { label: "Users", href: "/users", icon: Users, roles: ["ADMIN", "RESELLER"] },
 ];
 
 const bottomNavItems = [
@@ -44,6 +48,8 @@ const bottomNavItems = [
  */
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const visibleNavItems = navItems.filter((item) => !item.roles || item.roles.includes(user?.role ?? ""));
 
   return (
     <div className="flex h-full w-64 flex-col border-r border-sidebar-border bg-sidebar">
@@ -63,7 +69,7 @@ export function Sidebar() {
 
       {/* Main navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link

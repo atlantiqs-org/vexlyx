@@ -2,6 +2,20 @@ import type { PrismaClient } from "@prisma/client";
 import * as argon2 from "argon2";
 import type { RegisterInput, LoginInput } from "./schema.js";
 
+const PUBLIC_USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  resellerId: true,
+  maxProjects: true,
+  maxDomains: true,
+  maxDatabases: true,
+  maxMailboxes: true,
+  maxSubAccounts: true,
+  createdAt: true,
+} as const;
+
 export class AuthService {
   constructor(private prisma: PrismaClient) {}
 
@@ -29,13 +43,7 @@ export class AuthService {
         password: hashedPassword,
         role,
       },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-      },
+      select: PUBLIC_USER_SELECT,
     });
 
     return user;
@@ -56,25 +64,14 @@ export class AuthService {
       throw new AuthError("Invalid email or password", "INVALID_CREDENTIALS", 401);
     }
 
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      createdAt: user.createdAt,
-    };
+    const { password: _password, ...publicUser } = user;
+    return publicUser;
   }
 
   async getCurrentUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-      },
+      select: PUBLIC_USER_SELECT,
     });
 
     if (!user) {

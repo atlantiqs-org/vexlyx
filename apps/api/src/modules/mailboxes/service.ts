@@ -8,6 +8,7 @@ import type {
   MailboxResponse,
 } from "@vexlyx/shared";
 import { runDovecotManager, MailService } from "../mail/service.js";
+import { assertUnderQuota } from "../../utils/quota.js";
 
 export class MailboxError extends Error {
   constructor(
@@ -73,6 +74,13 @@ export class MailboxService {
     userId: string,
     input: CreateMailboxInput,
   ): Promise<{ mailbox: MailboxResponse; password: string }> {
+    await assertUnderQuota(
+      this.prisma,
+      userId,
+      "mailbox",
+      (message, code, statusCode) => new MailboxError(message, code, statusCode),
+    );
+
     const domain = await this.prisma.domain.findFirst({
       where: { id: input.domainId, userId },
     });

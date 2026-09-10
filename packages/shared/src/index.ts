@@ -295,3 +295,22 @@ export type {
   FirewallStatusResponse,
 } from "./schemas/firewall.js";
 
+export {
+  RoleSchema,
+  UserResponseSchema,
+  QuotaUsageSchema,
+  UsageSummarySchema,
+  CreateSubAccountSchema,
+  UpdateUserRoleSchema,
+  UpdateUserQuotasSchema,
+} from "./schemas/users.js";
+export type {
+  RoleInput,
+  UserResponse,
+  QuotaUsage,
+  UsageSummary,
+  CreateSubAccountInput,
+  UpdateUserRoleInput,
+  UpdateUserQuotasInput,
+} from "./schemas/users.js";
+

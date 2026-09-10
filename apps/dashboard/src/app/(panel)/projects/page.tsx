@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { useProjects } from "@/hooks/useProjects";
+import { useUsage } from "@/hooks/useUsage";
+import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { cn } from "@/lib/utils";
 
 export default function ProjectsPage() {
   const { projects, isLoading, error, createProject, refetch } = useProjects();
+  const { usage, isLoading: isUsageLoading } = useUsage();
   const [modalOpen, setModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -32,7 +35,8 @@ export default function ProjectsPage() {
             Manage and deploy your hosted applications.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <QuotaBadge label="Projects" usage={usage?.project} isLoading={isUsageLoading} />
           <Button
             id="refresh-projects"
             variant="outline"
@@ -53,6 +57,8 @@ export default function ProjectsPage() {
             id="new-project-btn"
             onClick={() => setModalOpen(true)}
             size="sm"
+            disabled={isQuotaAtLimit(usage?.project)}
+            title={isQuotaAtLimit(usage?.project) ? "You've reached your project limit" : undefined}
           >
             <Plus className="mr-2 h-4 w-4" />
             New Project

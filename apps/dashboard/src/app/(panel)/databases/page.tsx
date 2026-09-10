@@ -45,6 +45,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useUsage } from "@/hooks/useUsage";
+import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { cn } from "@/lib/utils";
 import type { DatabaseDetail, DatabaseType, Project } from "@vexlyx/shared";
 
@@ -127,6 +129,8 @@ export default function DatabasesPage() {
   // Delete modal state
   const [deleteDb, setDeleteDb] = useState<DatabaseDetail | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const { usage, isLoading: isUsageLoading } = useUsage();
 
   // ---------------------------------------------------------------------------
   // Data Fetching
@@ -316,6 +320,7 @@ export default function DatabasesPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <QuotaBadge label="Databases" usage={usage?.database} isLoading={isUsageLoading} />
           <Button
             asChild
             variant="outline"
@@ -338,6 +343,8 @@ export default function DatabasesPage() {
             onClick={() => setCreateModalOpen(true)}
             size="sm"
             className="flex items-center gap-2"
+            disabled={isQuotaAtLimit(usage?.database)}
+            title={isQuotaAtLimit(usage?.database) ? "You've reached your database limit" : undefined}
           >
             <Plus className="h-4 w-4" />
             New Database

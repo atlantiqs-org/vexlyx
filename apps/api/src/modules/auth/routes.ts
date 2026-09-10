@@ -100,4 +100,10 @@ export async function authRoutes(app: FastifyInstance) {
       return { user };
     },
   );
+
+  // GET /api/auth/config — public, lets the dashboard know whether to show
+  // the self-registration form/link (F5.8).
+  app.get("/config", async () => {
+    return { allowRegistration: env.ALLOW_REGISTRATION };
+  });
 }

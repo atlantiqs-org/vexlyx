@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { PrismaClient, DatabaseType } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { encrypt, decrypt } from "../../utils/encryption.js";
+import { assertUnderQuota } from "../../utils/quota.js";
 import { EnvService } from "../env/service.js";
 import type {
   CreateDatabaseInput,
@@ -157,6 +158,13 @@ export class DatabaseService {
    * Provision a new isolated database and user on the selected engine.
    */
   async create(userId: string, input: CreateDatabaseInput): Promise<DatabaseDetail> {
+    await assertUnderQuota(
+      this.prisma,
+      userId,
+      "database",
+      (message, code, statusCode) => new DatabaseError(message, code, statusCode),
+    );
+
     // 1. Check for name collision under this user
     const existing = await this.prisma.database.findUnique({
       where: {

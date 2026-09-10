@@ -20,6 +20,7 @@ import type {
   CertType,
 } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
+import { assertUnderQuota } from "../../utils/quota.js";
 
 // ---------------------------------------------------------------------------
 // Error Handling
@@ -305,6 +306,13 @@ http:
    * verification is automatically inherited and status is set directly to ACTIVE.
    */
   public async create(userId: string, input: CreateDomainInput): Promise<DomainResponse> {
+    await assertUnderQuota(
+      this.prisma,
+      userId,
+      "domain",
+      (message, code, statusCode) => new DomainError(message, code, statusCode),
+    );
+
     const existing = await this.prisma.domain.findUnique({
       where: { hostname: input.hostname },
     });
