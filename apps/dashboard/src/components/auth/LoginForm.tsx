@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthConfig } from "@/hooks/useAuthConfig";
 import { ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ type FieldErrors = Partial<Record<"email" | "password" | "root", string>>;
 
 export function LoginForm() {
   const { login } = useAuth();
+  const { allowRegistration } = useAuthConfig();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
@@ -125,15 +127,17 @@ export function LoginForm() {
           </Button>
         </form>
 
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/register"
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Create one
-          </Link>
-        </div>
+        {allowRegistration && (
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link
+              href="/register"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Create one
+            </Link>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

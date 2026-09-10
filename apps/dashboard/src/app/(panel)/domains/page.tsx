@@ -51,6 +51,8 @@ import {
 } from "@/components/ui/select";
 import { useDomains } from "@/hooks/useDomains";
 import { useProjects } from "@/hooks/useProjects";
+import { useUsage } from "@/hooks/useUsage";
+import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { SubdomainModal } from "@/components/domains/SubdomainModal";
 import { cn } from "@/lib/utils";
 import type { DomainResponse, DomainStatus } from "@vexlyx/shared";
@@ -133,6 +135,7 @@ export default function DomainsPage() {
   } = useDomains();
 
   const { projects } = useProjects();
+  const { usage, isLoading: isUsageLoading } = useUsage();
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -302,6 +305,7 @@ export default function DomainsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <QuotaBadge label="Domains" usage={usage?.domain} isLoading={isUsageLoading} className="mr-1" />
           <Button
             variant="outline"
             size="sm"
@@ -328,6 +332,8 @@ export default function DomainsPage() {
             size="sm"
             onClick={() => setAddModalOpen(true)}
             className="h-9 gap-1.5 text-xs font-medium"
+            disabled={isQuotaAtLimit(usage?.domain)}
+            title={isQuotaAtLimit(usage?.domain) ? "You've reached your domain limit" : undefined}
           >
             <Plus className="h-3.5 w-3.5" />
             Add Domain

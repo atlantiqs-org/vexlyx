@@ -49,6 +49,8 @@ import {
 } from "@/components/ui/select";
 import { useMail } from "@/hooks/useMail";
 import { useMailboxes } from "@/hooks/useMailboxes";
+import { useUsage } from "@/hooks/useUsage";
+import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { cn } from "@/lib/utils";
 import type { MailboxResponse, QuotaPreset } from "@vexlyx/shared";
 
@@ -117,6 +119,7 @@ export function MailboxesPanel() {
     updateQuota,
     resetPassword,
   } = useMailboxes();
+  const { usage, isLoading: isUsageLoading } = useUsage();
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -251,15 +254,19 @@ export function MailboxesPanel() {
               />
             </div>
 
-            <Button
-              size="sm"
-              className="gap-2"
-              onClick={() => setIsCreateOpen(true)}
-              disabled={domains.length === 0}
-            >
-              <Plus className="h-4 w-4" />
-              Create Mailbox
-            </Button>
+            <div className="flex items-center gap-3">
+              <QuotaBadge label="Mailboxes" usage={usage?.mailbox} isLoading={isUsageLoading} />
+              <Button
+                size="sm"
+                className="gap-2"
+                onClick={() => setIsCreateOpen(true)}
+                disabled={domains.length === 0 || isQuotaAtLimit(usage?.mailbox)}
+                title={isQuotaAtLimit(usage?.mailbox) ? "You've reached your mailbox limit" : undefined}
+              >
+                <Plus className="h-4 w-4" />
+                Create Mailbox
+              </Button>
+            </div>
           </div>
 
           {domains.length === 0 && !isLoading && (

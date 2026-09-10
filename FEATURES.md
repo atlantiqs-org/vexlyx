@@ -27,14 +27,14 @@ This document is the **single source of truth** for all Vexlyx features.
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 0: Foundation | 🟢 COMPLETED | 100% (7/7) |
-| Phase 1: Project Deployment | 🟢 COMPLETED | 100% (7/7) |
+| Phase 1: Project Deployment | 🟡 IN PROGRESS | 88% (7/8) |
 | Phase 2: Multi-Runtime Support | 🟢 COMPLETED | 100% (8/8) |
-| Phase 3: Domain & DNS | 🟢 COMPLETED | 100% (4/4) |
-| Phase 4: Email Server | 🟢 COMPLETED | 100% (7/7) |
-| Phase 5: System & Administration | 🟡 IN PROGRESS | 43% (3/7) |
-| Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% (0/4) |
+| Phase 3: Domain & DNS | 🟡 IN PROGRESS | 80% (4/5) |
+| Phase 4: Email Server | 🟡 IN PROGRESS | 88% (7/8) |
+| Phase 5: System & Administration | 🟡 IN PROGRESS | 30% (6/20) |
+| Phase 6: Ecosystem & Launch | 🔴 NOT STARTED | 0% (0/3) |
 
-**Overall Completion:** 82% (36/44 features)
+**Overall Completion:** 66% (39/59 features)
 
 ---
 
@@ -601,6 +601,30 @@ Allow users to set environment variables per project. Variables are encrypted at
 
 ---
 
+### F1.8 — Project Detail Page: Tabbed Sections
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+`apps/dashboard/src/app/(panel)/projects/[id]/page.tsx` currently renders 14 distinct sections stacked vertically with no grouping — Overview info, Repository, Configuration, Metadata, `GitSettings`, `ContainerControls`, `EnvVarEditor`, `DatabasePanel`, `DomainPanel`, `FileManagerCard`, `SftpPanel`, `WordPressPanel`/`DockerfilePanel` (conditional), and `BuildPanel` (deployments) — in that order. This makes the page a very long scroll with no way to jump to what you need, and buries important panels (env vars, deployments) below less-frequently-used ones (SFTP, files).
+
+**Acceptance Criteria:**
+- [ ] Project detail page is reorganized into tabs (e.g. Overview, Deploy/Build, Environment, Database, Domains, Files, Git & Advanced) using the existing shadcn `Tabs` component (already used elsewhere, e.g. the Mail page)
+- [ ] Each existing panel component (`GitSettings`, `ContainerControls`, `EnvVarEditor`, `DatabasePanel`, `DomainPanel`, `FileManagerCard`, `SftpPanel`, `WordPressPanel`, `DockerfilePanel`, `BuildPanel`) moves into the appropriate tab without behavior changes
+- [ ] Overview tab keeps the at-a-glance info (type/status/repo/config/metadata) so users don't lose the summary view
+- [ ] Active tab persists across a page refresh (e.g. via a URL query param) so a direct link to "the env vars tab" is shareable
+- [ ] No regression to any existing panel's functionality — this is a layout change only
+
+**Test Plan:**
+1. Open a project → tabs are visible, Overview shows the summary info
+2. Switch tabs → each panel renders and functions exactly as before (deploy, edit env vars, manage domains, etc.)
+3. Refresh the page while on a non-default tab → still on that tab
+4. WordPress/Dockerfile-specific tabs only show for those project types
+
+**Developer Docs:**
+- **Location:** `docs/dev/project-detail-page.md`
+
+---
+
 ## Phase 2: Multi-Runtime Support
 
 ### F2.1 — Next.js Deployment
@@ -1147,6 +1171,26 @@ Automatic SSL certificate provisioning via Let's Encrypt through Traefik.
 
 ---
 
+### F3.5 — Domain, DNS Zone & Backup UX Polish
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Follow-up polish pass after a manual UX/responsiveness review. Domain cards and DNS zone management are functionally responsive already (`apps/dashboard/src/app/(panel)/domains/page.tsx` uses `grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3`; the DNS records table at `domains/[id]/dns/page.tsx:692` is already wrapped in `overflow-x-auto`), but a few rough edges remain from the audit: the domain filter bar's `Select` triggers use fixed widths (`w-[140px]`/`w-[150px]`/`w-[160px]`, `domains/page.tsx:355,368,381`) that don't shrink on very narrow viewports (mitigated by `flex-wrap` but not ideal), and two dialogs use an un-prefixed `grid grid-cols-3` (`domains/page.tsx:799`, `domains/[id]/dns/page.tsx:914`) that isn't verified against small dialog widths on mobile.
+
+**Acceptance Criteria:**
+- [ ] Domain filter `Select` triggers use responsive width classes (e.g. `w-full sm:w-[140px]`) instead of fixed pixel widths
+- [ ] The two un-prefixed `grid-cols-3` dialogs are tested and adjusted (e.g. `grid-cols-1 sm:grid-cols-3`) for narrow mobile viewports
+- [ ] Manual pass at 360px/768px/1024px widths confirms no overflow or unreadable truncation on `/domains`, `/domains/[id]/dns`, and their dialogs
+
+**Test Plan:**
+1. Resize browser to 360px width → domain filter bar and DNS-instructions dialogs remain usable, no horizontal page scroll
+2. Resize to tablet width (768px) → domain cards reflow to 2 columns, DNS table scrolls horizontally within its own container, not the page
+
+**Developer Docs:**
+- **Location:** `docs/dev/domains-dns.md` (append a "Responsive Design Notes" section)
+
+---
+
 ## Phase 4: Email Server
 
 ### F4.1 — Postfix SMTP Server
@@ -1444,6 +1488,32 @@ Per-mailbox vacation/out-of-office auto-reply, powered by Dovecot Pigeonhole (Si
 
 ---
 
+### F4.8 — Mail Page: Production-Grade Operations (Queue, Bounces, DKIM Rotation)
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Phase 4 (F4.1-F4.7) covers the mail *provisioning* side well (mailboxes, aliases, vacation, DKIM/SPF/DMARC status badges, storage-usage bars already exist and look fine — see `apps/dashboard/src/components/mail/MailboxesPanel.tsx`), but the mail page has none of the day-2 *operations* tooling an admin needs to run a real mail server, which is why it "feels dumb" for production use. Confirmed by audit: `apps/api/src/modules/mail/routes.ts` exposes only `/status`, `/domains`, `/sync`, `/dkim/:domainId`, `/auth/:domainId/regenerate`, `/test-send`, `/webmail/status`, `/test-relay` — there is no queue endpoint, no bounce/delivery-log endpoint anywhere in the API, and DKIM only supports first-time generation, not rotation. The Webmail tab is just a status badge + external link.
+
+Comparable tools (Mailcow, cPanel/WHM) all expose: a mail queue manager (list/hold/delete/flush, `postqueue -p`-backed in Postfix's case), a delivery/bounce log viewer, and DKIM key rotation (not just one-shot generation) as core "day-2" admin features.
+
+**Acceptance Criteria:**
+- [ ] New "Queue" view: lists messages currently in the Postfix queue (`postqueue -p` via a new `system/python` script or extending `mail_manager.py`), with delete/flush actions
+- [ ] New "Delivery Log" view: tails/searches recent Postfix delivery and bounce events (success/deferred/bounced) per domain or mailbox
+- [ ] DKIM section gains a "Rotate key" action (generate a new key, publish new DNS record, keep the old one valid until DNS propagates), not just first-time generate
+- [ ] Webmail tab shows something more useful than a status badge — at minimum, recent Roundcube activity or a direct embedded login, not just an external link
+- [ ] All new endpoints follow the existing `mail` module's error-handling and auth patterns
+
+**Test Plan:**
+1. Send a test email to an unreachable domain → it appears in the Queue view as deferred, then in the Delivery Log as bounced once retries are exhausted
+2. Manually flush the queue → message delivery is retried immediately
+3. Rotate DKIM for a domain → new selector/key published, old key still validates in-flight signed mail until DNS updates propagate
+4. Webmail tab shows more than just "running" — e.g. last-login or a working embedded view
+
+**Developer Docs:**
+- **Location:** `docs/dev/email/mail-operations.md`
+
+---
+
 ## Phase 5: System & Administration
 
 ### F5.1 — One-Line Server Installer
@@ -1628,18 +1698,18 @@ Web-based UFW firewall management.
 ---
 
 ### F5.5 — User Roles & Permissions
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Role-based access control with Admin, User, and Reseller roles.
 
 **Acceptance Criteria:**
-- [ ] Admin: full access, manage users, system settings
-- [ ] User: manage own projects, domains, databases
-- [ ] Reseller: create sub-accounts, allocate resources
-- [ ] Role assignment UI
-- [ ] Permission middleware on API routes
-- [ ] Resource quotas per role
+- [x] Admin: full access, manage users, system settings
+- [x] User: manage own projects, domains, databases
+- [x] Reseller: create sub-accounts, allocate resources
+- [x] Role assignment UI
+- [x] Permission middleware on API routes
+- [x] Resource quotas per role
 
 **Test Plan:**
 1. Admin creates user → user can login and create projects
@@ -1713,6 +1783,308 @@ STATIC/REACT and WORDPRESS project types currently deploy through the exact same
 
 **Developer Docs:**
 - **Location:** `docs/dev/fast-static-wordpress-serving.md`
+
+---
+
+### F5.8 — Admin/Reseller Direct User Provisioning & Logout
+**Status:** 🟢 COMPLETED
+
+**Description:**
+Closes gaps found while testing F5.5: there was no way to log out of the dashboard at all, and public self-registration was on by default with no way for an ADMIN or RESELLER to create accounts directly instead.
+
+**Acceptance Criteria:**
+- [x] `ALLOW_REGISTRATION` defaults to `false` (closed panel) — `/register` shows an "ask your administrator" message instead of the form when disabled, and the login page hides the "Create one" link, both driven by a new public `GET /api/auth/config` endpoint
+- [x] ADMIN can create a user of any role (USER/RESELLER/ADMIN) directly from `/users` via a "New User" dialog
+- [x] RESELLER's existing "New Sub-account" flow is unchanged (forced USER role, `maxSubAccounts` quota-checked)
+- [x] Header has a working account menu with a "Log out" action that clears the session and redirects to `/login`
+
+**Test Plan:**
+1. Fresh install (`ALLOW_REGISTRATION` unset) → `/register` shows the disabled message; `/login` has no register link
+2. Set `ALLOW_REGISTRATION=true` → both reappear; `POST /api/auth/register` succeeds
+3. As ADMIN, create a RESELLER and a plain USER via "New User" → both appear correctly on `/users`
+4. As RESELLER, create sub-accounts until `maxSubAccounts` is hit → blocked with `QUOTA_EXCEEDED`
+5. Click the account menu → "Log out" → session cleared, redirected to `/login`
+
+**Developer Docs:**
+- **Location:** `docs/dev/roles-permissions.md` (appended)
+
+---
+
+### F5.9 — Onboarding: DNS Records & Public IP Visibility
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Neither the installer nor the dashboard ever tells the installing admin what DNS records to create or what IP to point them at. Confirmed by code audit: `system/scripts/install/config.sh` only prompts for the single panel domain (`VEXLYX_DOMAIN`); `steps/16-summary.sh` prints a generic "make sure your domain points here" warning without stating the server's actual public IP or listing the other hostnames that need records (`webmail.<domain>` for Roundcube, a wildcard `*.<domain>` for deployed project subdomains since `BASE_DOMAIN` defaults to the same zone as the panel — see `docker-compose.prod.yml`'s `BASE_DOMAIN: ${VEXLYX_DOMAIN}`). No code anywhere in the repo currently detects/exposes the server's public IP.
+
+**Acceptance Criteria:**
+- [ ] Installer detects the server's public IP (e.g. via a simple external lookup, or the primary route's source address) and prints it plainly at the end of setup
+- [ ] Installer lists every DNS record the admin needs to create: `A <domain> -> <ip>`, `A webmail.<domain> -> <ip>` (if mail is enabled), `A *.<domain> -> <ip>` (wildcard, for deployed project subdomains)
+- [ ] The same information is available post-install in the dashboard (see F5.11 Settings page), not just scrolled past in installer output
+- [ ] Works whether the panel domain and the deployed-app base domain are the same zone (default) or configured separately
+
+**Test Plan:**
+1. Run the installer against a fresh server → output clearly lists the IP and every required DNS record before finishing
+2. Skip DNS setup, finish install anyway → dashboard Settings page still shows the same records/IP for later reference
+3. Point DNS as instructed → panel, webmail, and a deployed test project's subdomain all resolve and load correctly
+
+**Developer Docs:**
+- **Location:** `docs/dev/dns-onboarding.md`
+
+---
+
+### F5.10 — Fix Production Subdomain Routing (Traefik HTTPS)
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Deployed project subdomains don't work in production (reported against `panel.mindgera.site`). Root cause confirmed by code audit: `docker/traefik/traefik.prod.yml.tmpl` sets a **global** HTTP→HTTPS redirect on the `web` entrypoint, but the deployed-project compose templates (`system/templates/docker-compose/{next,node,php,static,python,wordpress,docker}.yml`) only define a router on the `web` entrypoint — no `websecure` router, no TLS/certresolver. So every request to a default `{slug}.<BASE_DOMAIN>` subdomain gets redirected to HTTPS, where no matching router exists, and the connection dead-ends (this is very likely also the "redirects me to localhost" symptom, since the browser is left with no working route and falls back to whatever it was last showing). Only custom `Domain` records (F3.1/F3.2, which do get `docker/traefik/dynamic/domain-*.yml` with both entrypoints + TLS) work today. Separately, `ContainerControls.tsx:257` and `WordPressPanel.tsx:205` hardcode a `http://localhost:${internalPort}` "view" link, which is actively misleading once the project is reachable at a real subdomain on a remote server.
+
+**Acceptance Criteria:**
+- [ ] Every deployed-project compose template gets a `websecure` router with TLS/certresolver, mirroring what `Domain` records already receive, so the default `{slug}.<BASE_DOMAIN>` subdomain works over HTTPS out of the box
+- [ ] `docker_manager.py`'s router-label generation is updated consistently across all project types (NODEJS/NEXTJS/PYTHON/REACT/STATIC/PHP/WORDPRESS/DOCKER)
+- [ ] The "view project" link in the dashboard uses the real `deployedDomain` (or the custom `Domain`, if one is attached) instead of `localhost:<internalPort>`
+- [ ] Existing custom-`Domain` routing (F3.1/F3.2) is unaffected
+
+**Test Plan:**
+1. Deploy a fresh project with no custom domain attached → its default subdomain loads over HTTPS with a valid cert
+2. Click "View" in the dashboard from a non-local machine → opens the real subdomain, not `localhost`
+3. Attach a custom `Domain` to a project → still works exactly as before
+
+**Developer Docs:**
+- **Location:** `docs/dev/domain-routing.md`
+
+---
+
+### F5.11 — Panel Settings Page
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+The Sidebar has always linked to `/settings` (`apps/dashboard/src/components/layout/Sidebar.tsx`), but no page was ever built — it 404s today. Build the real page: account info (name/email), change-password, and (once F5.9 lands) the DNS records/public-IP reference info so an admin can look it up again after the installer output has scrolled away.
+
+**Acceptance Criteria:**
+- [ ] `/settings` renders instead of 404ing
+- [ ] Shows the logged-in user's name/email and lets them change their password
+- [ ] Once F5.9 ships, shows the server's public IP and the required DNS records for reference
+- [ ] Linked correctly from the Sidebar (already wired, just needs a page)
+
+**Test Plan:**
+1. Click "Settings" in the sidebar → real page loads, no 404
+2. Change password → can log in with the new password, old one rejected
+3. After F5.9 ships → DNS/IP reference section shows accurate, current values
+
+**Developer Docs:**
+- **Location:** `docs/dev/settings-page.md`
+
+---
+
+### F5.12 — Consistent Refresh Button Animation (Design System Enforcement)
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+CLAUDE.md's design system mandates a dedicated `isRefreshing` state with `animate-spin` on the `RefreshCw`/`RotateCw` icon for 500-600ms on every refresh action, but a full-repo audit found at least 4 different patterns in actual use:
+1. Correct pattern (dedicated state + timeout): most pages (`databases/page.tsx`, `projects/page.tsx`, `BuildPanel.tsx`, `ContainerControls.tsx`, `DatabasePanel.tsx`, `EnvVarEditor.tsx`, `GitSettings.tsx`, `domains/page.tsx`, `domains/[id]/dns/page.tsx`, `domains/[id]/ssl/page.tsx`, `DnsManagementModal.tsx`, `mail/page.tsx`, `WebmailPanel.tsx`).
+2. Spins for the real (variable) network duration instead of a fixed 500-600ms: `MonitoringPage.tsx:220-222` (bound to react-query's `isFetching`), `FileTree.tsx:305,347`, `FileManagerCard.tsx:22,46`, `SftpPanel.tsx:71,80`.
+3. No spin animation at all: `app/(standalone)/projects/[id]/files/page.tsx:362`.
+4. Wrong icon (`RotateCw` instead of the app's `RefreshCw`) and/or wrong timeout (500ms instead of 600ms): `ContainerControls.tsx:196`, `WordPressPanel.tsx:118`, `DockerfilePanel.tsx:84`.
+5. `GitSettings.tsx:324,436` uses `RefreshCw` for "Generate/Regenerate" buttons with no spin binding at all (swaps to `Loader2` instead) — a third distinct pattern for a refresh-shaped action.
+
+**Acceptance Criteria:**
+- [ ] A single shared helper/hook (e.g. `useRefreshAnimation()`) encapsulates the "set isRefreshing, animate-spin, clear after 600ms (floor, even if the real fetch finishes faster)" pattern
+- [ ] Every refresh-shaped button in the dashboard is migrated to use it, including the 4 categories of offenders listed above
+- [ ] `RefreshCw` is used consistently for "refresh/reload data" actions; `RotateCw`/`Loader2` are reserved for genuinely different actions (e.g. a restart action, an in-flight submit)
+- [ ] Manual click-through of every page confirms a consistent ~600ms spin feel regardless of actual network latency
+
+**Test Plan:**
+1. Throttle network to "Slow 3G" in devtools → every refresh button still only spins for ~600ms visually (the underlying fetch continues in the background), not the full slow-network duration
+2. Click every refresh-shaped button across the app → same icon, same animation duration everywhere
+
+**Developer Docs:**
+- **Location:** `docs/dev/design-system.md` (append "Refresh Buttons" section)
+
+---
+
+### F5.13 — Monitoring: Per-Core CPU & Configurable Timezone
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Two related gaps found during review:
+- **CPU cores**: `system/python/system_monitor.py` only ever collects an aggregate `psutil.cpu_percent(interval=interval)` (line 77) into a single `cpuPercent` field (`MetricSnapshot.cpuPercent` in `schema.prisma`) — there is no per-core breakdown and no core-count field anywhere in the schema or API, so the dashboard has no way to show individual core load even if it wanted to.
+- **Timezone**: nothing in the repo is timezone-aware. Every displayed timestamp uses `toLocaleString(undefined, …)` (browser-default, unlabeled) across `databases/page.tsx`, `domains/page.tsx`, `domains/[id]/ssl/page.tsx`, `projects/[id]/page.tsx`, `BuildPanel.tsx`, `BackupList.tsx`, `BackupDetail.tsx`, etc. The backup schedule cron (`BackupSettings.scheduleCron`) is passed to BullMQ's repeatable job with no `tz` option (`apps/api/src/modules/backups/service.ts`), so "0 3 * * *" silently means "3am in whatever timezone the API server's OS is set to" — and the UI (`BackupSettingsCard.tsx`) labels it "daily at 3am" with no qualifier, which is confusing for a server in a different timezone than the admin.
+
+**Acceptance Criteria:**
+- [ ] `system_monitor.py` collects per-core percentages (`psutil.cpu_percent(percpu=True)`) and core count, stored either as a new JSON column or a separate table, and exposed via the monitoring API
+- [ ] Monitoring dashboard shows a per-core breakdown (e.g. a small bar per core) alongside the existing aggregate CPU chart
+- [ ] A server-timezone setting is added (e.g. to the new Settings page from F5.11, or `BackupSettings`), defaulting to the server's detected local timezone but overridable
+- [ ] The backup cron schedule is passed to BullMQ with an explicit `tz` option matching the configured timezone, and the Settings/Backups UI states which timezone "3am" refers to
+- [ ] Displayed timestamps across the dashboard optionally respect the configured timezone rather than silently using the browser's
+
+**Test Plan:**
+1. Monitoring page shows N per-core bars matching the server's actual core count
+2. Set the timezone setting to something other than the server's OS timezone → backup runs at the expected wall-clock time in that zone, and the UI states the zone explicitly
+3. Confirm existing aggregate CPU/RAM/disk charts are unaffected
+
+**Developer Docs:**
+- **Location:** `docs/dev/monitoring.md` (append "Per-Core CPU & Timezone" section)
+
+---
+
+### F5.14 — Fix Backup Failure Diagnostics ("exited with code 2 and no output")
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Reported live: a backup run shows `Backups: FAILED — Backup script exited with code 2 and no output`. Root-caused by code audit: `system/python/backup_manager.py` never calls `sys.exit(2)` itself — its only intentional exit path is `sys.exit(1)` inside `fail()`, always preceded by a JSON print to stdout. Exit code 2 with **zero** stdout means the Python interpreter/process died *before* any Python code ran — almost certainly the OS-level "can't open file '<path>': No such file or directory" (errno 2) from a misresolved `PYTHON_BIN`/script path (`apps/api/src/modules/backups/service.ts`'s `getBackupScriptPath()` falls back to a guessed path if none of its candidates exist), or a wrong/missing Python interpreter. Separately, `service.ts` *does* capture the child process's stderr but only logs it at `logger.debug` — it's never included in the `BackupError` message actually shown to the user (`"Backup script exited with code ${code} and no output"`), so the real cause is invisible to whoever's looking at the failure in the dashboard.
+
+**Acceptance Criteria:**
+- [ ] `service.ts`'s error message includes captured stderr when present, instead of the generic "no output" message
+- [ ] Confirm (in the actual failing environment) whether `PYTHON_BIN`/the resolved script path is correct; fix the path-resolution fallback or document the required `PYTHON_BIN` setting if not
+- [ ] Add a startup/health check (e.g. on API boot, or as part of the installer) that verifies the configured Python interpreter and `backup_manager.py` path are both resolvable, failing loudly at startup rather than silently at the next scheduled backup
+- [ ] Re-run a scheduled and a manual backup successfully after the fix
+
+**Test Plan:**
+1. Reproduce locally by pointing `PYTHON_BIN` at a nonexistent path → confirm the new error message shows the real stderr instead of "no output"
+2. Fix the actual misconfiguration on the affected server → next backup run succeeds
+3. Trigger a manual backup from the dashboard → completes with `COMPLETED` status
+
+**Developer Docs:**
+- **Location:** `docs/dev/backup-system.md` (append "Troubleshooting" section)
+
+---
+
+### F5.15 — Docker Image/Container Cleanup & Disk Reclamation
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Every redeploy leaves the previous build's Docker image and layers on disk — confirmed by audit: `docker_manager.py`'s `cmd_deploy` uses `docker compose up -d --force-recreate --pull never` (replaces the container but never removes the old image), and `cmd_remove` only runs `docker compose down --volumes --remove-orphans` (no `docker image rm`, no pruning). There is no scheduled or manual cleanup job anywhere in the repo, and no disk-usage-by-category breakdown (images/volumes/containers) in the monitoring module — so disk fills up silently over time with no visibility or way to reclaim it from the panel.
+
+Comparable tools all solve this: **Coolify** runs configurable automated cleanup (by disk-usage threshold or cron) that removes stopped containers/unused images/build cache, skipping cleanup during an active deploy; **Dokploy** exposes 5 discrete ops (clean unused images/volumes/stopped containers/builder cache/all) runnable manually or via a daily cron; **CapRover** ships a manual "Disk Clean-Up" action (`docker container prune` + `docker image prune --all`).
+
+**Acceptance Criteria:**
+- [ ] Monitoring/Settings page shows a disk-usage breakdown by category (images, containers, volumes, build cache) — e.g. via `docker system df`
+- [ ] A manual "Clean up" action in the dashboard runs the equivalent of `docker container prune` + `docker image prune -a` (skipping images belonging to currently-running containers)
+- [ ] An optional scheduled cleanup job (cron, mirroring the existing `BackupSettings.scheduleCron` pattern), off by default
+- [ ] Redeploying a project optionally removes the previous image after the new one is confirmed healthy (not immediately, to allow rollback)
+- [ ] Cleanup never removes an image/container currently in use by a running project
+
+**Test Plan:**
+1. Redeploy a project several times → confirm old images accumulate (reproducing the current bug) before the fix
+2. Run "Clean up" from the dashboard → disk usage drops, running projects unaffected
+3. Enable the scheduled cleanup → runs automatically on schedule, same safety guarantees
+4. Disk-usage breakdown reflects real `docker system df` numbers
+
+**Developer Docs:**
+- **Location:** `docs/dev/docker-cleanup.md`
+
+---
+
+### F5.16 — Dashboard Home Page: Real Widgets
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+`apps/dashboard/src/app/(panel)/dashboard/page.tsx` is a pure stub today — confirmed by its own doc comment: "Currently uses placeholder data with loading skeletons. Will be connected to real API data in Phase 1." It's 4 `StatCard`s all hardcoded to `value="0"` plus a static "Getting Started" box — no charts, no recent activity, no quick actions, no real data fetching at all, which is why it "looks static."
+
+**Acceptance Criteria:**
+- [ ] Stat tiles show real counts (projects, domains, databases, mailboxes) fetched from the existing list endpoints, not hardcoded zeros
+- [ ] A resource-usage widget (CPU/RAM/disk) reusing data already collected by F5.2's monitoring, so the home page reflects real server health at a glance
+- [ ] A "recent activity" feed (recent deployments, recent backups, recent domain/SSL status changes) — reusing existing `Deployment`/`BackupSnapshot` data
+- [ ] Quick-action buttons (e.g. "New Project", "New Domain") for common tasks
+- [ ] "Getting Started" box only shows for genuinely empty accounts (zero projects), not unconditionally
+
+**Test Plan:**
+1. Fresh account with nothing created → stat tiles show real zeros, "Getting Started" box shows
+2. Account with projects/domains/databases → stat tiles show accurate counts, resource widget shows live server data, recent activity reflects real recent actions
+3. Quick actions navigate to the right creation flows
+
+**Developer Docs:**
+- **Location:** `docs/dev/dashboard-home.md`
+
+---
+
+### F5.17 — Two-Factor Authentication (2FA/TOTP)
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Competitor audit (F5.5 follow-up): Plesk, cPanel/WHM, and CapRover all support 2FA on login, tied to their access-control system — Vexlyx currently has none, at any role. Given Vexlyx's ADMIN role has unrestricted access (including firewall and backups), this is a meaningfully higher-value security feature than for a typical SaaS app.
+
+**Acceptance Criteria:**
+- [ ] TOTP-based 2FA (compatible with standard authenticator apps), optional per-user, enforceable-by-policy for ADMIN (e.g. an env flag requiring it for the ADMIN role specifically)
+- [ ] Setup flow: QR code + manual secret entry, backup/recovery codes shown once
+- [ ] Login flow: password, then TOTP challenge if enabled, before session creation
+- [ ] Works alongside the existing Argon2id + Redis session auth (`apps/api/src/plugins/auth.ts`) without replacing it
+
+**Test Plan:**
+1. Enable 2FA on an account → login requires password + valid TOTP code
+2. Wrong/expired TOTP code → login rejected, no session created
+3. Recovery code → works once, then is invalidated
+4. Account without 2FA enabled → unaffected, logs in as before
+
+**Developer Docs:**
+- **Location:** `docs/dev/two-factor-auth.md`
+
+---
+
+### F5.18 — Audit Log
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Competitor audit: Dokploy ships audit logs as a first-class access-control feature; cPanel/WHM has detailed action logging. Vexlyx has none — no record of who changed a role, deleted a user, modified a firewall rule, or restored a backup, beyond each individual module's own DB rows (e.g. `FirewallRule.createdBy`). With F5.5-F5.8's admin/reseller user-management now live, this gap is more pressing — an ADMIN can silently change any user's role or delete any account with no trail.
+
+**Acceptance Criteria:**
+- [ ] New `AuditLog` table: actor (userId), action, target (type + id), metadata (before/after where relevant), timestamp
+- [ ] Logged at minimum: role changes, quota changes, user creation/deletion, firewall rule/policy changes, backup restore/delete
+- [ ] Admin-only `/audit-log` view (table, filterable by actor/action/date)
+- [ ] Does not log request bodies containing secrets (passwords, DB credentials, encrypted env vars)
+
+**Test Plan:**
+1. Admin changes a user's role → entry appears with old/new role, correct actor
+2. Reseller deletes their own sub-account → entry appears attributed to the reseller, not the admin
+3. Firewall rule added/removed → entry appears
+4. `/audit-log` page paginates and filters correctly
+
+**Developer Docs:**
+- **Location:** `docs/dev/audit-log.md`
+
+---
+
+### F5.19 — Fine-Grained Custom Permissions
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Competitor audit: Vexlyx's RBAC is fixed (ADMIN/RESELLER/USER, no per-permission toggles), while WHM (ACL templates per reseller), Plesk (Service/Reseller Plan permission properties, independent of resource limits), and Dokploy (25+ resource categories × CRUD+Deploy/Cancel/Restore, Enterprise tier) all let an admin grant a sub-account/reseller a specific subset of capabilities rather than an all-or-nothing role. Coolify, by contrast, is also fixed-role and has open community requests (coollabsio/coolify#2378, #5293) for exactly this — confirming it's a recognized gap across the market, not just Vexlyx.
+
+**Acceptance Criteria:**
+- [ ] A permission model beyond the 3 fixed roles — e.g. a `Permission` enum (canManageFirewall, canManageBackups, canCreateSubAccounts, canManageDns, …) assignable per-user by an ADMIN, layered on top of the existing role (role sets sane defaults, permissions can narrow or extend within role boundaries)
+- [ ] `requireRole` middleware (`apps/api/src/plugins/auth.ts`) gains a `requirePermission` counterpart, or is extended to check both
+- [ ] UI on `/users` edit dialog to toggle individual permissions for a user
+- [ ] Backward compatible: existing ADMIN/RESELLER/USER behavior is the default when no custom permissions are set
+
+**Test Plan:**
+1. Admin grants a USER `canManageDns` without full RESELLER role → that user can manage DNS but not create sub-accounts or see other users
+2. Revoke a permission → immediately enforced on next request (same DB-lookup pattern as `requireRole`)
+3. Default (no custom permissions set) → behaves identically to current F5.5/F5.8 behavior
+
+**Developer Docs:**
+- **Location:** `docs/dev/fine-grained-permissions.md`
+
+---
+
+### F5.20 — Reseller Overselling Mode for Quotas
+**Status:** 🔴 NOT STARTED
+
+**Description:**
+Competitor audit: WHM's "Overselling" feature lets a reseller nominally assign sub-accounts more resources than the reseller's own cap, while WHM enforces the reseller's real limit against actual aggregate *usage* rather than the nominal sum — standard practice in reseller hosting, since most sub-accounts never use their full allocation. Vexlyx's current model (`apps/api/src/utils/quota.ts`) is the simpler, non-overselling case: a reseller's `maxSubAccounts` and other quotas are flat caps with no allocation/usage distinction. This is a legitimate, deliberately simpler v1 — this task tracks the natural v2 once real reseller usage patterns are known.
+
+**Acceptance Criteria:**
+- [ ] Optional "overselling" mode per reseller (off by default, matching current behavior)
+- [ ] When enabled, a reseller can set sub-account quotas that nominally sum above their own limit
+- [ ] Enforcement switches from "nominal sum ≤ reseller limit" to "actual aggregate usage ≤ reseller limit" at resource-creation time
+- [ ] Clear UI indication when a reseller is in oversold territory (nominal > limit) so they understand the risk
+
+**Test Plan:**
+1. Reseller with `maxProjects: 10` creates 3 sub-accounts each with `maxProjects: 5` (nominal sum 15 > 10) — allowed once overselling is on
+2. Actual project creation across those sub-accounts still blocked once real aggregate usage hits 10
+3. Overselling off (default) → nominal-sum behavior unchanged from today
+
+**Developer Docs:**
+- **Location:** `docs/dev/reseller-overselling.md`
 
 ---
 

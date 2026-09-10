@@ -21,7 +21,7 @@ export async function firewallRoutes(app: FastifyInstance) {
   // GET /api/firewall — live status + managed rules
   // ---------------------------------------------------------------------------
 
-  app.get("/", { preHandler: [app.requireAuth] }, async (_request, reply) => {
+  app.get("/", { preHandler: [app.requireRole("ADMIN")] }, async (_request, reply) => {
     try {
       return await service.getStatus();
     } catch (err) {
@@ -33,7 +33,7 @@ export async function firewallRoutes(app: FastifyInstance) {
   // POST /api/firewall/rules — add a rule
   // ---------------------------------------------------------------------------
 
-  app.post("/rules", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.post("/rules", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const body = CreateFirewallRuleSchema.parse(request.body);
       const rule = await service.addRule(request.userId!, body);
@@ -48,7 +48,7 @@ export async function firewallRoutes(app: FastifyInstance) {
   // DELETE /api/firewall/rules/:id — remove a rule
   // ---------------------------------------------------------------------------
 
-  app.delete("/rules/:id", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.delete("/rules/:id", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const { id } = FirewallRuleIdParamSchema.parse(request.params);
       await service.deleteRule(id);
@@ -63,7 +63,7 @@ export async function firewallRoutes(app: FastifyInstance) {
   // PUT /api/firewall/settings — update default incoming/outgoing policy
   // ---------------------------------------------------------------------------
 
-  app.put("/settings", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.put("/settings", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const body = UpdateFirewallSettingsSchema.parse(request.body);
       return await service.updateSettings(body);

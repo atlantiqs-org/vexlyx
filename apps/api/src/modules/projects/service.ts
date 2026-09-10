@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { CreateProjectInput, UpdateProjectInput, ProjectListQuery } from "./schema.js";
+import { assertUnderQuota } from "../../utils/quota.js";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -107,6 +108,13 @@ export class ProjectService {
   }
 
   async create(userId: string, data: CreateProjectInput) {
+    await assertUnderQuota(
+      this.prisma,
+      userId,
+      "project",
+      (message, code, statusCode) => new ProjectError(message, code, statusCode),
+    );
+
     // Check for duplicate name within this user's projects
     const existing = await this.prisma.project.findUnique({
       where: { userId_name: { userId, name: data.name } },

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthConfig } from "@/hooks/useAuthConfig";
 import { ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ type FieldErrors = Partial<
 
 export function RegisterForm() {
   const { register } = useAuth();
+  const { allowRegistration, isLoading: isConfigLoading } = useAuthConfig();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
@@ -82,6 +84,27 @@ export function RegisterForm() {
       setIsLoading(false);
     }
   };
+
+  if (!isConfigLoading && !allowRegistration) {
+    return (
+      <Card className="border-border">
+        <CardHeader className="space-y-1 text-center">
+          <h1 className="text-xl font-semibold tracking-tight">Registration is disabled</h1>
+          <p className="text-sm text-muted-foreground">
+            This panel is invite-only. Ask your administrator or reseller to create an account for you.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="mt-2 text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+              Sign in
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-border">

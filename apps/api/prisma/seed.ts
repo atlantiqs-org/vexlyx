@@ -20,6 +20,35 @@ async function main() {
   });
 
   console.log(`Seeded admin user: ${admin.email} (id: ${admin.id})`);
+
+  const reseller = await prisma.user.upsert({
+    where: { email: "reseller@vexlyx.local" },
+    update: { password: hashedPassword },
+    create: {
+      email: "reseller@vexlyx.local",
+      name: "Reseller",
+      password: hashedPassword,
+      role: Role.RESELLER,
+      maxSubAccounts: 5,
+    },
+  });
+
+  console.log(`Seeded reseller user: ${reseller.email} (id: ${reseller.id})`);
+
+  const subAccount = await prisma.user.upsert({
+    where: { email: "sub-account@vexlyx.local" },
+    update: { password: hashedPassword, resellerId: reseller.id },
+    create: {
+      email: "sub-account@vexlyx.local",
+      name: "Sub Account",
+      password: hashedPassword,
+      role: Role.USER,
+      resellerId: reseller.id,
+      maxProjects: 3,
+    },
+  });
+
+  console.log(`Seeded sub-account user: ${subAccount.email} (id: ${subAccount.id})`);
 }
 
 main()

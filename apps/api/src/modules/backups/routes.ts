@@ -63,7 +63,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // GET /api/backups — list snapshots
   // ---------------------------------------------------------------------------
 
-  app.get("/", { preHandler: [app.requireAuth] }, async (_request, reply) => {
+  app.get("/", { preHandler: [app.requireRole("ADMIN")] }, async (_request, reply) => {
     try {
       const snapshots = await service.list();
       return {
@@ -81,7 +81,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // GET /api/backups/settings — get schedule/retention config
   // ---------------------------------------------------------------------------
 
-  app.get("/settings", { preHandler: [app.requireAuth] }, async (_request, reply) => {
+  app.get("/settings", { preHandler: [app.requireRole("ADMIN")] }, async (_request, reply) => {
     try {
       return await service.getSettings();
     } catch (err) {
@@ -93,7 +93,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // PUT /api/backups/settings — update schedule/retention config
   // ---------------------------------------------------------------------------
 
-  app.put("/settings", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.put("/settings", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const body = UpdateBackupSettingsSchema.parse(request.body);
       const updated = await service.updateSettings(body);
@@ -115,7 +115,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // GET /api/backups/:id — snapshot detail (includes manifest)
   // ---------------------------------------------------------------------------
 
-  app.get("/:id", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.get("/:id", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const { id } = SnapshotIdParamSchema.parse(request.params);
       const snapshot = await service.get(id);
@@ -129,7 +129,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // POST /api/backups — trigger a manual backup
   // ---------------------------------------------------------------------------
 
-  app.post("/", { preHandler: [app.requireAuth] }, async (_request, reply) => {
+  app.post("/", { preHandler: [app.requireRole("ADMIN")] }, async (_request, reply) => {
     try {
       await backupQueue.add("manual-backup", { trigger: "MANUAL" });
       reply.status(202);
@@ -143,7 +143,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // DELETE /api/backups/:id — remove a snapshot and its archive
   // ---------------------------------------------------------------------------
 
-  app.delete("/:id", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.delete("/:id", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const { id } = SnapshotIdParamSchema.parse(request.params);
       await service.delete(id);
@@ -158,7 +158,7 @@ export async function backupRoutes(app: FastifyInstance) {
   // POST /api/backups/:id/restore — restore a single item from a snapshot
   // ---------------------------------------------------------------------------
 
-  app.post("/:id/restore", { preHandler: [app.requireAuth] }, async (request, reply) => {
+  app.post("/:id/restore", { preHandler: [app.requireRole("ADMIN")] }, async (request, reply) => {
     try {
       const { id } = SnapshotIdParamSchema.parse(request.params);
       const { itemType, itemId } = RestoreItemSchema.parse(request.body);

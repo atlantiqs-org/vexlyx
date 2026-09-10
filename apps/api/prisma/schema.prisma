@@ -18,6 +18,7 @@ datasource db {
 enum Role {
   ADMIN
   USER
+  RESELLER
 }
 
 /// Supported project/application types for deployment.
@@ -130,6 +131,17 @@ model User {
   name      String
   password  String
   role      Role     @default(USER)
+  /// Reseller (User.id) that owns this account, when this user is a
+  /// reseller-created sub-account. Null for admins, resellers themselves,
+  /// and directly-registered users.
+  resellerId String?  @map("reseller_id")
+  /// Per-resource creation caps; null means unlimited. maxSubAccounts only
+  /// applies to RESELLER users.
+  maxProjects    Int?     @map("max_projects")
+  maxDomains     Int?     @map("max_domains")
+  maxDatabases   Int?     @map("max_databases")
+  maxMailboxes   Int?     @map("max_mailboxes")
+  maxSubAccounts Int?     @map("max_sub_accounts")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -140,7 +152,10 @@ model User {
   mailboxes      Mailbox[]
   virtualAliases VirtualAlias[]
   sftpUser       SftpUser?
+  reseller       User?          @relation("ResellerAccounts", fields: [resellerId], references: [id], onDelete: SetNull)
+  subAccounts    User[]         @relation("ResellerAccounts")
 
+  @@index([resellerId])
   @@map("users")
 }
 

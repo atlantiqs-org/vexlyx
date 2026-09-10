@@ -1,5 +1,5 @@
 /** User roles available in the Vexlyx platform */
-export type Role = "ADMIN" | "USER";
+export type Role = "ADMIN" | "USER" | "RESELLER";
 
 /**
  * Public user object returned by the API.
@@ -11,6 +11,12 @@ export type User = {
   email: string;
   name: string;
   role: Role;
+  resellerId: string | null;
+  maxProjects: number | null;
+  maxDomains: number | null;
+  maxDatabases: number | null;
+  maxMailboxes: number | null;
+  maxSubAccounts: number | null;
   createdAt: Date | string;
 };
 

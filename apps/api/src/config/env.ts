@@ -22,9 +22,12 @@ const envSchema = z.object({
   // auth check never sees it. Leave unset for local dev (dashboard/api both
   // on localhost, where a Domain attribute doesn't apply the same way).
   COOKIE_DOMAIN: z.string().min(1).optional(),
+  // Public self-registration is off by default (F5.8) — a fresh install is a
+  // closed panel where the first admin (created by create-admin.ts/seed.ts)
+  // provisions everyone else from /users. Flip to "true" to allow it.
   ALLOW_REGISTRATION: z
     .enum(["true", "false"])
-    .default("true")
+    .default("false")
     .transform((v) => v === "true"),
   // Git integration (F1.3)
   PROJECTS_DIR: z.string().min(1).default("./workspaces/projects"),
