@@ -29,6 +29,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { fetchAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Project, DatabaseDetail } from "@vexlyx/shared";
@@ -53,10 +60,7 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   const [availableDbs, setAvailableDbs] = useState<DatabaseDetail[]>([]);
 
   // Form state for DB settings
-  const [dbName, setDbName] = useState("wordpress");
-  const [dbUser, setDbUser] = useState("root");
-  const [dbPassword, setDbPassword] = useState("");
-  const [dbHost, setDbHost] = useState("vexlyx-mysql:3306");
+  const [selectedDatabaseId, setSelectedDatabaseId] = useState("");
   const [dbPrefix, setDbPrefix] = useState("wp_");
 
   // Upload state
@@ -68,10 +72,7 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   const [isExporting, setIsExporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importDbName, setImportDbName] = useState("wordpress");
-  const [importDbUser, setImportDbUser] = useState("root");
-  const [importDbPassword, setImportDbPassword] = useState("");
-  const [importDbHost, setImportDbHost] = useState("localhost");
+  const [importDatabaseId, setImportDatabaseId] = useState("");
   const importFileRef = useRef<HTMLInputElement | null>(null);
 
   const loadDatabases = useCallback(async () => {
@@ -81,12 +82,10 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
       );
       const mysqlDbs = (res.databases ?? []).filter((d) => d.type === "MYSQL");
       setAvailableDbs(mysqlDbs);
-      if (mysqlDbs.length > 0 && mysqlDbs[0]) {
-        const first = mysqlDbs[0];
-        setDbName(first.name);
-        setDbUser(first.dbUser);
-        if (first.dbPassword) setDbPassword(first.dbPassword);
-        setDbHost(`${first.internalHost}:${first.port}`);
+      const first = mysqlDbs[0];
+      if (first) {
+        setSelectedDatabaseId((current) => current || first.id);
+        setImportDatabaseId((current) => current || first.id);
       }
     } catch {
       // Ignore error if database list fails
@@ -94,10 +93,10 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   }, [project.id]);
 
   useEffect(() => {
-    if (installModalOpen) {
+    if (installModalOpen || importOpen) {
       void loadDatabases();
     }
-  }, [installModalOpen, loadDatabases]);
+  }, [installModalOpen, importOpen, loadDatabases]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -119,6 +118,10 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   };
 
   const handleInstall = async () => {
+    if (!selectedDatabaseId) {
+      toast.error("Select a MySQL database first");
+      return;
+    }
     setIsInstalling(true);
     try {
       const result = await fetchAPI<{ message: string; success: boolean }>(
@@ -126,12 +129,8 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
         {
           method: "POST",
           body: JSON.stringify({
-            dbName,
-            dbUser,
-            dbPassword,
-            dbHost,
+            databaseId: selectedDatabaseId,
             dbPrefix,
-            downloadCore: true,
           }),
         },
       );
@@ -227,14 +226,12 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
   const handleImport = async () => {
     const file = importFileRef.current?.files?.[0];
     if (!file) { toast.error("Select a .tar.gz archive first"); return; }
+    if (!importDatabaseId) { toast.error("Select a MySQL database first"); return; }
     setIsImporting(true);
     try {
       const form = new FormData();
       form.append("file", file, file.name);
-      form.append("dbName", importDbName);
-      form.append("dbUser", importDbUser);
-      form.append("dbPassword", importDbPassword);
-      form.append("dbHost", importDbHost);
+      form.append("databaseId", importDatabaseId);
       const url = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"}/api/projects/${project.id}/wordpress/import`;
       const res = await fetch(url, { method: "POST", credentials: "include", body: form });
       if (!res.ok) {
@@ -444,77 +441,49 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
               1-Click WordPress Setup
             </DialogTitle>
             <DialogDescription>
-              Scaffold WordPress core files and auto-generate a secure wp-config.php with
-              cryptographic salts and permalinks support.
+              WordPress core ships in the official image — pick the MySQL database to connect it to.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3.5 py-2">
-            {availableDbs.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
-                <Database className="h-4 w-4 shrink-0" />
+            {availableDbs.length === 0 ? (
+              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                <Database className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>
-                  Using provisioned MySQL database <strong>{dbName}</strong> on <code>{dbHost}</code>
+                  No MySQL database found for this project.{" "}
+                  <a href="/databases" className="underline font-medium">
+                    Create one on the Databases page
+                  </a>{" "}
+                  first.
                 </span>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="wp-db-select" className="text-xs">Database</Label>
+                <Select value={selectedDatabaseId} onValueChange={setSelectedDatabaseId}>
+                  <SelectTrigger id="wp-db-select" className="h-8 text-xs">
+                    <SelectValue placeholder="Select a MySQL database" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDbs.map((db) => (
+                      <SelectItem key={db.id} value={db.id}>
+                        {db.name} ({db.internalHost}:{db.port})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="wp-db-name" className="text-xs">Database Name</Label>
+              <Label htmlFor="wp-db-prefix" className="text-xs">Table Prefix</Label>
               <Input
-                id="wp-db-name"
-                value={dbName}
-                onChange={(e) => setDbName(e.target.value)}
-                placeholder="wordpress"
+                id="wp-db-prefix"
+                value={dbPrefix}
+                onChange={(e) => setDbPrefix(e.target.value)}
+                placeholder="wp_"
                 className="h-8 text-xs"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="wp-db-user" className="text-xs">Database User</Label>
-                <Input
-                  id="wp-db-user"
-                  value={dbUser}
-                  onChange={(e) => setDbUser(e.target.value)}
-                  placeholder="root"
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="wp-db-pass" className="text-xs">Database Password</Label>
-                <Input
-                  id="wp-db-pass"
-                  type="password"
-                  value={dbPassword}
-                  onChange={(e) => setDbPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="wp-db-host" className="text-xs">Database Host</Label>
-                <Input
-                  id="wp-db-host"
-                  value={dbHost}
-                  onChange={(e) => setDbHost(e.target.value)}
-                  placeholder="localhost:3306"
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="wp-db-prefix" className="text-xs">Table Prefix</Label>
-                <Input
-                  id="wp-db-prefix"
-                  value={dbPrefix}
-                  onChange={(e) => setDbPrefix(e.target.value)}
-                  placeholder="wp_"
-                  className="h-8 text-xs"
-                />
-              </div>
             </div>
           </div>
 
@@ -532,7 +501,7 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
               size="sm"
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
               onClick={() => void handleInstall()}
-              disabled={isInstalling}
+              disabled={isInstalling || availableDbs.length === 0}
             >
               {isInstalling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Install WordPress
@@ -591,24 +560,28 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
                 className="mt-1 block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:font-medium file:bg-background file:text-foreground hover:file:bg-muted"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">DB Name</Label>
-                <Input value={importDbName} onChange={(e) => setImportDbName(e.target.value)} className="mt-1 h-8 text-sm" />
+            {availableDbs.length === 0 ? (
+              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                <Database className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>No MySQL database found for this project. Create one first.</span>
               </div>
+            ) : (
               <div>
-                <Label className="text-xs text-muted-foreground">DB Host</Label>
-                <Input value={importDbHost} onChange={(e) => setImportDbHost(e.target.value)} className="mt-1 h-8 text-sm" />
+                <Label className="text-xs text-muted-foreground">Database</Label>
+                <Select value={importDatabaseId} onValueChange={setImportDatabaseId}>
+                  <SelectTrigger className="mt-1 h-8 text-sm">
+                    <SelectValue placeholder="Select a MySQL database" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDbs.map((db) => (
+                      <SelectItem key={db.id} value={db.id}>
+                        {db.name} ({db.internalHost}:{db.port})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">DB User</Label>
-                <Input value={importDbUser} onChange={(e) => setImportDbUser(e.target.value)} className="mt-1 h-8 text-sm" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">DB Password</Label>
-                <Input type="password" value={importDbPassword} onChange={(e) => setImportDbPassword(e.target.value)} className="mt-1 h-8 text-sm" />
-              </div>
-            </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setImportOpen(false)} disabled={isImporting}>
@@ -618,7 +591,7 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
               id="confirm-wp-import-btn"
               size="sm"
               onClick={() => void handleImport()}
-              disabled={isImporting}
+              disabled={isImporting || availableDbs.length === 0}
             >
               {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Import Site

@@ -189,6 +189,36 @@ def get_templates_dir() -> Path:
     return candidates[0]  # unreachable
 
 
+def get_nginx_templates_dir() -> Path:
+    """Find the system/templates/nginx directory (F5.7)."""
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        script_dir.parent / "templates" / "nginx",
+        Path(os.getcwd()) / "system" / "templates" / "nginx",
+        Path(os.getcwd()) / "../../system" / "templates" / "nginx",
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return c
+    fail(
+        "Cannot find system/templates/nginx directory.",
+        "NGINX_TEMPLATES_DIR_NOT_FOUND",
+    )
+    return candidates[0]  # unreachable
+
+
+def primary_service_name(project_type: str) -> str:
+    """
+    Return the Docker Compose service name that fronts HTTP traffic for a
+    project type -- used by status/logs/container-id lookups (F5.7).
+
+    Every template has a single "app" service except WORDPRESS, which splits
+    into a PHP-FPM "app" service and an nginx "web" service; "web" is the one
+    that's actually reachable/healthy/Traefik-routed.
+    """
+    return "web" if project_type.upper() == "WORDPRESS" else "app"
+
+
 def pick_template(project_type: str) -> str:
     """Return the template filename for a given project type."""
     mapping = {
@@ -238,6 +268,7 @@ def generate_compose_file(
     container_port: int,
     memory_limit: str,
     env_vars: dict[str, str],
+    extra_placeholders: dict[str, str] | None = None,
 ) -> None:
     template = template_path.read_text(encoding="utf-8")
     env_block = build_env_block(env_vars)
@@ -251,17 +282,28 @@ def generate_compose_file(
         .replace("{{memory_limit}}", memory_limit)
         .replace("{{env_block}}", env_block)
     )
+    for key, value in (extra_placeholders or {}).items():
+        content = content.replace(f"{{{{{key}}}}}", value)
     compose_dir.mkdir(parents=True, exist_ok=True)
     (compose_dir / "docker-compose.yml").write_text(content, encoding="utf-8")
 
 
-def get_container_id(compose_dir: str, docker_bin: str) -> str | None:
-    """Return the short container ID of the `app` service, or None."""
+def generate_nginx_conf(compose_dir: Path, template_path: Path) -> Path:
+    """Copy a nginx/*.conf.template into the project's deploy dir (F5.7)."""
+    content = template_path.read_text(encoding="utf-8")
+    compose_dir.mkdir(parents=True, exist_ok=True)
+    dest = compose_dir / "nginx.conf"
+    dest.write_text(content, encoding="utf-8")
+    return dest
+
+
+def get_container_id(compose_dir: str, docker_bin: str, project_type: str = "NODEJS") -> str | None:
+    """Return the short container ID of the primary (Traefik-facing) service, or None."""
     if not Path(compose_dir).is_dir() or not (Path(compose_dir) / "docker-compose.yml").is_file():
         return None
 
     result = subprocess.run(
-        [docker_bin, "compose", "ps", "-q", "app"],
+        [docker_bin, "compose", "ps", "-q", primary_service_name(project_type)],
         cwd=compose_dir,
         capture_output=True,
         text=True,
@@ -297,6 +339,8 @@ def cmd_deploy(payload: dict) -> None:
       containerPort -- override default container port
       domain       -- fully custom hostname override
       envVars      -- dict of env var key->value to inject
+      staticRoot   -- (STATIC/REACT, F5.7) host dir to bind-mount as the nginx webroot;
+                      defaults to projectDir when omitted (no-build case)
 
     Returns: { containerId, hostPort, hostname }
     """
@@ -333,6 +377,30 @@ def cmd_deploy(payload: dict) -> None:
         fail(f"Template not found: {template_file}", "TEMPLATE_NOT_FOUND")
 
     compose_dir = Path(project_dir) / "deploy"
+    extra_placeholders: dict[str, str] = {}
+    project_type_upper = project_type.upper()
+
+    # F5.7 — STATIC/REACT: bind-mount content + generate SPA-fallback nginx config
+    if project_type_upper in ("STATIC", "REACT"):
+        static_root = payload.get("staticRoot") or project_dir
+        extra_placeholders["static_root"] = Path(static_root).resolve().as_posix()
+        nginx_conf_path = generate_nginx_conf(
+            compose_dir, get_nginx_templates_dir() / "spa.conf.template"
+        )
+        extra_placeholders["nginx_conf_path"] = nginx_conf_path.resolve().as_posix()
+
+    # F5.7 — WORDPRESS: generate fastcgi nginx config + map DB_* env vars to WORDPRESS_DB_*
+    if project_type_upper == "WORDPRESS":
+        nginx_conf_path = generate_nginx_conf(
+            compose_dir, get_nginx_templates_dir() / "wordpress.conf.template"
+        )
+        extra_placeholders["nginx_conf_path"] = nginx_conf_path.resolve().as_posix()
+        extra_placeholders["wp_db_host"] = env_vars.get("DB_HOST", "")
+        extra_placeholders["wp_db_name"] = env_vars.get("DB_NAME", "")
+        extra_placeholders["wp_db_user"] = env_vars.get("DB_USER", "")
+        extra_placeholders["wp_db_password"] = env_vars.get("DB_PASSWORD", "")
+        extra_placeholders["wp_db_prefix"] = env_vars.get("DB_PREFIX", "wp_")
+
     log_line(f"[vexlyx] Generating docker-compose.yml in {compose_dir}")
     generate_compose_file(
         compose_dir=compose_dir,
@@ -344,13 +412,16 @@ def cmd_deploy(payload: dict) -> None:
         container_port=container_port,
         memory_limit=memory_limit,
         env_vars=env_vars,
+        extra_placeholders=extra_placeholders,
     )
 
     log_line(f"[vexlyx] Starting container: image={image_name} port={host_port} hostname={hostname}")
-    run_compose(str(compose_dir), ["up", "-d", "--force-recreate", "--pull", "never"], docker_bin)
+    # --pull missing: reuse local Nixpacks-built images as-is, but still fetch fixed
+    # images (nginx:alpine, wordpress:php8.3-fpm-alpine) on their first deploy.
+    run_compose(str(compose_dir), ["up", "-d", "--force-recreate", "--pull", "missing"], docker_bin)
 
     # Retrieve the container ID
-    container_id = get_container_id(str(compose_dir), docker_bin) or ""
+    container_id = get_container_id(str(compose_dir), docker_bin, project_type) or ""
     log_line(f"[vexlyx] Container started: id={container_id[:12] if container_id else 'unknown'}")
 
     respond({
@@ -408,6 +479,7 @@ def cmd_remove(payload: dict) -> None:
 
 def cmd_status(payload: dict) -> None:
     project_dir = require_field(payload, "projectDir")
+    project_type = payload.get("projectType", "NODEJS")
     docker_bin = get_docker_binary()
     compose_dir = str(Path(project_dir) / "deploy")
 
@@ -415,7 +487,7 @@ def cmd_status(payload: dict) -> None:
         respond({"containerStatus": "not_found", "containerId": None})
         return
 
-    container_id = get_container_id(compose_dir, docker_bin)
+    container_id = get_container_id(compose_dir, docker_bin, project_type)
     if not container_id:
         respond({"containerStatus": "not_found", "containerId": None})
         return
@@ -433,6 +505,7 @@ def cmd_status(payload: dict) -> None:
 
 def cmd_logs(payload: dict) -> None:
     project_dir = require_field(payload, "projectDir")
+    project_type = payload.get("projectType", "NODEJS")
     tail = int(payload.get("tail", 100))
     docker_bin = get_docker_binary()
     compose_dir = str(Path(project_dir) / "deploy")
@@ -442,7 +515,7 @@ def cmd_logs(payload: dict) -> None:
         return
 
     result = subprocess.run(
-        [docker_bin, "compose", "logs", f"--tail={tail}", "--no-log-prefix", "app"],
+        [docker_bin, "compose", "logs", f"--tail={tail}", "--no-log-prefix", primary_service_name(project_type)],
         cwd=compose_dir,
         capture_output=True,
         text=True,
@@ -454,8 +527,12 @@ def cmd_logs(payload: dict) -> None:
         respond({"logs": "No runtime logs available."})
         return
 
+    respond({"logs": result.stdout.strip() or result.stderr.strip()})
+
+
 def cmd_logs_follow(payload: dict) -> None:
     project_dir = require_field(payload, "projectDir")
+    project_type = payload.get("projectType", "NODEJS")
     tail = int(payload.get("tail", 100))
     docker_bin = get_docker_binary()
     compose_dir = str(Path(project_dir) / "deploy")
@@ -465,7 +542,7 @@ def cmd_logs_follow(payload: dict) -> None:
         return
 
     proc = subprocess.Popen(
-        [docker_bin, "compose", "logs", "--follow", f"--tail={tail}", "--no-log-prefix", "app"],
+        [docker_bin, "compose", "logs", "--follow", f"--tail={tail}", "--no-log-prefix", primary_service_name(project_type)],
         cwd=compose_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

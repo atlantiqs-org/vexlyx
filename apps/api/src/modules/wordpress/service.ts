@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { EnvService } from "../env/service.js";
+import { DatabaseService } from "../databases/service.js";
+import { decrypt } from "../../utils/encryption.js";
 import type { WordPressInstallInput, WordPressUploadInput, WordPressImportInput } from "./schema.js";
 
 // ---------------------------------------------------------------------------
@@ -124,9 +126,11 @@ function runPythonCommand<T>(payload: Record<string, unknown>): Promise<T> {
 
 export class WordPressService {
   private envService: EnvService;
+  private databaseService: DatabaseService;
 
   constructor(private prisma: PrismaClient) {
     this.envService = new EnvService(prisma);
+    this.databaseService = new DatabaseService(prisma);
   }
 
   async install(
@@ -137,20 +141,28 @@ export class WordPressService {
     const project = await this.findOwnedProject(userId, projectId);
     const projectDir = resolve(env.PROJECTS_DIR, projectId);
 
+    const db = await this.databaseService.getById(userId, input.databaseId);
+    if (db.type !== "MYSQL") {
+      throw new WordPressError(
+        "WordPress requires a MySQL database. Create a MySQL database first.",
+        "WORDPRESS_REQUIRES_MYSQL",
+        400,
+      );
+    }
+    if (db.projectId !== projectId) {
+      await this.prisma.database.update({
+        where: { id: db.id },
+        data: { projectId },
+      });
+    }
+
     const result = await runPythonCommand<{
       success: boolean;
       projectDir: string;
-      hasWpConfig: boolean;
-      hasHtaccess: boolean;
+      wpContentDir: string;
     }>({
       command: "wordpress-install",
       projectDir,
-      dbName: input.dbName,
-      dbUser: input.dbUser,
-      dbPassword: input.dbPassword,
-      dbHost: input.dbHost,
-      dbPrefix: input.dbPrefix,
-      downloadCore: input.downloadCore,
     });
 
     // Update project type to WORDPRESS if it's not already
@@ -161,18 +173,18 @@ export class WordPressService {
       });
     }
 
-    // Upsert database env vars
+    // Upsert database env vars -- consumed by wordpress.yml's WORDPRESS_DB_* mapping
     const envVars = [
-      { key: "DB_NAME", value: input.dbName },
-      { key: "DB_USER", value: input.dbUser },
-      { key: "DB_PASSWORD", value: input.dbPassword },
-      { key: "DB_HOST", value: input.dbHost },
+      { key: "DB_NAME", value: db.name },
+      { key: "DB_USER", value: db.dbUser },
+      { key: "DB_PASSWORD", value: db.dbPassword ?? "" },
+      { key: "DB_HOST", value: db.internalHost },
       { key: "DB_PREFIX", value: input.dbPrefix },
     ];
     await this.envService.bulkUpsert(userId, projectId, envVars);
 
     return {
-      message: "WordPress core and configuration installed successfully",
+      message: "WordPress installed successfully",
       ...result,
     };
   }
@@ -254,11 +266,32 @@ export class WordPressService {
     const filename = `wp-export-${project.id}-${Date.now()}.tar.gz`;
     const tarPath = join(exportDir, filename);
 
+    const db = await this.prisma.database.findFirst({
+      where: { projectId, type: "MYSQL" },
+    });
+    if (!db) {
+      throw new WordPressError(
+        "No MySQL database is linked to this project. Link one before exporting.",
+        "WORDPRESS_NO_LINKED_DATABASE",
+        400,
+      );
+    }
+    let plainPassword: string;
+    try {
+      plainPassword = decrypt(db.dbPassword);
+    } catch {
+      throw new WordPressError("Failed to decrypt database password", "DECRYPTION_ERROR", 500);
+    }
+
     await runPythonCommand<{ success: boolean }>({
       command: "wordpress-export",
       projectDir,
       exportDir,
       tarPath,
+      dbName: db.name,
+      dbUser: db.dbUser,
+      dbPassword: plainPassword,
+      dbHost: db.host,
     });
 
     const stream = createReadStream(tarPath);
@@ -291,22 +324,37 @@ export class WordPressService {
     const project = await this.findOwnedProject(userId, projectId);
     const projectDir = resolve(env.PROJECTS_DIR, projectId);
 
+    const db = await this.databaseService.getById(userId, input.databaseId);
+    if (db.type !== "MYSQL") {
+      throw new WordPressError(
+        "WordPress requires a MySQL database. Create a MySQL database first.",
+        "WORDPRESS_REQUIRES_MYSQL",
+        400,
+      );
+    }
+    if (db.projectId !== projectId) {
+      await this.prisma.database.update({
+        where: { id: db.id },
+        data: { projectId },
+      });
+    }
+
     const result = await runPythonCommand<{ success: boolean }>({
       command: "wordpress-import",
       projectDir,
       tarPath: input.tarPath,
-      dbName: input.dbName,
-      dbUser: input.dbUser,
-      dbPassword: input.dbPassword,
-      dbHost: input.dbHost,
+      dbName: db.name,
+      dbUser: db.dbUser,
+      dbPassword: db.dbPassword ?? "",
+      dbHost: db.host,
     });
 
-    // Update env vars with new DB credentials
+    // Update env vars with the linked database's credentials
     const envVars = [
-      { key: "DB_NAME", value: input.dbName },
-      { key: "DB_USER", value: input.dbUser },
-      { key: "DB_PASSWORD", value: input.dbPassword },
-      { key: "DB_HOST", value: input.dbHost },
+      { key: "DB_NAME", value: db.name },
+      { key: "DB_USER", value: db.dbUser },
+      { key: "DB_PASSWORD", value: db.dbPassword ?? "" },
+      { key: "DB_HOST", value: db.internalHost },
     ];
     await this.envService.bulkUpsert(userId, projectId, envVars);
 

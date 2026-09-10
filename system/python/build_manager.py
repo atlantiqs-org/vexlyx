@@ -26,7 +26,6 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -114,6 +113,14 @@ def get_docker_binary() -> str:
 
     fail("Docker CLI not found in PATH. Install Docker Engine or Docker Desktop.", "DOCKER_NOT_FOUND")
     return "docker"
+
+
+def get_docker_binary() -> str:
+    binary = shutil.which("docker")
+    if binary:
+        return binary
+    fail("Docker CLI not found in PATH. Install Docker Engine or Docker Desktop.", "DOCKER_NOT_FOUND")
+    return "docker"  # unreachable
 
 
 def find_dockerfile(project_dir: Path) -> Path | None:
@@ -702,157 +709,6 @@ def detect_php_project(project_dir: Path, plan: dict) -> tuple[str, str | None, 
     return None
 
 
-def generate_wp_salts() -> list[tuple[str, str]]:
-    """Generate 8 cryptographically secure WordPress salts."""
-    salt_names = [
-        "AUTH_KEY",
-        "SECURE_AUTH_KEY",
-        "LOGGED_IN_KEY",
-        "NONCE_KEY",
-        "AUTH_SALT",
-        "SECURE_AUTH_SALT",
-        "LOGGED_IN_SALT",
-        "NONCE_SALT",
-    ]
-    return [(name, secrets.token_urlsafe(48)) for name in salt_names]
-
-
-def generate_wp_config_content(
-    db_name: str = "wordpress",
-    db_user: str = "root",
-    db_password: str = "",
-    db_host: str = "localhost",
-    db_prefix: str = "wp_",
-) -> str:
-    salts = generate_wp_salts()
-    salt_definitions = "\n".join([f"define('{name}', '{val}');" for name, val in salts])
-
-    return f"""<?php
-/**
- * The base configuration for WordPress
- * Generated automatically by Vexlyx Control Panel (F2.4).
- */
-
-// ** Database settings ** //
-define('DB_NAME', '{db_name}');
-define('DB_USER', '{db_user}');
-define('DB_PASSWORD', '{db_password}');
-define('DB_HOST', '{db_host}');
-define('DB_CHARSET', 'utf8mb4');
-define('DB_COLLATE', '');
-
-/**#@+
- * Authentication unique keys and salts.
- */
-{salt_definitions}
-/**#@-*/
-
-/**
- * WordPress database table prefix.
- */
-$table_prefix = '{db_prefix}';
-
-/**
- * For developers: WordPress debugging mode.
- */
-define('WP_DEBUG', false);
-
-/**
- * Direct filesystem method — allows direct plugin and theme installs
- * without requiring FTP credentials inside containers.
- */
-define('FS_METHOD', 'direct');
-
-/**
- * Reverse proxy and SSL header handling for Traefik.
- */
-if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {{
-    $_SERVER['HTTPS'] = 'on';
-}}
-
-/* That's all, stop editing! Happy publishing. */
-
-/** Absolute path to the WordPress directory. */
-if (!defined('ABSPATH')) {{
-    define('ABSPATH', __DIR__ . '/');
-}}
-
-/** Sets up WordPress vars and included files. */
-require_once ABSPATH . 'wp-settings.php';
-"""
-
-
-def generate_wp_htaccess_content() -> str:
-    return """# BEGIN WordPress
-# The directives between "BEGIN WordPress" and "END WordPress" are
-# dynamically generated, and should only be modified via WordPress filters.
-<IfModule mod_rewrite.c>
-RewriteEngine On
-RewriteBase /
-RewriteRule ^index\\.php$ - [L]
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.php [L]
-</IfModule>
-# END WordPress
-"""
-
-
-def download_and_extract_wordpress_core(target_dir: Path) -> None:
-    """
-    Downloads official WordPress core tarball from wordpress.org and extracts to target_dir.
-    If offline or network fails, creates valid WordPress scaffolding.
-    """
-    target_dir.mkdir(parents=True, exist_ok=True)
-    wp_url = "https://wordpress.org/latest.tar.gz"
-
-    cache_dir = Path.home() / ".cache" / "vexlyx"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_tarball = cache_dir / "wordpress-latest.tar.gz"
-
-    download_needed = not cached_tarball.is_file() or cached_tarball.stat().st_size < 1000000
-
-    if download_needed:
-        try:
-            req = urllib.request.Request(
-                wp_url,
-                headers={"User-Agent": "Vexlyx-Control-Panel/1.0"},
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp, open(cached_tarball, "wb") as out_file:
-                shutil.copyfileobj(resp, out_file)
-        except Exception:
-            pass
-
-    if cached_tarball.is_file():
-        try:
-            with tarfile.open(cached_tarball, "r:gz") as tar:
-                for member in tar.getmembers():
-                    parts = Path(member.name).parts
-                    if len(parts) > 1 and parts[0] == "wordpress":
-                        rel_path = Path(*parts[1:])
-                        dest_path = target_dir / rel_path
-                        if member.isdir():
-                            dest_path.mkdir(parents=True, exist_ok=True)
-                        elif member.isfile():
-                            dest_path.parent.mkdir(parents=True, exist_ok=True)
-                            with tar.extractfile(member) as src_f, open(dest_path, "wb") as dst_f:
-                                if src_f:
-                                    shutil.copyfileobj(src_f, dst_f)
-            return
-        except Exception:
-            pass
-
-    # Fallback minimal scaffolding
-    (target_dir / "index.php").write_text("<?php\ndefine('WP_USE_THEMES', true);\nrequire __DIR__ . '/wp-blog-header.php';\n", encoding="utf-8")
-    (target_dir / "wp-blog-header.php").write_text("<?php\n// WordPress entrypoint\n", encoding="utf-8")
-    (target_dir / "wp-login.php").write_text("<?php\n// WordPress login\n", encoding="utf-8")
-    (target_dir / "wp-content" / "plugins").mkdir(parents=True, exist_ok=True)
-    (target_dir / "wp-content" / "themes").mkdir(parents=True, exist_ok=True)
-    (target_dir / "wp-content" / "uploads").mkdir(parents=True, exist_ok=True)
-    (target_dir / "wp-includes").mkdir(parents=True, exist_ok=True)
-    (target_dir / "wp-includes" / "version.php").write_text("<?php\n$wp_version = '6.7.2';\n", encoding="utf-8")
-
-
 def safe_extract_zip(zip_path: Path, target_dir: Path) -> int:
     """Safely extracts a ZIP archive into target_dir preventing path traversal."""
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -1245,6 +1101,17 @@ def cmd_build(payload: dict) -> None:
     if not build_cmd and detected_build:
         build_cmd = detected_build
 
+    # Nixpacks' own PHP provider only recognizes a project as PHP when a
+    # composer.json is present -- unlike our own detect_php_project(), which
+    # also accepts bare .php files with no framework/dependencies. Without
+    # this, a "pure PHP" project (plain .php files, no composer.json) passes
+    # Vexlyx's own plan/detect step but then fails nixpacks' real build with
+    # "unable to generate a build plan". Bridge the gap with an empty
+    # composer.json so nixpacks can build it like any other PHP app.
+    if detected_type in ("PHP", "WORDPRESS") and not (project_path / "composer.json").is_file():
+        (project_path / "composer.json").write_text("{}\n", encoding="utf-8")
+        log_line("[vexlyx] No composer.json found — created a minimal one so Nixpacks can build this PHP project")
+
     # For Python projects, ensure setuptools<70 is installed into venv
     if detected_type == "PYTHON" and not install_cmd:
         if (project_path / "requirements.txt").is_file():
@@ -1335,50 +1202,94 @@ def cmd_build(payload: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Static build-output extraction (F5.7)
+# ---------------------------------------------------------------------------
+
+STATIC_OUTPUT_DIR_CANDIDATES = ["dist", "build", "out", "public"]
+
+
+def cmd_extract_static_output(payload: dict) -> None:
+    """
+    Pull a STATIC/REACT project's built output directory out of a throwaway
+    Nixpacks-built image, then discard the image -- the image itself is never
+    deployed; only its build output is served (by a fixed nginx:alpine).
+
+    Payload fields:
+      projectDir -- absolute path to the project source
+      imageName  -- the Nixpacks image built by a prior `build` command
+
+    Returns: { success: true, staticOutputDir: "<projectDir>/deploy/static-output" }
+    """
+    project_dir = Path(require_field(payload, "projectDir"))
+    image_name = require_field(payload, "imageName")
+    docker_bin = get_docker_binary()
+
+    output_dir = project_dir / "deploy" / "static-output"
+    if output_dir.is_dir():
+        shutil.rmtree(output_dir, ignore_errors=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    create_result = subprocess.run(
+        [docker_bin, "create", image_name],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if create_result.returncode != 0:
+        fail(
+            f"Failed to create container from {image_name}: {create_result.stderr.strip()}",
+            "STATIC_EXTRACT_CREATE_FAILED",
+        )
+        return
+
+    container_id = create_result.stdout.strip()
+    copied = False
+    try:
+        for candidate in STATIC_OUTPUT_DIR_CANDIDATES:
+            cp_result = subprocess.run(
+                [docker_bin, "cp", f"{container_id}:/app/{candidate}/.", str(output_dir)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if cp_result.returncode == 0:
+                log_line(f"[vexlyx] Extracted static build output from /app/{candidate}")
+                copied = True
+                break
+    finally:
+        subprocess.run([docker_bin, "rm", "-f", container_id], capture_output=True)
+        subprocess.run([docker_bin, "rmi", "-f", image_name], capture_output=True)
+
+    if not copied:
+        fail(
+            f"Could not find a build output directory ({', '.join(STATIC_OUTPUT_DIR_CANDIDATES)}) in {image_name}",
+            "STATIC_EXTRACT_NO_OUTPUT_DIR",
+        )
+        return
+
+    respond({"success": True, "staticOutputDir": str(output_dir.resolve())})
+
+
+# ---------------------------------------------------------------------------
 # WordPress One-Click Scaffolding & Asset Upload Commands (F2.4)
 # ---------------------------------------------------------------------------
 
 def cmd_wordpress_install(payload: dict) -> None:
     """
-    Scaffold a WordPress installation:
-    1. Downloads official WordPress core (if requested/needed).
-    2. Generates secure wp-config.php with cryptographically secure salts.
-    3. Creates .htaccess rewrite rules for permalinks.
-    4. Sets up wp-content directories.
+    Scaffold a WordPress project's wp-content directory (F5.7).
+
+    WordPress core now ships inside the official wordpress:php8.3-fpm-alpine
+    image (see system/templates/docker-compose/wordpress.yml); only
+    wp-content is user data that lives on the host. DB credentials are no
+    longer written to a host-side wp-config.php -- they flow into the
+    container purely as WORDPRESS_DB_* environment variables at deploy time.
     """
     project_dir = require_field(payload, "projectDir")
     target_path = Path(project_dir)
     target_path.mkdir(parents=True, exist_ok=True)
 
-    db_name = payload.get("dbName", "wordpress")
-    db_user = payload.get("dbUser", "root")
-    db_password = payload.get("dbPassword", "")
-    db_host = payload.get("dbHost", "localhost")
-    db_prefix = payload.get("dbPrefix", "wp_")
-    download_core = payload.get("downloadCore", True)
-
-    # 1. Download/extract core if needed
-    if download_core:
-        has_core = (target_path / "wp-login.php").is_file() and (target_path / "wp-includes").is_dir()
-        if not has_core:
-            download_and_extract_wordpress_core(target_path)
-
-    # 2. Write wp-config.php
-    wp_config_content = generate_wp_config_content(
-        db_name=db_name,
-        db_user=db_user,
-        db_password=db_password,
-        db_host=db_host,
-        db_prefix=db_prefix,
-    )
-    (target_path / "wp-config.php").write_text(wp_config_content, encoding="utf-8")
-
-    # 3. Write .htaccess for permalinks
-    htaccess_file = target_path / ".htaccess"
-    if not htaccess_file.is_file():
-        htaccess_file.write_text(generate_wp_htaccess_content(), encoding="utf-8")
-
-    # 4. Ensure wp-content subdirectories exist
     (target_path / "wp-content" / "plugins").mkdir(parents=True, exist_ok=True)
     (target_path / "wp-content" / "themes").mkdir(parents=True, exist_ok=True)
     (target_path / "wp-content" / "uploads").mkdir(parents=True, exist_ok=True)
@@ -1386,8 +1297,7 @@ def cmd_wordpress_install(payload: dict) -> None:
     respond({
         "success": True,
         "projectDir": str(target_path.resolve()),
-        "hasWpConfig": True,
-        "hasHtaccess": True,
+        "wpContentDir": str((target_path / "wp-content").resolve()),
     })
 
 
@@ -1434,23 +1344,19 @@ def cmd_wordpress_upload(payload: dict) -> None:
 
 def cmd_wordpress_status(payload: dict) -> None:
     """
-    Inspect WordPress installation status, core version, plugins, and themes.
+    Inspect WordPress installation status, plugins, and themes.
+
+    F5.7: WordPress core no longer lives on the host (it ships inside the
+    wordpress:php8.3-fpm-alpine image), so "installed" is judged by whether
+    wp-content has been scaffolded, and coreVersion can't be read from a
+    host file anymore -- it requires a live container query, out of scope
+    here, so it's reported as "unknown".
     """
     project_dir = require_field(payload, "projectDir")
     target_path = Path(project_dir)
 
-    is_installed = (target_path / "wp-config.php").is_file() or (target_path / "wp-login.php").is_file()
-
+    is_installed = (target_path / "wp-content" / "plugins").is_dir()
     core_version = "unknown"
-    version_file = target_path / "wp-includes" / "version.php"
-    if version_file.is_file():
-        try:
-            content = version_file.read_text(encoding="utf-8")
-            m = re.search(r"\$wp_version\s*=\s*['\"]([^'\"]+)['\"]", content)
-            if m:
-                core_version = m.group(1)
-        except Exception:
-            pass
 
     plugins: list[str] = []
     plugins_dir = target_path / "wp-content" / "plugins"
@@ -1561,55 +1467,54 @@ def cmd_dockerfile_save(payload: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_wordpress_export(payload: dict) -> None:
+    """
+    Export a WordPress project (F5.7: wp-content + a fresh DB dump only --
+    core is reproducible from the wordpress:php8.3-fpm-alpine image and
+    doesn't need to be exported). DB credentials come directly from the
+    payload (the API resolves them from the project's linked F2.6 Database
+    record) since there is no host-side wp-config.php to parse anymore.
+    """
     project_dir = Path(require_field(payload, "projectDir"))
     export_dir = Path(require_field(payload, "exportDir"))
     tar_path = Path(require_field(payload, "tarPath"))
+    db_name = require_field(payload, "dbName")
+    db_user = require_field(payload, "dbUser")
+    db_password = payload.get("dbPassword", "")
+    db_host = require_field(payload, "dbHost")
 
-    if not project_dir.is_dir():
-        fail(f"Project directory not found: {project_dir}", "WP_DIR_NOT_FOUND")
+    wp_content_dir = project_dir / "wp-content"
+    if not wp_content_dir.is_dir():
+        fail(f"wp-content directory not found: {wp_content_dir}", "WP_DIR_NOT_FOUND")
 
     export_dir.mkdir(parents=True, exist_ok=True)
 
-    # Read DB credentials from wp-config.php
-    wp_config = project_dir / "wp-config.php"
-    db_name = db_user = db_password = db_host = ""
-    if wp_config.is_file():
-        content = wp_config.read_text(encoding="utf-8", errors="replace")
-        for var, attr in [("DB_NAME", "db_name"), ("DB_USER", "db_user"),
-                          ("DB_PASSWORD", "db_password"), ("DB_HOST", "db_host")]:
-            m = re.search(rf"define\s*\(\s*['\"]{var}['\"]\s*,\s*['\"]([^'\"]*)['\"]", content)
-            if m:
-                val = m.group(1)
-                if attr == "db_name": db_name = val
-                elif attr == "db_user": db_user = val
-                elif attr == "db_password": db_password = val
-                elif attr == "db_host": db_host = val.split(":")[0]
-
     # Dump database
     sql_path = export_dir / "database.sql"
-    if db_name and db_user:
-        try:
-            mysqldump_cmd = [
-                "mysqldump",
-                f"--host={db_host or 'localhost'}",
-                f"--user={db_user}",
-                f"--password={db_password}",
-                "--single-transaction",
-                "--routines",
-                "--triggers",
-                db_name,
-            ]
-            result = subprocess.run(mysqldump_cmd, capture_output=True)
-            if result.returncode == 0:
-                sql_path.write_bytes(result.stdout)
-        except Exception:
-            pass  # Continue export without DB dump
+    try:
+        mysqldump_cmd = [
+            "mysqldump",
+            f"--host={db_host}",
+            f"--user={db_user}",
+            f"--password={db_password}",
+            "--single-transaction",
+            "--routines",
+            "--triggers",
+            db_name,
+        ]
+        result = subprocess.run(mysqldump_cmd, capture_output=True)
+        if result.returncode == 0:
+            sql_path.write_bytes(result.stdout)
+        else:
+            fail(f"mysqldump failed: {result.stderr.decode(errors='replace')}", "WP_DB_DUMP_FAILED")
+            return
+    except FileNotFoundError:
+        fail("mysqldump is not installed or not in PATH", "WP_MYSQLDUMP_NOT_FOUND")
+        return
 
-    # Create tar.gz: project files + optional SQL dump
+    # Create tar.gz: wp-content + SQL dump
     with tarfile.open(tar_path, "w:gz") as tar:
-        tar.add(project_dir, arcname="files")
-        if sql_path.is_file():
-            tar.add(sql_path, arcname="database.sql")
+        tar.add(wp_content_dir, arcname="wp-content")
+        tar.add(sql_path, arcname="database.sql")
 
     respond({"success": True, "tarPath": str(tar_path)})
 
@@ -1619,14 +1524,21 @@ def cmd_wordpress_export(payload: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_wordpress_import(payload: dict) -> None:
+    """
+    Import a WordPress export (F5.7: restores wp-content + the DB dump only;
+    core comes from the wordpress:php8.3-fpm-alpine image). DB credentials
+    come from the payload (the API resolves them from the project's linked
+    F2.6 Database record) -- no wp-config.php is written; the container
+    picks up WORDPRESS_DB_* env vars at deploy time instead.
+    """
     project_dir = Path(require_field(payload, "projectDir"))
     tar_path_str = require_field(payload, "tarPath")
     tar_path = Path(tar_path_str)
 
-    db_name = payload.get("dbName", "wordpress")
-    db_user = payload.get("dbUser", "root")
+    db_name = require_field(payload, "dbName")
+    db_user = require_field(payload, "dbUser")
     db_password = payload.get("dbPassword", "")
-    db_host = payload.get("dbHost", "localhost")
+    db_host = require_field(payload, "dbHost")
 
     if not tar_path.is_file():
         fail(f"Uploaded archive not found: {tar_path}", "WP_TAR_NOT_FOUND")
@@ -1657,12 +1569,15 @@ def cmd_wordpress_import(payload: dict) -> None:
 
         tar.extractall(path=extract_tmp, members=safe_members)
 
-    # Move extracted files into project dir
-    files_src = extract_tmp / "files"
-    if files_src.is_dir():
-        shutil.copytree(str(files_src), str(project_dir), dirs_exist_ok=True)
-    else:
-        shutil.copytree(str(extract_tmp), str(project_dir), dirs_exist_ok=True)
+    # Move extracted wp-content into the project's wp-content dir
+    wp_content_dest = project_dir / "wp-content"
+    files_src = extract_tmp / "wp-content"
+    if not files_src.is_dir():
+        # Backward-compat: older exports (pre-F5.7) tarred the whole
+        # project under "files", with wp-content nested inside it.
+        legacy_src = extract_tmp / "files" / "wp-content"
+        files_src = legacy_src if legacy_src.is_dir() else extract_tmp
+    shutil.copytree(str(files_src), str(wp_content_dest), dirs_exist_ok=True)
 
     # Import SQL dump if present
     sql_candidates = list(extract_tmp.glob("**/*.sql"))
@@ -1681,17 +1596,6 @@ def cmd_wordpress_import(payload: dict) -> None:
         except Exception as e:
             fail(f"SQL import failed: {e}", "WP_SQL_IMPORT_FAILED")
 
-    # Write fresh wp-config.php with new credentials
-    wp_config_path = project_dir / "wp-config.php"
-    if not wp_config_path.is_file() or db_name:
-        wp_config_content = generate_wp_config_content(
-            db_name=db_name,
-            db_user=db_user,
-            db_password=db_password,
-            db_host=db_host,
-        )
-        wp_config_path.write_text(wp_config_content, encoding="utf-8")
-
     # Clean up temp extraction
     shutil.rmtree(str(extract_tmp), ignore_errors=True)
 
@@ -1705,6 +1609,7 @@ def cmd_wordpress_import(payload: dict) -> None:
 COMMANDS = {
     "plan": cmd_plan,
     "build": cmd_build,
+    "extract-static-output": cmd_extract_static_output,
     "wordpress-install": cmd_wordpress_install,
     "wordpress-upload": cmd_wordpress_upload,
     "wordpress-status": cmd_wordpress_status,
