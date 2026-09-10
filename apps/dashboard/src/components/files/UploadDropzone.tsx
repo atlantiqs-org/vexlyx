@@ -16,7 +16,7 @@ interface UploadDropzoneProps {
   className?: string;
 }
 
-const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+const MAX_BYTES = 1000 * 1024 * 1024; // 1000 MB
 
 // ---------------------------------------------------------------------------
 // Component
@@ -33,7 +33,7 @@ export function UploadDropzone({
   const uploadFiles = async (files: File[]) => {
     const oversized = files.filter((f) => f.size > MAX_BYTES);
     if (oversized.length > 0) {
-      toast.error(`${oversized.map((f) => f.name).join(", ")} exceeds 100 MB limit`);
+      toast.error(`${oversized.map((f) => f.name).join(", ")} exceeds 1000 MB limit`);
     }
 
     const valid = files.filter((f) => f.size <= MAX_BYTES);
@@ -104,7 +104,7 @@ export function UploadDropzone({
       />
       <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
       <p className="text-sm text-foreground font-medium">Drop files here or click to upload</p>
-      <p className="text-xs text-muted-foreground mt-1">Max 100 MB per file</p>
+      <p className="text-xs text-muted-foreground mt-1">Max 1000 MB per file</p>
     </div>
   );
 }
