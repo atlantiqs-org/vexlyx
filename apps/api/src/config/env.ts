@@ -67,7 +67,7 @@ const envSchema = z.object({
   WEBMAIL_PORT: z.coerce.number().int().default(8089),
   WEBMAIL_CONTAINER_NAME: z.string().min(1).default("vexlyx-roundcube"),
   // File Manager & SFTP (F2.8)
-  FILE_UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(500).default(100),
+  FILE_UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(1000).default(1000),
   SFTP_HOST: z.string().min(1).default("0.0.0.0"),
   SFTP_PORT: z.coerce.number().int().default(22),
   // Backup System (F5.3) — these are only first-boot defaults for the
