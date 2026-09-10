@@ -59,9 +59,10 @@ When a domain is verified, Vexlyx generates a dynamic router configuration in `d
      - **Type**: `TXT`
      - **Host**: `_vexlyx-challenge.<hostname>`
      - **Value**: `vexlyx-verification=<token>`
+     - Plus a `routingRecord` (an `A` record: `<hostname>` → the server's public IP, from F5.9's `PUBLIC_IP`) — TXT verification only proves ownership, it doesn't route traffic. Found live: a domain that verified successfully still showed nothing when visited, because nothing told the admin an A record was also needed. `DomainPanel.tsx`'s DNS Instructions modal now shows both.
 
 2. **DNS Ownership Verification (`POST /api/domains/:id/verify`)**:
-   - Performs asynchronous DNS TXT queries via Node's `dns.promises.resolveTxt` against `_vexlyx-challenge.<hostname>` and `<hostname>`.
+   - Queries `_vexlyx-challenge.<hostname>` and `<hostname>` directly against a few public resolvers (Cloudflare/Google/Quad9 — `new dns.Resolver()` + `setServers()`, not the server's own configured resolver) — found live that a premature "Verify" click could get the server's local/cloud-provider resolver to negative-cache a lookup for up to the zone's SOA TTL (observed: 1 hour on an AWS VPC resolver), making a genuinely-published record look missing long after it actually propagated. Any one public resolver seeing the record is enough.
    - If matching token is detected:
      - Domain status updated to `ACTIVE`.
      - Invokes `syncTraefikRouter(domain)`.
@@ -118,7 +119,12 @@ When a domain is verified, Vexlyx generates a dynamic router configuration in `d
     "verificationInstructions": {
       "recordType": "TXT",
       "recordName": "_vexlyx-challenge.app.example.com",
-      "recordValue": "vexlyx-verification=vexlyx-verify-a1b2c3d4..."
+      "recordValue": "vexlyx-verification=vexlyx-verify-a1b2c3d4...",
+      "routingRecord": {
+        "recordType": "A",
+        "recordName": "app.example.com",
+        "publicIp": "203.0.113.10"
+      }
     }
   }
   ```
@@ -170,6 +176,9 @@ pnpm lint        # Validates ESLint rules
 pnpm build       # Validates Next.js and API production builds
 ```
 
+### Live Verification
+Confirmed end-to-end on `panel.mindgera.site`: attached `html.mindgera.site` to a deployed project, verified via TXT (public-resolver check), added the now-surfaced A record, and confirmed it serves trusted HTTPS alongside the project's own default subdomain (F5.10) — both routes work simultaneously without interfering with each other.
+
 ---
 
 ## 5. UI Integration
@@ -183,4 +192,6 @@ pnpm build       # Validates Next.js and API production builds
 
 1. **Dedicated Verification Token**: Added `verificationToken String? @map("verification_token")` directly to `Domain` model via Prisma migration `20260902184554_add_domain_verification_token` to guarantee cryptographic unicity and fast indexing.
 2. **Traefik Dynamic File Provider**: Utilized Traefik's dynamic file provider (`docker/traefik/dynamic/`) rather than editing container labels. This enables zero-downtime instant routing attachment and detachment without restarting or redeploying the application container.
-3. **No External DNS Dependencies**: Implemented DNS resolution using Node's built-in `dns.promises.resolveTxt` and crypto generation using `node:crypto`.
+3. **No External DNS Dependencies**: Implemented DNS resolution using Node's built-in `dns` module and crypto generation using `node:crypto`.
+4. **Query public resolvers directly, not the server's own** (added after live-server testing on `panel.mindgera.site`): originally used the default `dns.promises.resolveTxt`, which trusts whatever resolver the host has configured. A cloud provider's local resolver can negative-cache an early failed lookup (e.g. a "Verify" click before DNS propagated) for a long time — observed up to an hour on AWS — even after the record is genuinely live everywhere else. Switched to explicitly querying Cloudflare/Google/Quad9, matching the pattern F3.3's `dns-service.ts checkPropagation()` already used.
+5. **Surface the required A record, not just TXT** (same live-testing pass): TXT verification proves ownership but was the *only* thing shown to the admin — a verified domain with no A record just renders nothing, with no indication why. `verificationInstructions` now always includes a `routingRecord` (A record host + the server's public IP from F5.9), and the dashboard's DNS Instructions modal shows it alongside the TXT record.

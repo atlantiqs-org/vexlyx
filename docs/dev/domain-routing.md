@@ -67,10 +67,10 @@ No changes were needed in `docker_manager.py`, `apps/api/src/modules/domains/ser
 
 ## How to Test
 
-1. Deploy a fresh project with no custom domain attached, in production → its default subdomain loads over HTTPS with a valid Let's Encrypt cert (was previously unreachable).
+1. Deploy a fresh project with no custom domain attached, in production → its default subdomain loads over HTTPS with a valid Let's Encrypt cert (was previously unreachable). ✅ Verified live on `panel.mindgera.site` (STATIC and WORDPRESS projects).
 2. Open the project's page in the dashboard → "Endpoint / Domain" links to `https://<subdomain>`; "Host Port" is plain text, not a link.
-3. Attach a custom `Domain` to the project and wait for it to go `ACTIVE` → the dashboard's view link switches to the custom domain; the default subdomain still works too (unaffected regression check).
-4. Deploy one project of each type (Next.js, Node, Python, PHP, static/React, WordPress, custom Dockerfile) → confirm each gets a working `-secure` router (`docker inspect <container> --format '{{json .Config.Labels}}'` or the Traefik dashboard's router list).
+3. Attach a custom `Domain` to the project and wait for it to go `ACTIVE` → the dashboard's view link switches to the custom domain; the default subdomain still works too (unaffected regression check). ✅ Verified live — `html.mindgera.site` and `static-app.panel.mindgera.site` both serve trusted HTTPS from the same project simultaneously.
+4. Deploy one project of each type (Next.js, Node, Python, PHP, static/React, WordPress, custom Dockerfile) → confirm each gets a working `-secure` router (`docker inspect <container> --format '{{json .Config.Labels}}'` or the Traefik dashboard's router list). Confirmed live for STATIC and WORDPRESS; the rest were verified via local template rendering only (see F5.10 in FEATURES.md).
 5. In dev (`docker-compose up`), confirm nothing regressed — `http://*.vexlyx.localhost` project subdomains still load exactly as before.
 
 ---
