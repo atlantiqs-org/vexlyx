@@ -10,6 +10,7 @@ import {
   Copy,
   Check,
   RefreshCw,
+  RotateCw,
   Eye,
   EyeOff,
   ShieldCheck,
@@ -22,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useGitSettings } from "@/hooks/useGitSettings";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import { ConnectRepoSchema } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -119,17 +121,13 @@ export function GitSettings({
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isRotatingSecret, setIsRotatingSecret] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
+  const handleRefresh = () =>
+    refresh(async () => {
       await fetchMetadata();
       toast.success("Git settings refreshed");
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  };
+    });
 
   // Fetch git metadata on mount so SSH key + webhook URL are populated.
   useEffect(() => {
@@ -216,12 +214,7 @@ export function GitSettings({
               onClick={() => void handleRefresh()}
               disabled={isRefreshing || state.isLoading}
             >
-              <RefreshCw
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-500",
-                  (isRefreshing || state.isLoading) && "animate-spin text-indigo-500",
-                )}
-              />
+              <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
             </Button>
           </div>
           <CardDescription className="text-xs">
@@ -321,7 +314,7 @@ export function GitSettings({
             {isGeneratingKey ? (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              <KeyRound className="mr-2 h-3.5 w-3.5" />
             )}
             {metadata?.sshPublicKey ? "Regenerate SSH Key" : "Generate SSH Key"}
           </Button>
@@ -433,7 +426,7 @@ export function GitSettings({
                     {isRotatingSecret ? (
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                      <RotateCw className="mr-1.5 h-3.5 w-3.5" />
                     )}
                     Regenerate
                   </Button>

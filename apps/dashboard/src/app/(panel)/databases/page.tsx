@@ -48,6 +48,7 @@ import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { useUsage } from "@/hooks/useUsage";
 import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DatabaseDetail, DatabaseType, Project } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -99,7 +100,7 @@ export default function DatabasesPage() {
   const [databases, setDatabases] = useState<DatabaseDetail[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
   const [search, setSearch] = useState("");
   const [engineFilter, setEngineFilter] = useState<"ALL" | DatabaseType>("ALL");
 
@@ -157,15 +158,11 @@ export default function DatabasesPage() {
     }
   }, []);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
+  const handleRefresh = () =>
+    refresh(async () => {
       await fetchData(true);
       toast.success("Databases refreshed");
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  };
+    });
 
   useEffect(() => {
     void fetchData();
@@ -415,9 +412,7 @@ export default function DatabasesPage() {
             aria-label="Refresh database list"
             className="border-border text-muted-foreground hover:text-foreground"
           >
-            <RefreshCw
-              className={cn("h-4 w-4 transition-transform", isRefreshing && "animate-spin text-primary")}
-            />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-4 w-4")} />
           </Button>
         </div>
       </div>

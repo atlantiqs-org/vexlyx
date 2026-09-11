@@ -8,22 +8,15 @@ import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { useProjects } from "@/hooks/useProjects";
 import { useUsage } from "@/hooks/useUsage";
 import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
-import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 
 export default function ProjectsPage() {
   const { projects, isLoading, error, createProject, refetch } = useProjects();
   const { usage, isLoading: isUsageLoading } = useUsage();
   const [modalOpen, setModalOpen] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  };
+  const handleRefresh = () => refresh(() => refetch());
 
   return (
     <div className="space-y-6">
@@ -46,12 +39,7 @@ export default function ProjectsPage() {
             aria-label="Refresh projects"
             title="Refresh projects"
           >
-            <RefreshCw
-              className={cn(
-                "h-4 w-4 transition-transform duration-500",
-                (isLoading || isRefreshing) && "animate-spin text-indigo-500",
-              )}
-            />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-4 w-4")} />
           </Button>
           <Button
             id="new-project-btn"

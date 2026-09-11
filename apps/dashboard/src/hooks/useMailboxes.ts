@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useRefreshAnimation } from "@/hooks/useRefreshAnimation";
 import type { MailboxResponse, CreateMailboxInput, QuotaPreset } from "@vexlyx/shared";
 
 export function useMailboxes() {
   const [mailboxes, setMailboxes] = useState<MailboxResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh: runRefresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   const fetchMailboxes = useCallback(async () => {
@@ -23,10 +24,8 @@ export function useMailboxes() {
   }, []);
 
   const refresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await fetchMailboxes();
-    setIsRefreshing(false);
-  }, [fetchMailboxes]);
+    await runRefresh(() => fetchMailboxes());
+  }, [fetchMailboxes, runRefresh]);
 
   useEffect(() => {
     void fetchMailboxes();

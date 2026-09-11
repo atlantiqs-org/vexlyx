@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { Project, DockerfileStatus, DockerfileTemplate } from "@vexlyx/shared";
 
 interface DockerfilePanelProps {
@@ -43,7 +44,7 @@ export function DockerfilePanel({ project, onProjectUpdate, onDeployTrigger }: D
   const [dockerfileContent, setDockerfileContent] = useState("");
   const [dockerignoreContent, setDockerignoreContent] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [portInput, setPortInput] = useState<string>(project.port?.toString() ?? "3000");
@@ -78,11 +79,7 @@ export function DockerfilePanel({ project, onProjectUpdate, onDeployTrigger }: D
     void fetchDockerfileData();
   }, [fetchDockerfileData]);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchDockerfileData();
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
+  const handleRefresh = () => refresh(() => fetchDockerfileData());
 
   const handleApplyTemplate = (tmpl: DockerfileTemplate) => {
     setDockerfileContent(tmpl.dockerfile);
@@ -187,11 +184,11 @@ export function DockerfilePanel({ project, onProjectUpdate, onDeployTrigger }: D
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRefresh}
+              onClick={() => void handleRefresh()}
               disabled={isRefreshing || isLoading}
               className="h-8 px-2.5 text-xs"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", isRefreshing && "animate-spin")} />
+              <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5 mr-1.5")} />
               Refresh
             </Button>
 

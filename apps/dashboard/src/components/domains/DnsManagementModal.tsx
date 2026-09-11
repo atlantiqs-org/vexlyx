@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { useDnsRecords } from "@/hooks/useDnsRecords";
 import { cn } from "@/lib/utils";
+import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type {
   DomainResponse,
   DnsRecordResponse,
@@ -371,7 +372,7 @@ export function DnsManagementModal({
                   className="h-8 px-2.5 text-xs gap-1.5"
                   title="Refresh records"
                 >
-                  <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+                  <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
                   Refresh
                 </Button>
 

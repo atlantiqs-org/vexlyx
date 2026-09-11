@@ -53,6 +53,7 @@ import {
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { useDnsRecords } from "@/hooks/useDnsRecords";
 import { cn } from "@/lib/utils";
+import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type {
   DomainResponse,
   DnsRecordResponse,
@@ -420,7 +421,7 @@ export default function DomainDnsPage() {
             disabled={isRefreshing || isRecordsLoading}
             className="h-8 text-xs gap-1.5"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
             Refresh
           </Button>
 

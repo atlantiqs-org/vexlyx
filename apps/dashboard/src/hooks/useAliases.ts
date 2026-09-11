@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useRefreshAnimation } from "@/hooks/useRefreshAnimation";
 import type { AliasResponse, CreateAliasInput } from "@vexlyx/shared";
 
 export function useAliases() {
   const [aliases, setAliases] = useState<AliasResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh: runRefresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   const fetchAliases = useCallback(async () => {
@@ -23,10 +24,8 @@ export function useAliases() {
   }, []);
 
   const refresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await fetchAliases();
-    setIsRefreshing(false);
-  }, [fetchAliases]);
+    await runRefresh(() => fetchAliases());
+  }, [fetchAliases, runRefresh]);
 
   useEffect(() => {
     void fetchAliases();

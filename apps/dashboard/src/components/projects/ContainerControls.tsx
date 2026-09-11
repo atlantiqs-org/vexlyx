@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import { LogViewer } from "@/components/projects/LogViewer";
 import { useRuntimeLogs } from "@/hooks/useLogs";
 import { useContainerAction, useContainerStatus } from "@/hooks/useDeploy";
@@ -43,7 +44,7 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
     project.id,
     Boolean(project.containerId),
   );
-  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+  const { isRefreshing: isRefreshingStatus, refresh: refreshStatusAnimation } = useRefreshAnimation();
   const [showLogs, setShowLogs] = useState(false);
 
   // F5.10: default subdomains now get real HTTPS routing, so prefer an
@@ -53,15 +54,11 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
   const activeDomain = domains.find((d) => d.status === "ACTIVE");
   const viewDomain = activeDomain?.hostname ?? project.deployedDomain;
 
-  const handleRefreshStatus = async () => {
-    setIsRefreshingStatus(true);
-    try {
+  const handleRefreshStatus = () =>
+    refreshStatusAnimation(async () => {
       await refetchStatus();
       toast.success("Container status refreshed");
-    } finally {
-      setTimeout(() => setIsRefreshingStatus(false), 600);
-    }
-  };
+    });
 
   // Real-time runtime logs via Socket.io
   const { lines: runtimeLines, isConnected: logsConnected, clear: clearLogs } = useRuntimeLogs(
@@ -145,12 +142,7 @@ export function ContainerControls({ project, onProjectUpdate }: ContainerControl
                 onClick={() => void handleRefreshStatus()}
                 disabled={isRefreshingStatus}
               >
-                <RefreshCw
-                  className={cn(
-                    "h-3 w-3 transition-transform duration-500",
-                    isRefreshingStatus && "animate-spin text-indigo-500",
-                  )}
-                />
+                <RefreshCw className={refreshIconClassName(isRefreshingStatus, "h-3 w-3")} />
               </Button>
             )}
           </div>

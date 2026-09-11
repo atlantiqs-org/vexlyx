@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWebmail } from "@/hooks/useWebmail";
 import { cn } from "@/lib/utils";
+import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 
 export function WebmailPanel() {
   const { status, isLoading, isRefreshing, refresh } = useWebmail();
@@ -58,7 +59,7 @@ export function WebmailPanel() {
                   onClick={() => void refresh()}
                   disabled={isRefreshing}
                 >
-                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                  <RefreshCw className={refreshIconClassName(isRefreshing, "h-4 w-4")} />
                   Refresh
                 </Button>
                 <Button

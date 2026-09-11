@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useRefreshAnimation } from "@/hooks/useRefreshAnimation";
 import type {
   DomainResponse,
   CreateDomainInput,
@@ -19,7 +20,7 @@ export function useDomains(options: UseDomainsOptions = {}) {
   const { projectId, parentId, rootOnly, autoFetch = true } = options;
   const [domains, setDomains] = useState<DomainResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh: runRefresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   const fetchDomains = useCallback(
@@ -42,7 +43,6 @@ export function useDomains(options: UseDomainsOptions = {}) {
         setError(message);
       } finally {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     },
     [projectId, parentId, rootOnly],
@@ -56,8 +56,7 @@ export function useDomains(options: UseDomainsOptions = {}) {
   }, [autoFetch, fetchDomains]);
 
   const refresh = async () => {
-    setIsRefreshing(true);
-    await fetchDomains(true);
+    await runRefresh(() => fetchDomains(true));
   };
 
   const createDomain = async (input: CreateDomainInput): Promise<DomainResponse> => {
