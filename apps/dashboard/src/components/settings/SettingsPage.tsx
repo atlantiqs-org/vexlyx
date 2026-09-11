@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDnsInfo } from "@/hooks/useDnsInfo";
 import { ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DnsRecordVerification } from "@vexlyx/shared";
 
 /**
@@ -50,7 +51,7 @@ export function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  const [isRefreshingDns, setIsRefreshingDns] = useState(false);
+  const { isRefreshing: isRefreshingDns, refresh: refreshDnsAnimation } = useRefreshAnimation();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -82,14 +83,7 @@ export function SettingsPage() {
     }
   };
 
-  const handleRefreshDns = async () => {
-    setIsRefreshingDns(true);
-    try {
-      await refreshDns();
-    } finally {
-      setTimeout(() => setIsRefreshingDns(false), 600);
-    }
-  };
+  const handleRefreshDns = () => refreshDnsAnimation(() => refreshDns());
 
   const copyRecord = (text: string, index: number) => {
     void navigator.clipboard.writeText(text);
@@ -226,7 +220,7 @@ export function SettingsPage() {
               onClick={() => void handleRefreshDns()}
               disabled={isRefreshingDns || isDnsLoading}
             >
-              <RefreshCw className={cn("h-4 w-4", isRefreshingDns && "animate-spin")} />
+              <RefreshCw className={refreshIconClassName(isRefreshingDns, "h-4 w-4")} />
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">

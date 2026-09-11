@@ -55,6 +55,7 @@ import { useUsage } from "@/hooks/useUsage";
 import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { SubdomainModal } from "@/components/domains/SubdomainModal";
 import { cn } from "@/lib/utils";
+import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DomainResponse, DomainStatus } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -313,7 +314,7 @@ export default function DomainsPage() {
             disabled={isRefreshing || isLoading}
             className="h-9 gap-1.5 text-xs font-medium"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
             Refresh
           </Button>
 

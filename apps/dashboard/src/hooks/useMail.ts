@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useRefreshAnimation } from "@/hooks/useRefreshAnimation";
 import type {
   SmtpStatusResponse,
   VirtualDomain,
@@ -16,7 +17,7 @@ export function useMail() {
   const [domains, setDomains] = useState<VirtualDomain[]>([]);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isLoadingDomains, setIsLoadingDomains] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh: runRefresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
@@ -44,10 +45,8 @@ export function useMail() {
   }, []);
 
   const refreshAll = useCallback(async () => {
-    setIsRefreshing(true);
-    await Promise.all([fetchStatus(), fetchDomains()]);
-    setIsRefreshing(false);
-  }, [fetchStatus, fetchDomains]);
+    await runRefresh(() => Promise.all([fetchStatus(), fetchDomains()]));
+  }, [fetchStatus, fetchDomains, runRefresh]);
 
   useEffect(() => {
     void fetchStatus();

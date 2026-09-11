@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { FileNode } from "@vexlyx/shared";
 
 interface FileManagerCardProps {
@@ -16,11 +16,10 @@ interface FileManagerCardProps {
 export function FileManagerCard({ projectId }: FileManagerCardProps) {
   const [recentFiles, setRecentFiles] = useState<FileNode[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
-  const loadFiles = useCallback(async (refresh = false) => {
-    if (refresh) setIsRefreshing(true);
-    else setIsLoading(true);
+  const loadFilesInternal = useCallback(async (isManual = false) => {
+    if (!isManual) setIsLoading(true);
 
     try {
       const res = await fetchAPI<{ nodes: FileNode[] }>(
@@ -43,9 +42,16 @@ export function FileManagerCard({ projectId }: FileManagerCardProps) {
       // Silently fail — project may not have files yet
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   }, [projectId]);
+
+  const loadFiles = useCallback(
+    (isManual = false) => {
+      if (isManual) return refresh(() => loadFilesInternal(true));
+      return loadFilesInternal(false);
+    },
+    [loadFilesInternal, refresh],
+  );
 
   useEffect(() => {
     void loadFiles();
@@ -67,7 +73,7 @@ export function FileManagerCard({ projectId }: FileManagerCardProps) {
               onClick={() => void loadFiles(true)}
               aria-label="Refresh files"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+              <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
             </Button>
             <Button asChild variant="outline" size="sm" className="h-7 gap-1.5">
               <Link href={`/projects/${projectId}/files`} target="_blank" rel="noopener noreferrer">

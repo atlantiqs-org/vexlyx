@@ -53,6 +53,7 @@ import { AliasesPanel } from "@/components/mail/AliasesPanel";
 import { WebmailPanel } from "@/components/mail/WebmailPanel";
 import { useMail } from "@/hooks/useMail";
 import { cn } from "@/lib/utils";
+import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { SendTestEmailInput, TestEmailResultResponse } from "@vexlyx/shared";
 
 export default function MailPage() {
@@ -220,7 +221,7 @@ export default function MailPage() {
             disabled={isRefreshing || isLoading}
             className="gap-2"
           >
-            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-4 w-4")} />
             Refresh
           </Button>
 

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import { LogViewer } from "@/components/projects/LogViewer";
 import { useBuildLogs } from "@/hooks/useLogs";
 import { ApiRequestError } from "@/lib/api";
@@ -218,17 +219,13 @@ export function BuildPanel({
 }: BuildPanelProps) {
   const { triggerBuild, isTriggering } = useTriggerBuild(projectId);
   const { deployments, isLoading, refetch } = useDeployments(projectId);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
+  const handleRefresh = () =>
+    refresh(async () => {
       await refetch();
       toast.success("Deployments refreshed");
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  };
+    });
 
   // Re-fetch when external triggers occur (e.g. Save & Deploy in DockerfilePanel)
   useEffect(() => {
@@ -313,12 +310,7 @@ export function BuildPanel({
               onClick={() => void handleRefresh()}
               disabled={isLoading || isRefreshing}
             >
-              <RefreshCw
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-500",
-                  (isLoading || isRefreshing) && "animate-spin text-indigo-500",
-                )}
-              />
+              <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
             </Button>
 
             <Button

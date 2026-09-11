@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { useDomains } from "@/hooks/useDomains";
 import { cn } from "@/lib/utils";
+import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DomainResponse, DomainStatus, Project } from "@vexlyx/shared";
 
 interface DomainPanelProps {
@@ -187,7 +188,7 @@ export function DomainPanel({ project }: DomainPanelProps) {
             className="h-8 px-2 text-muted-foreground hover:text-foreground"
             title="Refresh domains"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
           </Button>
 
           <Button

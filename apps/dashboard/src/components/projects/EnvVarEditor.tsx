@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import { useEnvVars } from "@/hooks/useEnvVars";
 import { EnvVarKeySchema } from "@vexlyx/shared";
 import type { EnvVar } from "@vexlyx/shared";
@@ -73,7 +74,7 @@ export function EnvVarEditor({ projectId, onDeployTrigger }: EnvVarEditorProps) 
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
   // Revealed values cache: { [key: string]: string }
   const [revealedValues, setRevealedValues] = useState<Record<string, string>>({});
@@ -105,15 +106,11 @@ export function EnvVarEditor({ projectId, onDeployTrigger }: EnvVarEditorProps) 
   }, [variables, searchQuery]);
 
   // Handle Refresh with full spin animation
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
+  const handleRefresh = () =>
+    refresh(async () => {
       await refetch();
       toast.success("Environment variables refreshed");
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  };
+    });
 
   // Handle Redeploy Trigger
   const handleRedeploy = () => {
@@ -346,12 +343,7 @@ export function EnvVarEditor({ projectId, onDeployTrigger }: EnvVarEditorProps) 
               disabled={isLoading || isRefreshing}
               title="Refresh variables"
             >
-              <RefreshCw
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-500",
-                  (isLoading || isRefreshing) && "animate-spin text-indigo-500",
-                )}
-              />
+              <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
             </Button>
           </div>
         </div>

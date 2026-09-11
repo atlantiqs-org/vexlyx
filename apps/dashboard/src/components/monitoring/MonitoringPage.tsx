@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import {
   useServerMetrics,
   useContainerMetrics,
@@ -182,7 +183,9 @@ const RANGE_OPTIONS: { label: string; value: MetricsRange }[] = [
 
 function HistorySection() {
   const [range, setRange] = useState<MetricsRange>("24h");
-  const { data, isLoading, isFetching, refetch } = useMetricHistory(range);
+  const { data, isLoading, refetch } = useMetricHistory(range);
+  const { isRefreshing, refresh } = useRefreshAnimation();
+  const handleRefresh = () => refresh(() => refetch());
 
   return (
     <Card>
@@ -214,12 +217,10 @@ function HistorySection() {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => void refetch()}
+            onClick={() => void handleRefresh()}
             aria-label="Refresh historical data"
           >
-            <RefreshCw
-              className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
-            />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
           </Button>
         </div>
       </CardHeader>
@@ -252,12 +253,9 @@ function HistorySection() {
 
 function ContainersSection() {
   const { containers } = useContainerMetrics();
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 600);
-  };
+  const handleRefresh = () => refresh(async () => {});
 
   return (
     <Card>
@@ -277,12 +275,7 @@ function ContainersSection() {
           onClick={handleRefresh}
           aria-label="Refresh container metrics"
         >
-          <RefreshCw
-            className={cn(
-              "h-3.5 w-3.5",
-              isRefreshing && "animate-spin duration-500",
-            )}
-          />
+          <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
         </Button>
       </CardHeader>
 

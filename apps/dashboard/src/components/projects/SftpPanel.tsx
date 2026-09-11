@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +57,7 @@ interface SftpPanelProps {
 export function SftpPanel({ projectId: _ }: SftpPanelProps) {
   const [credentials, setCredentials] = useState<SftpCredentials | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
   const [isAddingKey, setIsAddingKey] = useState(false);
@@ -67,9 +68,8 @@ export function SftpPanel({ projectId: _ }: SftpPanelProps) {
   const [disableOpen, setDisableOpen] = useState(false);
   const [newPublicKey, setNewPublicKey] = useState("");
 
-  const loadCredentials = useCallback(async (refresh = false) => {
-    if (refresh) setIsRefreshing(true);
-    else setIsLoading(true);
+  const loadCredentialsInternal = useCallback(async (isManual = false) => {
+    if (!isManual) setIsLoading(true);
     try {
       const data = await fetchAPI<SftpCredentials>("/api/sftp/credentials");
       setCredentials(data);
@@ -77,9 +77,16 @@ export function SftpPanel({ projectId: _ }: SftpPanelProps) {
       setCredentials(null);
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   }, []);
+
+  const loadCredentials = useCallback(
+    (isManual = false) => {
+      if (isManual) return refresh(() => loadCredentialsInternal(true));
+      return loadCredentialsInternal(false);
+    },
+    [loadCredentialsInternal, refresh],
+  );
 
   useEffect(() => {
     void loadCredentials();
@@ -210,7 +217,7 @@ export function SftpPanel({ projectId: _ }: SftpPanelProps) {
             onClick={() => void loadCredentials(true)}
             aria-label="Refresh SFTP credentials"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
           </Button>
         </div>
         <CardDescription className="text-xs">

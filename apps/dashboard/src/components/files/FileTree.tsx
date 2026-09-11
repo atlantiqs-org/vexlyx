@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fetchAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { FileNode } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -268,7 +269,7 @@ export function FileTree({
   const [dirChildren, setDirChildren] = useState<Map<string, FileNode[]>>(new Map());
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   // Load children of a specific directory
@@ -300,10 +301,9 @@ export function FileTree({
   );
 
   // Refresh tree in-place, preserving expanded folders and fetching their latest children
-  const refreshTree = useCallback(
+  const performRefresh = useCallback(
     async (isManual = false) => {
-      if (isManual) setIsRefreshing(true);
-      else setIsLoading(true);
+      if (!isManual) setIsLoading(true);
       setError(null);
 
       try {
@@ -344,10 +344,17 @@ export function FileTree({
         setError(msg);
       } finally {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     },
     [projectId],
+  );
+
+  const refreshTree = useCallback(
+    (isManual = false) => {
+      if (isManual) return refresh(() => performRefresh(true));
+      return performRefresh(false);
+    },
+    [performRefresh, refresh],
   );
 
   // Initial load
@@ -449,7 +456,7 @@ export function FileTree({
           aria-label="Refresh file tree"
           title="Refresh tree"
         >
-          <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+          <RefreshCw className={refreshIconClassName(isRefreshing, "h-3 w-3")} />
         </Button>
       </div>
 

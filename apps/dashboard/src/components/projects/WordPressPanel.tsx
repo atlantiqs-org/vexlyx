@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { fetchAPI } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import { useDomains } from "@/hooks/useDomains";
 import type { Project, DatabaseDetail } from "@vexlyx/shared";
 
@@ -55,7 +55,7 @@ interface WordPressPanelProps {
 
 export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps) {
   const [status, setStatus] = useState<WordPressStatus | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [availableDbs, setAvailableDbs] = useState<DatabaseDetail[]>([]);
@@ -116,11 +116,7 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
     void fetchStatus();
   }, [fetchStatus]);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchStatus();
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
+  const handleRefresh = () => refresh(() => fetchStatus());
 
   const handleInstall = async () => {
     if (!selectedDatabaseId) {
@@ -272,7 +268,7 @@ export function WordPressPanel({ project, onProjectUpdate }: WordPressPanelProps
             disabled={isRefreshing}
             aria-label="Refresh status"
           >
-            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-4 w-4")} />
           </Button>
           {siteUrl && (
             <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5">

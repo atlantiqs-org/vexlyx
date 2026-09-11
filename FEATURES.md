@@ -1878,7 +1878,7 @@ The Sidebar has always linked to `/settings` (`apps/dashboard/src/components/lay
 ---
 
 ### F5.12 — Consistent Refresh Button Animation (Design System Enforcement)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 CLAUDE.md's design system mandates a dedicated `isRefreshing` state with `animate-spin` on the `RefreshCw`/`RotateCw` icon for 500-600ms on every refresh action, but a full-repo audit found at least 4 different patterns in actual use:
@@ -1889,14 +1889,17 @@ CLAUDE.md's design system mandates a dedicated `isRefreshing` state with `animat
 5. `GitSettings.tsx:324,436` uses `RefreshCw` for "Generate/Regenerate" buttons with no spin binding at all (swaps to `Loader2` instead) — a third distinct pattern for a refresh-shaped action.
 
 **Acceptance Criteria:**
-- [ ] A single shared helper/hook (e.g. `useRefreshAnimation()`) encapsulates the "set isRefreshing, animate-spin, clear after 600ms (floor, even if the real fetch finishes faster)" pattern
-- [ ] Every refresh-shaped button in the dashboard is migrated to use it, including the 4 categories of offenders listed above
-- [ ] `RefreshCw` is used consistently for "refresh/reload data" actions; `RotateCw`/`Loader2` are reserved for genuinely different actions (e.g. a restart action, an in-flight submit)
-- [ ] Manual click-through of every page confirms a consistent ~600ms spin feel regardless of actual network latency
+- [x] A single shared helper/hook (`useRefreshAnimation()` in `apps/dashboard/src/hooks/useRefreshAnimation.ts`, plus a `refreshIconClassName()` companion for the icon classes) encapsulates the "set isRefreshing, animate-spin, clear after 600ms (floor, even if the real fetch finishes faster)" pattern
+- [x] Every refresh-shaped button in the dashboard is migrated to use it, including the 4 categories of offenders listed above — both component-owned `isRefreshing` state (17 files) and data-hook-owned state like `useDomains`/`useMail`/`useWebmail` etc. (7 hooks + their consumers)
+- [x] `RefreshCw` is used consistently for "refresh/reload data" actions; `RotateCw`/`Loader2` are reserved for genuinely different actions — `GitSettings.tsx`'s "Generate/Regenerate SSH Key" and "Regenerate Secret" buttons (mutation actions, not refreshes) now use `KeyRound`/`RotateCw` idle icons with a `Loader2` swap while pending, instead of `RefreshCw`
+- [x] Manual click-through of every page confirms a consistent ~600ms spin feel regardless of actual network latency — verified live (databases/projects/domains/monitoring refresh buttons, GitSettings KeyRound/RotateCw idle icons)
 
 **Test Plan:**
 1. Throttle network to "Slow 3G" in devtools → every refresh button still only spins for ~600ms visually (the underlying fetch continues in the background), not the full slow-network duration
 2. Click every refresh-shaped button across the app → same icon, same animation duration everywhere
+
+**Developer Docs:**
+- **Location:** `docs/dev/design-system.md` ("Refresh Buttons" section)
 
 **Developer Docs:**
 - **Location:** `docs/dev/design-system.md` (append "Refresh Buttons" section)

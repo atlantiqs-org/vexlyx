@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useRefreshAnimation } from "@/hooks/useRefreshAnimation";
 import type {
   CertificateResponse,
   ProvisionSslInput,
@@ -17,7 +18,7 @@ interface UseDomainSslOptions {
 export function useDomainSsl({ domainId, autoFetch = true }: UseDomainSslOptions = {}) {
   const [certificate, setCertificate] = useState<CertificateResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh: runRefresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   const [isProvisioning, setIsProvisioning] = useState(false);
@@ -49,7 +50,6 @@ export function useDomainSsl({ domainId, autoFetch = true }: UseDomainSslOptions
         setError(message);
       } finally {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     },
     [domainId],
@@ -62,8 +62,7 @@ export function useDomainSsl({ domainId, autoFetch = true }: UseDomainSslOptions
   }, [autoFetch, domainId, fetchCertificate]);
 
   const refresh = async () => {
-    setIsRefreshing(true);
-    await fetchCertificate(true);
+    await runRefresh(() => fetchCertificate(true));
   };
 
   const provisionAutoSsl = async (

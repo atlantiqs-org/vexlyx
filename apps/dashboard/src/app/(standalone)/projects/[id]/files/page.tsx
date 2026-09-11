@@ -32,6 +32,7 @@ import { FileEditor } from "@/components/files/FileEditor";
 import { UploadDropzone } from "@/components/files/UploadDropzone";
 import { fetchAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { FileNode, Project } from "@vexlyx/shared";
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,9 @@ export default function StandaloneFileManagerPage() {
   }, [initialOpen]);
 
   const refreshTree = useCallback(() => setRefreshTrigger((t) => t + 1), []);
+
+  const { isRefreshing, refresh } = useRefreshAnimation();
+  const handleRefreshClick = () => refresh(async () => setRefreshTrigger((t) => t + 1));
 
   // ── Select node ──────────────────────────────────────────────────────────
 
@@ -355,11 +359,12 @@ export default function StandaloneFileManagerPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground"
-            onClick={refreshTree}
+            onClick={() => void handleRefreshClick()}
+            disabled={isRefreshing}
             title="Refresh tree"
             aria-label="Refresh files"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
           </Button>
 
           <Separator orientation="vertical" className="h-5 mx-1" />

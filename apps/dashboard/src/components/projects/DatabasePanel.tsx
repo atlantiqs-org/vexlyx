@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DatabaseDetail, DatabaseType, Project } from "@vexlyx/shared";
 
 interface DatabasePanelProps {
@@ -44,7 +45,7 @@ interface DatabasePanelProps {
 export function DatabasePanel({ project, onProjectUpdate }: DatabasePanelProps) {
   const [databases, setDatabases] = useState<DatabaseDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh } = useRefreshAnimation();
 
   // Create modal state
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -93,15 +94,11 @@ export function DatabasePanel({ project, onProjectUpdate }: DatabasePanelProps) 
     }
   }, [project.id]);
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
+  const handleRefresh = () =>
+    refresh(async () => {
       await fetchDatabases(true);
       toast.success("Project databases refreshed");
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  };
+    });
 
   useEffect(() => {
     void fetchDatabases();
@@ -249,9 +246,7 @@ export function DatabasePanel({ project, onProjectUpdate }: DatabasePanelProps) 
             aria-label="Refresh project databases"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
           >
-            <RefreshCw
-              className={cn("h-3.5 w-3.5 transition-transform", isRefreshing && "animate-spin text-primary")}
-            />
+            <RefreshCw className={refreshIconClassName(isRefreshing, "h-3.5 w-3.5")} />
           </Button>
 
           <Button

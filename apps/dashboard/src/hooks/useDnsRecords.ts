@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
+import { useRefreshAnimation } from "@/hooks/useRefreshAnimation";
 import type {
   DnsRecordResponse,
   CreateDnsRecordInput,
@@ -17,7 +18,7 @@ interface UseDnsRecordsOptions {
 export function useDnsRecords({ domainId, autoFetch = true }: UseDnsRecordsOptions = {}) {
   const [records, setRecords] = useState<DnsRecordResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isRefreshing, refresh: runRefresh } = useRefreshAnimation();
   const [error, setError] = useState<string | null>(null);
 
   const fetchRecords = useCallback(
@@ -39,7 +40,6 @@ export function useDnsRecords({ domainId, autoFetch = true }: UseDnsRecordsOptio
         setError(message);
       } finally {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     },
     [domainId],
@@ -52,8 +52,7 @@ export function useDnsRecords({ domainId, autoFetch = true }: UseDnsRecordsOptio
   }, [autoFetch, domainId, fetchRecords]);
 
   const refresh = async () => {
-    setIsRefreshing(true);
-    await fetchRecords(true);
+    await runRefresh(() => fetchRecords(true));
   };
 
   const createRecord = async (input: CreateDnsRecordInput): Promise<DnsRecordResponse> => {
@@ -96,16 +95,15 @@ export function useDnsRecords({ domainId, autoFetch = true }: UseDnsRecordsOptio
   const initializeDefaults = async (): Promise<DnsRecordResponse[]> => {
     if (!domainId) throw new Error("No domain selected");
 
-    setIsRefreshing(true);
-    try {
+    let result: DnsRecordResponse[] = [];
+    await runRefresh(async () => {
       const data = await fetchAPI<DnsRecordResponse[]>(`/api/domains/${domainId}/dns/defaults`, {
         method: "POST",
       });
       setRecords(data ?? []);
-      return data ?? [];
-    } finally {
-      setIsRefreshing(false);
-    }
+      result = data ?? [];
+    });
+    return result;
   };
 
   const exportZone = async (): Promise<string> => {
