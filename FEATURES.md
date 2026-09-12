@@ -602,26 +602,29 @@ Allow users to set environment variables per project. Variables are encrypted at
 ---
 
 ### F1.8 — Project Detail Page: Tabbed Sections
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx` currently renders 14 distinct sections stacked vertically with no grouping — Overview info, Repository, Configuration, Metadata, `GitSettings`, `ContainerControls`, `EnvVarEditor`, `DatabasePanel`, `DomainPanel`, `FileManagerCard`, `SftpPanel`, `WordPressPanel`/`DockerfilePanel` (conditional), and `BuildPanel` (deployments) — in that order. This makes the page a very long scroll with no way to jump to what you need, and buries important panels (env vars, deployments) below less-frequently-used ones (SFTP, files).
 
 **Acceptance Criteria:**
-- [ ] Project detail page is reorganized into tabs (e.g. Overview, Deploy/Build, Environment, Database, Domains, Files, Git & Advanced) using the existing shadcn `Tabs` component (already used elsewhere, e.g. the Mail page)
-- [ ] Each existing panel component (`GitSettings`, `ContainerControls`, `EnvVarEditor`, `DatabasePanel`, `DomainPanel`, `FileManagerCard`, `SftpPanel`, `WordPressPanel`, `DockerfilePanel`, `BuildPanel`) moves into the appropriate tab without behavior changes
-- [ ] Overview tab keeps the at-a-glance info (type/status/repo/config/metadata) so users don't lose the summary view
-- [ ] Active tab persists across a page refresh (e.g. via a URL query param) so a direct link to "the env vars tab" is shareable
-- [ ] No regression to any existing panel's functionality — this is a layout change only
+- [x] Project detail page is reorganized into tabs (Overview, Deploy/Build, Environment, Database, Domains, Files, Git & Advanced) using the existing shadcn `Tabs` component (already used elsewhere, e.g. the Mail page)
+- [x] Each existing panel component (`GitSettings`, `ContainerControls`, `EnvVarEditor`, `DatabasePanel`, `DomainPanel`, `FileManagerCard`, `SftpPanel`, `WordPressPanel`, `DockerfilePanel`, `BuildPanel`) moves into the appropriate tab without behavior changes
+- [x] Overview tab keeps the at-a-glance info (type/status/repo/config/metadata) so users don't lose the summary view
+- [x] Active tab persists across a page refresh via a `?tab=<slug>` URL query param so a direct link to "the env vars tab" is shareable
+- [x] No regression to any existing panel's functionality — this is a layout change only
 
 **Test Plan:**
 1. Open a project → tabs are visible, Overview shows the summary info
 2. Switch tabs → each panel renders and functions exactly as before (deploy, edit env vars, manage domains, etc.)
 3. Refresh the page while on a non-default tab → still on that tab
-4. WordPress/Dockerfile-specific tabs only show for those project types
+4. WordPress/Dockerfile-specific panels (inside the Git & Advanced tab) only show for those project types
 
 **Developer Docs:**
 - **Location:** `docs/dev/project-detail-page.md`
+
+**Files Modified:**
+- `apps/dashboard/src/app/(panel)/projects/[id]/page.tsx`
 
 ---
 

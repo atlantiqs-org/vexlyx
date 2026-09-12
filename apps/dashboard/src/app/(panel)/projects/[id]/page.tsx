@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GitSettings } from "@/components/projects/GitSettings";
 import { BuildPanel } from "@/components/projects/BuildPanel";
 import { ContainerControls } from "@/components/projects/ContainerControls";
@@ -79,6 +80,22 @@ const STATUS_CONFIG: Record<ProjectStatus, { label: string; className: string }>
     className: "bg-slate-500/10 text-slate-400 border-slate-500/20",
   },
 };
+
+const TAB_VALUES = [
+  "overview",
+  "deploy",
+  "environment",
+  "database",
+  "domains",
+  "files",
+  "advanced",
+] as const;
+
+type TabValue = (typeof TAB_VALUES)[number];
+
+function isTabValue(value: string | null): value is TabValue {
+  return TAB_VALUES.includes(value as TabValue);
+}
 
 function formatDate(date: Date | string) {
   return new Date(date).toLocaleString(undefined, {
@@ -135,7 +152,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function ProjectDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const id = params.id;
+
+  const activeTab: TabValue = isTabValue(searchParams.get("tab"))
+    ? (searchParams.get("tab") as TabValue)
+    : "overview";
+
+  const handleTabChange = (value: string) => {
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("tab", value);
+    router.replace(`/projects/${id}?${query.toString()}`, { scroll: false });
+  };
 
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -264,138 +292,162 @@ export default function ProjectDetailPage() {
 
       <Separator />
 
-      {/* Detail cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Overview */}
-        <Card className="border border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Overview
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="divide-y divide-border">
-            <InfoRow label="Type" value={TYPE_LABELS[project.type] ?? project.type} />
-            <InfoRow label="Status" value={statusCfg.label} />
-            <InfoRow label="Project ID" value={project.id} />
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="deploy">Deploy/Build</TabsTrigger>
+          <TabsTrigger value="environment">Environment</TabsTrigger>
+          <TabsTrigger value="database">Database</TabsTrigger>
+          <TabsTrigger value="domains">Domains</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="advanced">Git & Advanced</TabsTrigger>
+        </TabsList>
 
-        {/* Repository */}
-        <Card className="border border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <GitBranch className="h-3.5 w-3.5" />
-              Repository
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="divide-y divide-border">
-            <InfoRow
-              label="Git URL"
-              value={project.gitUrl ?? "Not connected"}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Overview */}
+            <Card className="border border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y divide-border">
+                <InfoRow label="Type" value={TYPE_LABELS[project.type] ?? project.type} />
+                <InfoRow label="Status" value={statusCfg.label} />
+                <InfoRow label="Project ID" value={project.id} />
+              </CardContent>
+            </Card>
+
+            {/* Repository */}
+            <Card className="border border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <GitBranch className="h-3.5 w-3.5" />
+                  Repository
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y divide-border">
+                <InfoRow
+                  label="Git URL"
+                  value={project.gitUrl ?? "Not connected"}
+                />
+                <InfoRow label="Branch" value={project.branch} />
+              </CardContent>
+            </Card>
+
+            {/* Build settings */}
+            <Card className="border border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Terminal className="h-3.5 w-3.5" />
+                  Build Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y divide-border">
+                <InfoRow label="Build Command" value={project.buildCmd ?? "—"} />
+                <InfoRow label="Start Command" value={project.startCmd ?? "—"} />
+                <InfoRow label="Port" value={project.port?.toString() ?? "—"} />
+              </CardContent>
+            </Card>
+
+            {/* Network */}
+            <Card className="border border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Globe className="h-3.5 w-3.5" />
+                  Timestamps
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y divide-border">
+                <InfoRow label="Created" value={formatDate(project.createdAt)} />
+                <InfoRow label="Updated" value={formatDate(project.updatedAt)} />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="deploy" className="space-y-6">
+          {/* Live container controls */}
+          <ContainerControls
+            project={project}
+            onProjectUpdate={fetchProject}
+          />
+
+          {/* Build & deployment panel */}
+          <BuildPanel
+            projectId={project.id}
+            buildCmd={project.buildCmd}
+            onDeploySuccess={fetchProject}
+            refreshTrigger={deployTriggerCount}
+          />
+        </TabsContent>
+
+        <TabsContent value="environment" className="space-y-6">
+          {/* Environment variables editor */}
+          <EnvVarEditor
+            projectId={project.id}
+            onDeployTrigger={() => {
+              setDeployTriggerCount((c) => c + 1);
+              void fetchProject();
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="database" className="space-y-6">
+          {/* Provisioned Databases Panel (F2.6) */}
+          <DatabasePanel
+            project={project}
+            onProjectUpdate={fetchProject}
+          />
+        </TabsContent>
+
+        <TabsContent value="domains" className="space-y-6">
+          {/* Custom Domains Panel (F3.1) */}
+          <DomainPanel
+            project={project}
+            onProjectUpdate={fetchProject}
+          />
+        </TabsContent>
+
+        <TabsContent value="files" className="space-y-6">
+          {/* File Manager (F2.8) */}
+          <FileManagerCard projectId={project.id} />
+
+          {/* SFTP Access (F2.8) */}
+          <SftpPanel projectId={project.id} />
+        </TabsContent>
+
+        <TabsContent value="advanced" className="space-y-6">
+          {/* Git settings — full interactive panel */}
+          <GitSettings
+            projectId={project.id}
+            initialGitUrl={project.gitUrl}
+            initialBranch={project.branch}
+            onProjectUpdate={fetchProject}
+          />
+
+          {/* WordPress Management Panel */}
+          {project.type === "WORDPRESS" && (
+            <WordPressPanel
+              project={project}
+              onProjectUpdate={fetchProject}
             />
-            <InfoRow label="Branch" value={project.branch} />
-          </CardContent>
-        </Card>
+          )}
 
-        {/* Build settings */}
-        <Card className="border border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <Terminal className="h-3.5 w-3.5" />
-              Build Settings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="divide-y divide-border">
-            <InfoRow label="Build Command" value={project.buildCmd ?? "—"} />
-            <InfoRow label="Start Command" value={project.startCmd ?? "—"} />
-            <InfoRow label="Port" value={project.port?.toString() ?? "—"} />
-          </CardContent>
-        </Card>
-
-        {/* Network */}
-        <Card className="border border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <Globe className="h-3.5 w-3.5" />
-              Timestamps
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="divide-y divide-border">
-            <InfoRow label="Created" value={formatDate(project.createdAt)} />
-            <InfoRow label="Updated" value={formatDate(project.updatedAt)} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Git settings — full interactive panel */}
-      <GitSettings
-        projectId={project.id}
-        initialGitUrl={project.gitUrl}
-        initialBranch={project.branch}
-        onProjectUpdate={fetchProject}
-      />
-
-      {/* Live container controls */}
-      <ContainerControls
-        project={project}
-        onProjectUpdate={fetchProject}
-      />
-
-      {/* Environment variables editor */}
-      <EnvVarEditor
-        projectId={project.id}
-        onDeployTrigger={() => {
-          setDeployTriggerCount((c) => c + 1);
-          void fetchProject();
-        }}
-      />
-
-      {/* Provisioned Databases Panel (F2.6) */}
-      <DatabasePanel
-        project={project}
-        onProjectUpdate={fetchProject}
-      />
-
-      {/* Custom Domains Panel (F3.1) */}
-      <DomainPanel
-        project={project}
-        onProjectUpdate={fetchProject}
-      />
-
-      {/* File Manager (F2.8) */}
-      <FileManagerCard projectId={project.id} />
-
-      {/* SFTP Access (F2.8) */}
-      <SftpPanel projectId={project.id} />
-
-
-      {/* WordPress Management Panel */}
-      {project.type === "WORDPRESS" && (
-        <WordPressPanel
-          project={project}
-          onProjectUpdate={fetchProject}
-        />
-      )}
-
-      {/* Custom Dockerfile Management Panel (F2.5) */}
-      {(project.type === "DOCKER" || !project.gitUrl) && (
-        <DockerfilePanel
-          project={project}
-          onProjectUpdate={fetchProject}
-          onDeployTrigger={() => {
-            setDeployTriggerCount((c) => c + 1);
-            void fetchProject();
-          }}
-        />
-      )}
-
-      {/* Build & deployment panel */}
-      <BuildPanel
-        projectId={project.id}
-        buildCmd={project.buildCmd}
-        onDeploySuccess={fetchProject}
-        refreshTrigger={deployTriggerCount}
-      />
+          {/* Custom Dockerfile Management Panel (F2.5) */}
+          {(project.type === "DOCKER" || !project.gitUrl) && (
+            <DockerfilePanel
+              project={project}
+              onProjectUpdate={fetchProject}
+              onDeployTrigger={() => {
+                setDeployTriggerCount((c) => c + 1);
+                void fetchProject();
+              }}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
