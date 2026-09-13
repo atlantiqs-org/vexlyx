@@ -183,3 +183,16 @@ pnpm lint
 - **DNSSEC Support**: CoreDNS supports DNSSEC signing via the `dnssec` plugin. Keys can be generated per zone and configured in the Corefile.
 - **Secondary Nameserver Clustering**: Syncing zone files to remote nameservers via RFC 1995 IXFR / RFC 5936 AXFR or Git-based file synchronization.
 - **CAA & DS Records**: Easily added to `DnsRecordTypeSchema` with corresponding RFC validation.
+
+---
+
+## 8. Responsive Design Notes (F3.5)
+
+A UX/responsiveness pass on `/domains` and `/domains/[id]/dns` fixed several overflow issues found through manual testing at 360px/768px/1024px:
+
+- **Domain filter bar** (`domains/page.tsx`): the Type/Status/Project `Select` triggers used fixed pixel widths (`w-[140px]`/`w-[150px]`/`w-[160px]`) that didn't shrink on narrow viewports. Changed to `w-full sm:w-35`/`sm:w-37.5`/`sm:w-40` (canonical Tailwind spacing) so they stack full-width below `sm` and take fixed widths side-by-side above it.
+- **Domain card action row** (`domains/page.tsx`): for non-`ACTIVE` domains, a 4th "Verify" button was appended to a single `flex justify-between` row already holding "Manage DNS", "Manage SSL", and a help icon. With no wrap, the row overflowed the card width and visually bled into the neighboring grid card. Split into two rows: DNS/SSL/help on top, a full-width "Verify" button below when present.
+- **DNS Verification Ownership dialog** (`domains/page.tsx`): the TXT record info box used a `grid-cols-3` label-row/value-row layout (Record Type / Host / TTL headers above their values). Reflowing that grid to a single column on mobile would separate labels from values in a confusing order. Restructured into three stacked label:value rows instead, which reads correctly at every width.
+- **DNS records table Name column** (`domains/[id]/dns/page.tsx`): displayed `record.name` followed by an appended `.{domain.hostname}` suffix, assuming `name` is always zone-relative. The auto-created verification TXT record stores `name` as the full hostname already, so the suffix duplicated it and, combined with a `flex items-center` wrapper, visually overlapped once the name wrapped across lines in the narrow column. Fixed by skipping the suffix when `record.name` already ends with the domain's hostname, and replacing the flex row with plain wrapping text (`break-all`) plus `align-top` on the row so a wrapped Name cell doesn't throw off sibling cells' alignment.
+- **DNS table toolbar** (`domains/[id]/dns/page.tsx`): the record-type filter pills, search input, and "Recommended Defaults" button relied on `overflow-x-auto` to stay contained, but the row still extended past the card in some layouts. Replaced with `flex-wrap` throughout (pills, search box, button) so the row wraps onto additional lines instead of ever overflowing — the outer group only switches to a single side-by-side row at the `lg` breakpoint, where there's enough width for all of it.
+- **SRV form grid** (`domains/[id]/dns/page.tsx`): the Priority/Weight/Port `grid-cols-3` in the Add/Edit Record dialog was left unchanged — three short number inputs fit comfortably at 360px without cramping.
