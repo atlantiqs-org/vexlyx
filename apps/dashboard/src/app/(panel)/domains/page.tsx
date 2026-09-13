@@ -359,7 +359,7 @@ export default function DomainsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Type filter */}
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-9 w-[140px] text-xs">
+            <SelectTrigger className="h-9 w-full sm:w-35 text-xs">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
@@ -372,7 +372,7 @@ export default function DomainsPage() {
 
           {/* Status filter */}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-[150px] text-xs">
+            <SelectTrigger className="h-9 w-full sm:w-37.5 text-xs">
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -385,7 +385,7 @@ export default function DomainsPage() {
 
           {/* Project filter */}
           <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-xs">
+            <SelectTrigger className="h-9 w-full sm:w-40 text-xs">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
             <SelectContent>
@@ -643,50 +643,52 @@ export default function DomainsPage() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="h-8 flex-1 text-xs gap-1.5 font-medium hover:text-primary"
-                    >
-                      <Link href={`/domains/${domain.id}/dns`}>
-                        <Server className="h-3.5 w-3.5 text-indigo-500" />
-                        Manage DNS
-                      </Link>
-                    </Button>
+                  <div className="flex flex-col gap-2 pt-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="h-8 flex-1 text-xs gap-1.5 font-medium hover:text-primary"
+                      >
+                        <Link href={`/domains/${domain.id}/dns`}>
+                          <Server className="h-3.5 w-3.5 text-indigo-500" />
+                          Manage DNS
+                        </Link>
+                      </Button>
 
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="h-8 flex-1 text-xs gap-1.5 font-medium hover:text-primary"
-                    >
-                      <Link href={`/domains/${domain.id}/ssl`}>
-                        <Lock className="h-3.5 w-3.5 text-emerald-500" />
-                        Manage SSL
-                      </Link>
-                    </Button>
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="h-8 flex-1 text-xs gap-1.5 font-medium hover:text-primary"
+                      >
+                        <Link href={`/domains/${domain.id}/ssl`}>
+                          <Lock className="h-3.5 w-3.5 text-emerald-500" />
+                          Manage SSL
+                        </Link>
+                      </Button>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setInstructionsDomain(domain);
-                        setInstructionsModalOpen(true);
-                      }}
-                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      title="DNS Verification Challenge"
-                    >
-                      <HelpCircle className="h-3.5 w-3.5" />
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setInstructionsDomain(domain);
+                          setInstructionsModalOpen(true);
+                        }}
+                        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                        title="DNS Verification Challenge"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
 
                     {domain.status !== "ACTIVE" && (
                       <Button
                         size="sm"
                         onClick={() => void handleVerify(domain)}
                         disabled={isVerifying}
-                        className="h-8 text-xs shrink-0"
+                        className="h-8 w-full text-xs"
                       >
                         {isVerifying ? (
                           <>
@@ -803,16 +805,24 @@ export default function DomainsPage() {
           {instructionsDomain && (
             <div className="space-y-4 py-2">
               <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-3">
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="font-semibold text-muted-foreground">Record Type</div>
-                  <div className="font-semibold text-muted-foreground">Host / Name</div>
-                  <div className="font-semibold text-muted-foreground">TTL</div>
-                  <div className="font-mono text-foreground font-bold">TXT</div>
-                  <div className="font-mono text-foreground break-all">
-                    {instructionsDomain.verificationInstructions?.recordName ??
-                      `_vexlyx-challenge.${instructionsDomain.hostname.replace(/^\*\./, "")}`}
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-muted-foreground">Record Type</span>
+                    <span className="font-mono text-foreground font-bold">TXT</span>
                   </div>
-                  <div className="font-mono text-foreground">300 (or Auto)</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="font-semibold text-muted-foreground shrink-0">
+                      Host / Name
+                    </span>
+                    <span className="font-mono text-foreground break-all text-right">
+                      {instructionsDomain.verificationInstructions?.recordName ??
+                        `_vexlyx-challenge.${instructionsDomain.hostname.replace(/^\*\./, "")}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-muted-foreground">TTL</span>
+                    <span className="font-mono text-foreground">300 (or Auto)</span>
+                  </div>
                 </div>
 
                 <div className="space-y-1 pt-2 border-t border-border">

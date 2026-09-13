@@ -602,9 +602,9 @@ export default function DomainDnsPage() {
       {/* ----------------------------------------------------------------- */}
       <Card className="border border-border bg-card shadow-sm">
         <CardHeader className="pb-4 border-b border-border">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             {/* Filter Pills */}
-            <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+            <div className="flex flex-wrap items-center gap-1 w-full lg:w-auto">
               {["ALL", "A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV"].map((type) => {
                 const isSelected = selectedType === type;
                 return (
@@ -631,7 +631,7 @@ export default function DomainDnsPage() {
             </div>
 
             {/* Search Bar & Default Preset Button */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex flex-wrap gap-2 w-full lg:w-auto">
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
@@ -646,7 +646,7 @@ export default function DomainDnsPage() {
                 variant="outline"
                 size="sm"
                 onClick={handleInitDefaults}
-                className="h-8 text-xs gap-1.5 shrink-0"
+                className="h-8 w-full sm:w-auto text-xs gap-1.5"
                 title="Initialize baseline web & NS records"
               >
                 <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -704,10 +704,15 @@ export default function DomainDnsPage() {
                 <tbody className="divide-y divide-border/60">
                   {filteredRecords.map((record) => {
                     const cfg = TYPE_CONFIG[record.type] ?? TYPE_CONFIG.A;
+                    // Most records store a zone-relative name (e.g. "www"), but some
+                    // (like the auto-created verification TXT record) already store the
+                    // full hostname — appending the domain suffix again would duplicate it.
+                    const isFullyQualified =
+                      record.name === domain.hostname || record.name.endsWith(`.${domain.hostname}`);
                     return (
                       <tr
                         key={record.id}
-                        className="hover:bg-muted/20 transition-colors group"
+                        className="hover:bg-muted/20 transition-colors group align-top"
                       >
                         {/* Type */}
                         <td className="py-3 px-4">
@@ -720,15 +725,13 @@ export default function DomainDnsPage() {
                         </td>
 
                         {/* Name */}
-                        <td className="py-3 px-4 font-mono font-medium text-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <span>{record.name}</span>
-                            {record.name !== "@" && (
-                              <span className="text-muted-foreground font-normal text-[11px]">
-                                .{domain.hostname}
-                              </span>
-                            )}
-                          </div>
+                        <td className="py-3 px-4 font-mono font-medium text-foreground break-all">
+                          <span>{record.name}</span>
+                          {record.name !== "@" && !isFullyQualified && (
+                            <span className="text-muted-foreground font-normal text-[11px]">
+                              .{domain.hostname}
+                            </span>
+                          )}
                         </td>
 
                         {/* Value */}
