@@ -1175,22 +1175,30 @@ Automatic SSL certificate provisioning via Let's Encrypt through Traefik.
 ---
 
 ### F3.5 — Domain, DNS Zone & Backup UX Polish
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Follow-up polish pass after a manual UX/responsiveness review. Domain cards and DNS zone management are functionally responsive already (`apps/dashboard/src/app/(panel)/domains/page.tsx` uses `grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3`; the DNS records table at `domains/[id]/dns/page.tsx:692` is already wrapped in `overflow-x-auto`), but a few rough edges remain from the audit: the domain filter bar's `Select` triggers use fixed widths (`w-[140px]`/`w-[150px]`/`w-[160px]`, `domains/page.tsx:355,368,381`) that don't shrink on very narrow viewports (mitigated by `flex-wrap` but not ideal), and two dialogs use an un-prefixed `grid grid-cols-3` (`domains/page.tsx:799`, `domains/[id]/dns/page.tsx:914`) that isn't verified against small dialog widths on mobile.
+Follow-up polish pass after a manual UX/responsiveness review. Domain cards and DNS zone management are functionally responsive already (`apps/dashboard/src/app/(panel)/domains/page.tsx` uses `grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3`; the DNS records table at `domains/[id]/dns/page.tsx:692` is already wrapped in `overflow-x-auto`), but a few rough edges remained from the audit, plus two additional overflow/data-duplication bugs found via live testing during this pass.
 
 **Acceptance Criteria:**
-- [ ] Domain filter `Select` triggers use responsive width classes (e.g. `w-full sm:w-[140px]`) instead of fixed pixel widths
-- [ ] The two un-prefixed `grid-cols-3` dialogs are tested and adjusted (e.g. `grid-cols-1 sm:grid-cols-3`) for narrow mobile viewports
-- [ ] Manual pass at 360px/768px/1024px widths confirms no overflow or unreadable truncation on `/domains`, `/domains/[id]/dns`, and their dialogs
+- [x] Domain filter `Select` triggers use responsive width classes (`w-full sm:w-35`/`sm:w-37.5`/`sm:w-40`) instead of fixed pixel widths
+- [x] The DNS Verification Ownership dialog's TXT record grid was restructured into stacked label:value rows (rather than a literal `grid-cols-3` reflow, which would separate labels from values); the SRV form's `grid-cols-3` was verified to fit fine at 360px and left unchanged
+- [x] Manual pass at 360px/768px/1024px widths confirms no overflow or unreadable truncation on `/domains`, `/domains/[id]/dns`, and their dialogs
+- [x] (Found via live testing) Domain card action row no longer overflows into the neighboring grid card when a non-`ACTIVE` domain's "Verify" button is present — split into two rows
+- [x] (Found via live testing) DNS records table Name column no longer duplicates the domain hostname for the auto-created verification TXT record, and the DNS toolbar (filter pills/search/"Recommended Defaults") wraps instead of overflowing the card
 
 **Test Plan:**
 1. Resize browser to 360px width → domain filter bar and DNS-instructions dialogs remain usable, no horizontal page scroll
 2. Resize to tablet width (768px) → domain cards reflow to 2 columns, DNS table scrolls horizontally within its own container, not the page
 
 **Developer Docs:**
-- **Location:** `docs/dev/domains-dns.md` (append a "Responsive Design Notes" section)
+- **Location:** `docs/dev/dns-management.md` (appended "Responsive Design Notes (F3.5)" section — `docs/dev/domains-dns.md` referenced in the original spec doesn't exist; DNS docs already live in `dns-management.md`)
+
+**Files Modified:**
+- `apps/dashboard/src/app/(panel)/domains/page.tsx`
+- `apps/dashboard/src/app/(panel)/domains/[id]/dns/page.tsx`
+- `docs/dev/dns-management.md`
+- `FEATURES.md`
 
 ---
 
