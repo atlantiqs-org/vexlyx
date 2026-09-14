@@ -92,7 +92,16 @@ chown postfix:postdrop /var/spool/postfix/maildrop 2>/dev/null || true
 chmod 730 /var/spool/postfix/maildrop 2>/dev/null || true
 chmod g+s /var/spool/postfix/maildrop 2>/dev/null || true
 
-# 5. Start OpenDKIM in background
+# 5. Delivery/Bounce Log File (F4.8). Runs unconditionally on every start,
+# not just first-run — bind-mounted host dirs can appear root:root on first
+# mount on Windows Docker Desktop (same class of race documented above for
+# /var/spool/postfix).
+mkdir -p /var/log/postfix
+touch /var/log/postfix/postfix.log
+chown postfix:postfix /var/log/postfix/postfix.log
+chmod 644 /var/log/postfix/postfix.log
+
+# 6. Start OpenDKIM in background
 echo "[Vexlyx] Starting OpenDKIM Milter on port 8891..."
 opendkim -x /etc/opendkim/opendkim.conf || true
 

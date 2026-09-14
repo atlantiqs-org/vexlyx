@@ -8,6 +8,17 @@ import {
   SendTestEmailSchema,
   TestEmailResultSchema,
   SyncVirtualDomainsSchema,
+  QueueMessageSchema,
+  QueueListResponseSchema,
+  QueueActionResultSchema,
+  DeliveryLogEntrySchema,
+  DeliveryLogResponseSchema,
+  DeliveryLogFilterSchema,
+  DkimKeyStatusSchema,
+  DkimKeySchema,
+  DkimRotateResponseSchema,
+  WebmailLoginActivitySchema,
+  WebmailActivityResponseSchema,
 } from "@vexlyx/shared";
 
 export {
@@ -19,6 +30,17 @@ export {
   SendTestEmailSchema,
   TestEmailResultSchema,
   SyncVirtualDomainsSchema,
+  QueueMessageSchema,
+  QueueListResponseSchema,
+  QueueActionResultSchema,
+  DeliveryLogEntrySchema,
+  DeliveryLogResponseSchema,
+  DeliveryLogFilterSchema,
+  DkimKeyStatusSchema,
+  DkimKeySchema,
+  DkimRotateResponseSchema,
+  WebmailLoginActivitySchema,
+  WebmailActivityResponseSchema,
 };
 
 export type {
@@ -30,6 +52,16 @@ export type {
   SendTestEmailInput,
   TestEmailResultResponse,
   SyncVirtualDomainsInput,
+  QueueMessage,
+  QueueListResponse,
+  QueueActionResult,
+  DeliveryLogEntry,
+  DeliveryLogResponse,
+  DeliveryLogFilterInput,
+  DkimKey,
+  DkimRotateResponse,
+  WebmailLoginActivity,
+  WebmailActivityResponse,
 } from "@vexlyx/shared";
 
 export const MailDomainParamSchema = z.object({
@@ -37,3 +69,9 @@ export const MailDomainParamSchema = z.object({
 });
 
 export type MailDomainParam = z.infer<typeof MailDomainParamSchema>;
+
+export const QueueIdParamSchema = z.object({
+  queueId: z.string().regex(/^[0-9A-Fa-f]+$/, "Invalid queue ID"),
+});
+
+export type QueueIdParam = z.infer<typeof QueueIdParamSchema>;

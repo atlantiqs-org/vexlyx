@@ -11,7 +11,7 @@ RUN apk add --no-cache \
     bash
 
 # Create required directories
-RUN mkdir -p /etc/postfix /etc/opendkim /var/spool/postfix /var/run/opendkim
+RUN mkdir -p /etc/postfix /etc/opendkim /var/spool/postfix /var/run/opendkim /var/log/postfix
 
 # Copy configurations
 COPY main.cf /etc/postfix/main.cf

@@ -146,6 +146,17 @@ export {
   SendTestEmailSchema,
   TestEmailResultSchema,
   SyncVirtualDomainsSchema,
+  QueueMessageSchema,
+  QueueListResponseSchema,
+  QueueActionResultSchema,
+  DeliveryLogEntrySchema,
+  DeliveryLogResponseSchema,
+  DeliveryLogFilterSchema,
+  DkimKeyStatusSchema,
+  DkimKeySchema,
+  DkimRotateResponseSchema,
+  WebmailLoginActivitySchema,
+  WebmailActivityResponseSchema,
 } from "./schemas/mail.js";
 export type {
   ImapStatusResponse,
@@ -158,6 +169,16 @@ export type {
   SendTestEmailInput,
   TestEmailResultResponse,
   SyncVirtualDomainsInput,
+  QueueMessage,
+  QueueListResponse,
+  QueueActionResult,
+  DeliveryLogEntry,
+  DeliveryLogResponse,
+  DeliveryLogFilterInput,
+  DkimKey,
+  DkimRotateResponse,
+  WebmailLoginActivity,
+  WebmailActivityResponse,
 } from "./schemas/mail.js";
 
 export {

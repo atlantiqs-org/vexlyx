@@ -13,6 +13,13 @@ import type {
   TestEmailResultResponse,
   MailAuthCheck,
   MailAuthStatusResponse,
+  QueueListResponse,
+  QueueActionResult,
+  DeliveryLogResponse,
+  DeliveryLogFilterInput,
+  DkimKey,
+  DkimRotateResponse,
+  WebmailActivityResponse,
 } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
 import { DnsService } from "../domains/dns-service.js";
@@ -288,7 +295,10 @@ export class MailService {
         dnsRecords: {
           where: {
             OR: [
-              { type: "TXT", name: "default._domainkey" },
+              // Any selector's DKIM TXT record — not just "default" — so a
+              // rotated domain's currently-active selector is still found
+              // (F4.8).
+              { type: "TXT", name: { endsWith: "_domainkey" } },
               { type: "TXT", name: "@" },
               { type: "TXT", name: "_dmarc" },
               { type: "MX", name: "@" },
@@ -299,9 +309,19 @@ export class MailService {
       orderBy: { hostname: "asc" },
     });
 
+    // Batch-fetch each domain's currently-active DKIM selector (F4.8
+    // rotation) up front, so domains never rotated fall back to "default".
+    const activeDkimKeys = await this.prisma.dkimKey.findMany({
+      where: { domainId: { in: domains.map((d) => d.id) }, status: "ACTIVE" },
+      select: { domainId: true, selector: true },
+    });
+    const activeSelectorByDomainId = new Map(activeDkimKeys.map((k) => [k.domainId, k.selector]));
+
     const result: VirtualDomain[] = [];
 
     for (const d of domains) {
+      const activeSelector = activeSelectorByDomainId.get(d.id) ?? "default";
+
       // Check existing DKIM record from python manager
       const dkim = await runPostfixManager<{
         found: boolean;
@@ -310,13 +330,13 @@ export class MailService {
         dnsRecordName: string;
         dnsRecordValue: string;
         publicKey: string;
-      }>("get_dkim", { domain: d.hostname, selector: "default" });
+      }>("get_dkim", { domain: d.hostname, selector: activeSelector });
 
       const hasDnsTxt = d.dnsRecords.some(
-        (r) => r.type === "TXT" && r.name === "default._domainkey",
+        (r) => r.type === "TXT" && r.name === `${activeSelector}._domainkey`,
       );
 
-      const { checks, score, grade } = this.computeAuthChecks(d.dnsRecords);
+      const { checks, score, grade } = this.computeAuthChecks(d.dnsRecords, activeSelector);
 
       result.push({
         domainId: d.id,
@@ -355,6 +375,7 @@ export class MailService {
    */
   private computeAuthChecks(
     dnsRecords: Array<{ type: string; name: string; value: string; priority: number | null }>,
+    activeDkimSelector: string = "default",
   ): {
     checks: { spf: MailAuthCheck; dkim: MailAuthCheck; dmarc: MailAuthCheck; mx: MailAuthCheck };
     score: number;
@@ -368,7 +389,9 @@ export class MailService {
     const dmarcRecord = dnsRecords.find(
       (r) => r.type === "TXT" && r.name === "_dmarc" && unquote(r.value).startsWith("v=DMARC1"),
     );
-    const dkimRecord = dnsRecords.find((r) => r.type === "TXT" && r.name === "default._domainkey");
+    const dkimRecord = dnsRecords.find(
+      (r) => r.type === "TXT" && r.name === `${activeDkimSelector}._domainkey`,
+    );
     const mxRecord = dnsRecords.find((r) => r.type === "MX" && r.name === "@");
 
     const spfValid = !!spfRecord && /^v=spf1(\s+\S+)*\s+[-~?]all$/.test(unquote(spfRecord.value));
@@ -385,7 +408,7 @@ export class MailService {
       dkim: {
         pass: dkimPublished,
         detail: dkimPublished
-          ? "default._domainkey TXT record present"
+          ? `${activeDkimSelector}._domainkey TXT record present`
           : "DKIM not published to DNS",
       },
       dmarc: {
@@ -423,7 +446,15 @@ export class MailService {
       throw new MailError("Domain not found or unauthorized", "DOMAIN_NOT_FOUND", 404);
     }
 
-    const { checks, score, grade } = this.computeAuthChecks(domain.dnsRecords);
+    const activeDkimKey = await this.prisma.dkimKey.findFirst({
+      where: { domainId, status: "ACTIVE" },
+      select: { selector: true },
+    });
+
+    const { checks, score, grade } = this.computeAuthChecks(
+      domain.dnsRecords,
+      activeDkimKey?.selector ?? "default",
+    );
 
     return {
       domainId: domain.id,
@@ -601,5 +632,165 @@ export class MailService {
       url: env.WEBMAIL_URL,
     });
     return result;
+  }
+
+  /**
+   * Lists all messages currently in the Postfix mail queue (F4.8). Server-wide
+   * across all tenants — gated at the route level to ADMIN only.
+   */
+  async listQueue(): Promise<QueueListResponse> {
+    return runPostfixManager<QueueListResponse>("queue_list");
+  }
+
+  async deleteQueueMessage(queueId: string): Promise<QueueActionResult> {
+    return runPostfixManager<QueueActionResult>("queue_delete", { queueId });
+  }
+
+  async flushQueue(queueId?: string): Promise<QueueActionResult> {
+    return runPostfixManager<QueueActionResult>("queue_flush", { queueId });
+  }
+
+  async holdQueueMessage(queueId: string): Promise<QueueActionResult> {
+    return runPostfixManager<QueueActionResult>("queue_hold", { queueId });
+  }
+
+  async releaseQueueMessage(queueId: string): Promise<QueueActionResult> {
+    return runPostfixManager<QueueActionResult>("queue_release", { queueId });
+  }
+
+  /**
+   * Tails and filters Postfix's delivery/bounce log (F4.8). Server-wide
+   * across all tenants — gated at the route level to ADMIN only, so no
+   * per-user domain/mailbox ownership check is applied here.
+   */
+  async getDeliveryLog(filter: DeliveryLogFilterInput): Promise<DeliveryLogResponse> {
+    return runPostfixManager<DeliveryLogResponse>("delivery_log", filter);
+  }
+
+  /**
+   * Rotates a domain's DKIM signing key (F4.8): generates a new selector/key,
+   * switches OpenDKIM to sign with it, and keeps the previous selector's key
+   * and DNS TXT record untouched (RETIRING) so in-flight mail signed with it
+   * still validates until an admin confirms DNS propagation and removes it.
+   */
+  async rotateDkim(userId: string, domainId: string): Promise<DkimRotateResponse> {
+    const domain = await this.prisma.domain.findFirst({ where: { id: domainId, userId } });
+    if (!domain) {
+      throw new MailError("Domain not found or unauthorized", "DOMAIN_NOT_FOUND", 404);
+    }
+
+    let active = await this.prisma.dkimKey.findFirst({
+      where: { domainId, status: "ACTIVE" },
+    });
+
+    if (!active) {
+      // Backfill: a domain generated before F4.8 only has a filesystem key
+      // under the "default" selector, with no DkimKey row yet.
+      const existing = await runPostfixManager<{ found: boolean; selector: string; publicKey: string }>(
+        "get_dkim",
+        { domain: domain.hostname, selector: "default" },
+      );
+      if (existing.found) {
+        active = await this.prisma.dkimKey.create({
+          data: {
+            domainId,
+            userId,
+            selector: existing.selector,
+            status: "ACTIVE",
+            publicKey: existing.publicKey,
+            keyLength: 2048,
+          },
+        });
+      }
+    }
+
+    const rotateRes = await runPostfixManager<{
+      domain: string;
+      newSelector: string;
+      newDnsRecordName: string;
+      newDnsRecordValue: string;
+      newPublicKey: string;
+      keyLength: number;
+      oldSelector: string;
+    }>("rotate_dkim", { domain: domain.hostname, oldSelector: active?.selector ?? "default" });
+
+    await this.prisma.$transaction([
+      this.prisma.dkimKey.updateMany({
+        where: { domainId, status: "ACTIVE" },
+        data: { status: "RETIRING" },
+      }),
+      this.prisma.dkimKey.create({
+        data: {
+          domainId,
+          userId,
+          selector: rotateRes.newSelector,
+          status: "ACTIVE",
+          publicKey: rotateRes.newPublicKey,
+          keyLength: rotateRes.keyLength,
+        },
+      }),
+    ]);
+
+    // Publish the new selector's TXT record to DNS — never touches the
+    // retiring selector's existing record.
+    await this.prisma.dnsRecord.create({
+      data: {
+        type: "TXT",
+        name: `${rotateRes.newSelector}._domainkey`,
+        value: `"${rotateRes.newDnsRecordValue}"`,
+        ttl: 3600,
+        domainId,
+      },
+    });
+    await this.dnsService.syncZoneFile(domain.hostname, domain.id);
+
+    const keys = await this.prisma.dkimKey.findMany({
+      where: { domainId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return {
+      domain: domain.hostname,
+      newKey: {
+        domain: domain.hostname,
+        selector: rotateRes.newSelector,
+        dnsRecordName: rotateRes.newDnsRecordName,
+        dnsRecordValue: rotateRes.newDnsRecordValue,
+        publicKey: rotateRes.newPublicKey,
+        keyLength: rotateRes.keyLength,
+        inDns: true,
+      },
+      retiringKey: {
+        selector: rotateRes.oldSelector,
+        dnsRecordName: `${rotateRes.oldSelector}._domainkey.${domain.hostname}`,
+      },
+      keys: keys.map(
+        (k): DkimKey => ({
+          id: k.id,
+          domainId: k.domainId,
+          selector: k.selector,
+          status: k.status,
+          publicKey: k.publicKey,
+          keyLength: k.keyLength,
+          createdAt: k.createdAt.toISOString(),
+          retiredAt: k.retiredAt ? k.retiredAt.toISOString() : null,
+        }),
+      ),
+    };
+  }
+
+  /**
+   * Queries Roundcube's own SQLite database for each of the user's mailboxes'
+   * most recent login (F4.8).
+   */
+  async getWebmailActivity(userId: string): Promise<WebmailActivityResponse> {
+    const mailboxes = await this.prisma.mailbox.findMany({
+      where: { userId },
+      select: { address: true },
+    });
+
+    return runWebmailManager<WebmailActivityResponse>("recent_logins", {
+      addresses: mailboxes.map((m) => m.address),
+    });
   }
 }

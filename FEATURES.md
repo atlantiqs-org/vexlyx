@@ -1500,28 +1500,51 @@ Per-mailbox vacation/out-of-office auto-reply, powered by Dovecot Pigeonhole (Si
 ---
 
 ### F4.8 — Mail Page: Production-Grade Operations (Queue, Bounces, DKIM Rotation)
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
-Phase 4 (F4.1-F4.7) covers the mail *provisioning* side well (mailboxes, aliases, vacation, DKIM/SPF/DMARC status badges, storage-usage bars already exist and look fine — see `apps/dashboard/src/components/mail/MailboxesPanel.tsx`), but the mail page has none of the day-2 *operations* tooling an admin needs to run a real mail server, which is why it "feels dumb" for production use. Confirmed by audit: `apps/api/src/modules/mail/routes.ts` exposes only `/status`, `/domains`, `/sync`, `/dkim/:domainId`, `/auth/:domainId/regenerate`, `/test-send`, `/webmail/status`, `/test-relay` — there is no queue endpoint, no bounce/delivery-log endpoint anywhere in the API, and DKIM only supports first-time generation, not rotation. The Webmail tab is just a status badge + external link.
+Phase 4 (F4.1-F4.7) covers the mail *provisioning* side well (mailboxes, aliases, vacation, DKIM/SPF/DMARC status badges, storage-usage bars already exist and look fine — see `apps/dashboard/src/components/mail/MailboxesPanel.tsx`), but the mail page had none of the day-2 *operations* tooling an admin needs to run a real mail server. F4.8 adds a Queue view (list/delete/flush/hold/release via `postqueue`/`postsuper`), a Delivery Log view (tails Postfix's `maillog_file`, filterable by domain/mailbox/status), DKIM key rotation (new selector/key while the previous one stays valid in DNS), and recent Roundcube login activity on the Webmail tab.
+
+Queue and Delivery Log expose server-wide data across every tenant, so both are gated to `ADMIN` role only (`requireRole("ADMIN")`), matching the existing pattern for other server-wide infra views (`/api/backups`, `/api/firewall`, `/api/services`). DKIM rotation and webmail activity stay scoped to the requesting user's own domains/mailboxes.
 
 Comparable tools (Mailcow, cPanel/WHM) all expose: a mail queue manager (list/hold/delete/flush, `postqueue -p`-backed in Postfix's case), a delivery/bounce log viewer, and DKIM key rotation (not just one-shot generation) as core "day-2" admin features.
 
 **Acceptance Criteria:**
-- [ ] New "Queue" view: lists messages currently in the Postfix queue (`postqueue -p` via a new `system/python` script or extending `mail_manager.py`), with delete/flush actions
-- [ ] New "Delivery Log" view: tails/searches recent Postfix delivery and bounce events (success/deferred/bounced) per domain or mailbox
-- [ ] DKIM section gains a "Rotate key" action (generate a new key, publish new DNS record, keep the old one valid until DNS propagates), not just first-time generate
-- [ ] Webmail tab shows something more useful than a status badge — at minimum, recent Roundcube activity or a direct embedded login, not just an external link
-- [ ] All new endpoints follow the existing `mail` module's error-handling and auth patterns
+- [x] New "Queue" view: lists messages currently in the Postfix queue (`postqueue -p` via `postfix_manager.py`), with delete/flush/hold/release actions
+- [x] New "Delivery Log" view: tails/searches recent Postfix delivery and bounce events (success/deferred/bounced) per domain or mailbox
+- [x] DKIM section gains a "Rotate key" action (generate a new key, publish new DNS record, keep the old one valid until DNS propagates), not just first-time generate
+- [x] Webmail tab shows something more useful than a status badge — recent Roundcube login activity per mailbox, queried from Roundcube's own SQLite database
+- [x] All new endpoints follow the existing `mail` module's error-handling and auth patterns
 
 **Test Plan:**
-1. Send a test email to an unreachable domain → it appears in the Queue view as deferred, then in the Delivery Log as bounced once retries are exhausted
-2. Manually flush the queue → message delivery is retried immediately
-3. Rotate DKIM for a domain → new selector/key published, old key still validates in-flight signed mail until DNS updates propagate
-4. Webmail tab shows more than just "running" — e.g. last-login or a working embedded view
+1. Send a test email to an unreachable domain → it appears in the Queue view as deferred, then in the Delivery Log as bounced once retries are exhausted ✅ — verified against the live `vexlyx-postfix` container
+2. Manually flush the queue → message delivery is retried immediately ✅ — `postsuper -r`/`postqueue -f` verified
+3. Rotate DKIM for a domain → new selector/key published, old key still validates in-flight signed mail until DNS updates propagate ✅ — verified `SigningTable` repoints to the new selector while the old selector's `KeyTable` entry, key files, and DNS record are left untouched
+4. Webmail tab shows more than just "running" — last-login per mailbox, queried live from Roundcube's SQLite `users` table ✅
+
+No automated test suite exists in this repo yet (no Vitest anywhere in either app) — standing one up was scoped out of this feature per user decision; all verification above was manual/live-container. Follow-up: introduce Vitest and add coverage for the new service methods, routes, hooks, and panels.
 
 **Developer Docs:**
 - **Location:** `docs/dev/email/mail-operations.md`
+
+**Files Created:**
+- `apps/dashboard/src/hooks/useQueue.ts`
+- `apps/dashboard/src/hooks/useDeliveryLog.ts`
+- `apps/dashboard/src/components/mail/QueuePanel.tsx`
+- `apps/dashboard/src/components/mail/DeliveryLogPanel.tsx`
+- `docs/dev/email/mail-operations.md`
+
+**Files Modified:**
+- `apps/api/prisma/schema.prisma` (new `DkimKey` model + `DkimKeyStatus` enum)
+- `docker/postfix/main.cf` (`maillog_file`), `docker/postfix/Dockerfile`, `docker/postfix/entrypoint.sh` (log dir/file setup)
+- `docker-compose.yml` (bind-mount `./docker/mail-data/logs:/var/log/postfix`)
+- `system/python/postfix_manager.py` (queue list/delete/flush/hold/release, delivery log tail/filter, DKIM rotation)
+- `system/python/webmail_manager.py` (recent login activity via PHP/SQLite — the Roundcube image has no `sqlite3` CLI)
+- `packages/shared/src/schemas/mail.ts`, `packages/shared/src/index.ts` (new Zod schemas/types)
+- `apps/api/src/modules/mail/schema.ts`, `service.ts`, `routes.ts` (new endpoints)
+- `apps/dashboard/src/hooks/useMail.ts`, `useWebmail.ts` (rotateDkim, webmail activity)
+- `apps/dashboard/src/components/mail/WebmailPanel.tsx` (activity list)
+- `apps/dashboard/src/app/(panel)/mail/page.tsx` (Queue/Delivery Log tabs, DKIM rotate dialog, ADMIN-gated tab visibility)
 
 ---
 

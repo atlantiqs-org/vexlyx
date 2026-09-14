@@ -59,6 +59,12 @@ non_smtpd_milters = $smtpd_milters
 milter_default_action = accept
 milter_protocol = 6
 
+# Delivery/Bounce Logging (F4.8) — Postfix's own maillog_file sink (Postfix
+# 3.4+; Alpine 3.20 ships 3.9.x), since no syslog daemon runs in this minimal
+# container. Bind-mounted out via docker-compose so the Python layer can
+# tail/grep it directly.
+maillog_file = /var/log/postfix/postfix.log
+
 # Banner
 smtpd_banner = $myhostname ESMTP Vexlyx Mail Server
 biff = no

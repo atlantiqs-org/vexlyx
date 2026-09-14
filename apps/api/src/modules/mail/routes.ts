@@ -3,6 +3,8 @@ import { MailService, MailError } from "./service.js";
 import {
   SendTestEmailSchema,
   MailDomainParamSchema,
+  QueueIdParamSchema,
+  DeliveryLogFilterSchema,
 } from "./schema.js";
 import { isZodError, handleZodError } from "../../plugins/error-handler.js";
 
@@ -150,6 +152,158 @@ export async function mailRoutes(app: FastifyInstance) {
     async (_request, reply) => {
       try {
         const result = await service.testOpenRelay();
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/mail/queue — List the Postfix mail queue (F4.8, ADMIN only —
+  // server-wide across all tenants)
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/queue",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (_request, reply) => {
+      try {
+        const result = await service.listQueue();
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/mail/queue/:queueId/delete — Delete a queued message (F4.8)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/queue/:queueId/delete",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (request, reply) => {
+      try {
+        const { queueId } = QueueIdParamSchema.parse(request.params);
+        const result = await service.deleteQueueMessage(queueId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/mail/queue/flush — Flush the entire queue (F4.8)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/queue/flush",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (_request, reply) => {
+      try {
+        const result = await service.flushQueue();
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/mail/queue/:queueId/flush — Requeue one message immediately (F4.8)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/queue/:queueId/flush",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (request, reply) => {
+      try {
+        const { queueId } = QueueIdParamSchema.parse(request.params);
+        const result = await service.flushQueue(queueId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/mail/queue/:queueId/hold — Hold a queued message (F4.8)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/queue/:queueId/hold",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (request, reply) => {
+      try {
+        const { queueId } = QueueIdParamSchema.parse(request.params);
+        const result = await service.holdQueueMessage(queueId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/mail/queue/:queueId/release — Release a held message (F4.8)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/queue/:queueId/release",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (request, reply) => {
+      try {
+        const { queueId } = QueueIdParamSchema.parse(request.params);
+        const result = await service.releaseQueueMessage(queueId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/mail/logs — Delivery/bounce log (F4.8, ADMIN only — server-wide
+  // across all tenants)
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/logs",
+    { preHandler: [app.requireRole("ADMIN")] },
+    async (request, reply) => {
+      try {
+        const filter = DeliveryLogFilterSchema.parse(request.query);
+        const result = await service.getDeliveryLog(filter);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/mail/dkim/:domainId/rotate — Rotate a domain's DKIM key (F4.8)
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/dkim/:domainId/rotate",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const { domainId } = MailDomainParamSchema.parse(request.params);
+        const result = await service.rotateDkim(request.userId!, domainId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        handleMailError(err, reply);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/mail/webmail/activity — Recent Roundcube login activity (F4.8)
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/webmail/activity",
+    { preHandler: [app.requireAuth] },
+    async (request, reply) => {
+      try {
+        const result = await service.getWebmailActivity(request.userId!);
         return reply.status(200).send(result);
       } catch (err) {
         handleMailError(err, reply);
