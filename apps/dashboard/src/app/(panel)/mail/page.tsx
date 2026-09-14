@@ -51,10 +51,17 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MailboxesPanel } from "@/components/mail/MailboxesPanel";
 import { AliasesPanel } from "@/components/mail/AliasesPanel";
 import { WebmailPanel } from "@/components/mail/WebmailPanel";
+import { QueuePanel } from "@/components/mail/QueuePanel";
+import { DeliveryLogPanel } from "@/components/mail/DeliveryLogPanel";
 import { useMail } from "@/hooks/useMail";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
-import type { SendTestEmailInput, TestEmailResultResponse } from "@vexlyx/shared";
+import type {
+  SendTestEmailInput,
+  TestEmailResultResponse,
+  DkimRotateResponse,
+} from "@vexlyx/shared";
 
 export default function MailPage() {
   const {
@@ -66,9 +73,12 @@ export default function MailPage() {
     syncDomains,
     generateDkim,
     regenerateMailAuth,
+    rotateDkim,
     sendTestEmail,
     testOpenRelay,
   } = useMail();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   // Local state
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,6 +87,11 @@ export default function MailPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [generatingDkimId, setGeneratingDkimId] = useState<string | null>(null);
   const [regeneratingAuthId, setRegeneratingAuthId] = useState<string | null>(null);
+
+  // DKIM Rotation Dialog state
+  const [rotateTargetId, setRotateTargetId] = useState<string | null>(null);
+  const [isRotating, setIsRotating] = useState(false);
+  const [rotateResult, setRotateResult] = useState<DkimRotateResponse | null>(null);
 
   // Test Email Modal state
   const [isTestEmailOpen, setIsTestEmailOpen] = useState(false);
@@ -140,6 +155,20 @@ export default function MailPage() {
       toast.error("Failed to generate DKIM key");
     } finally {
       setGeneratingDkimId(null);
+    }
+  };
+
+  const handleRotateDkim = async () => {
+    if (!rotateTargetId) return;
+    setIsRotating(true);
+    try {
+      const res = await rotateDkim(rotateTargetId);
+      setRotateResult(res);
+      toast.success(`Rotated DKIM key for ${res.domain} — new selector ${res.newKey.selector}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to rotate DKIM key");
+    } finally {
+      setIsRotating(false);
     }
   };
 
@@ -257,6 +286,8 @@ export default function MailPage() {
           <TabsTrigger value="mailboxes">Mailboxes</TabsTrigger>
           <TabsTrigger value="aliases">Aliases</TabsTrigger>
           <TabsTrigger value="webmail">Webmail</TabsTrigger>
+          {isAdmin && <TabsTrigger value="queue">Queue</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="logs">Delivery Log</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="domains" className="space-y-6">
@@ -705,6 +736,18 @@ export default function MailPage() {
                                     Auto-Add to DNS
                                   </Button>
                                 )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1.5"
+                                  onClick={() => {
+                                    setRotateResult(null);
+                                    setRotateTargetId(domain.domainId);
+                                  }}
+                                >
+                                  <RefreshCw className="h-3.5 w-3.5" />
+                                  Rotate Key
+                                </Button>
                               </div>
                             </div>
 
@@ -817,6 +860,18 @@ export default function MailPage() {
         <TabsContent value="webmail">
           <WebmailPanel />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="queue">
+            <QueuePanel />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="logs">
+            <DeliveryLogPanel />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Send Test Email Modal */}
@@ -1021,6 +1076,97 @@ export default function MailPage() {
             <Button onClick={handleRunRelayTest} disabled={isTestingRelay}>
               Re-run Probe
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DKIM Rotation Dialog */}
+      <Dialog
+        open={!!rotateTargetId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRotateTargetId(null);
+            setRotateResult(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-indigo-500" />
+              Rotate DKIM Key
+            </DialogTitle>
+            <DialogDescription>
+              Generates a new DKIM selector and key pair for this domain. The previous key stays
+              valid and untouched — remove its DNS TXT record only after confirming the new
+              record has propagated.
+            </DialogDescription>
+          </DialogHeader>
+
+          {rotateResult ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
+                <div>
+                  <h4 className="text-sm font-semibold">
+                    New selector &quot;{rotateResult.newKey.selector}&quot; is now signing outgoing mail
+                  </h4>
+                  <p className="text-xs">
+                    Previous selector &quot;{rotateResult.retiringKey.selector}&quot; remains valid in
+                    DNS until you remove it.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    New Record Value (v=DKIM1; k=rsa; p=...)
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => copyToClipboard(rotateResult.newKey.dnsRecordValue, "rotate-new")}
+                  >
+                    {copiedField === "rotate-new" ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <div className="mt-1 max-h-24 overflow-y-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-100">
+                  {rotateResult.newKey.dnsRecordValue}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Retiring record: <code className="font-mono">{rotateResult.retiringKey.dnsRecordName}</code>{" "}
+                — remove this from DNS once propagation of the new record is confirmed.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This action takes effect immediately for new outgoing mail. Continue?
+            </p>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRotateTargetId(null);
+                setRotateResult(null);
+              }}
+            >
+              {rotateResult ? "Close" : "Cancel"}
+            </Button>
+            {!rotateResult && (
+              <Button onClick={handleRotateDkim} disabled={isRotating}>
+                {isRotating ? "Rotating…" : "Rotate Key"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

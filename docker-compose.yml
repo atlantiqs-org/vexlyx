@@ -144,6 +144,9 @@ services:
       # than a named volume, since named volumes reset ownership to root on
       # Windows/WSL2 mounts (see the /var/spool/postfix note below).
       - ./docker/mail-data/vhosts:/var/mail/vhosts
+      # Delivery/bounce log (F4.8) — same host-bind-mount convention as
+      # vhosts above (named volumes reset ownership to root on Windows).
+      - ./docker/mail-data/logs:/var/log/postfix
       # NOTE: /var/spool/postfix is intentionally NOT a named volume.
       # Docker named volumes on Windows (WSL2) reset directory ownership to root
       # on mount, which causes Postfix's cleanup daemon to fail with:

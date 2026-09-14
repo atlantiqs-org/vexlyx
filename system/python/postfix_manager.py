@@ -9,6 +9,10 @@ Handles:
 - Virtual domains and mailbox map synchronization.
 - OpenDKIM 2048-bit RSA key pair generation, SigningTable/KeyTable updates, and DNS TXT formatting.
 - Interactive test email delivery with complete SMTP handshake transcripts.
+- Mail queue inspection and management (list/delete/flush/hold/release) via postqueue/postsuper (F4.8).
+- Delivery/bounce log tailing and filtering from Postfix's maillog_file (F4.8).
+- DKIM key rotation: generates a new selector/key while leaving the previous
+  selector's key and DNS TXT record untouched (F4.8).
 
 Outputs structured JSON responses on stdout.
 """
@@ -22,7 +26,8 @@ import ssl
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from collections import deque
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 # Add possible site-packages
@@ -87,6 +92,18 @@ def get_dkim_dir() -> Path:
     base = get_postfix_dir() / "opendkim"
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def get_mail_log_path() -> Path:
+    candidates = [
+        Path.cwd() / "docker" / "mail-data" / "logs" / "postfix.log",
+        Path.cwd().parent / "docker" / "mail-data" / "logs" / "postfix.log",
+        Path.cwd().parent.parent / "docker" / "mail-data" / "logs" / "postfix.log",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +276,247 @@ def get_dkim_record(domain: str, selector: str = "default") -> dict:
         "publicKey": pub_b64,
         "keyLength": 2048,
     }
+
+
+def set_active_signing_selector(domain: str, selector: str) -> None:
+    """
+    Repoints OpenDKIM's SigningTable entry for `*@{domain}` at `selector`,
+    REPLACING (not appending to) whatever selector previously signed for this
+    domain. Used by DKIM rotation (F4.8): the old selector's KeyTable entry,
+    key files, and TrustedHosts entry are deliberately left untouched here so
+    its already-published DNS TXT record stays valid for any mail already
+    signed with it, while new outgoing mail switches to signing with the new
+    selector.
+    """
+    dkim_base = get_dkim_dir()
+    signing_table = dkim_base / "SigningTable"
+
+    sign_lines = signing_table.read_text(encoding="utf-8").splitlines() if signing_table.exists() else []
+    sign_lines = [line for line in sign_lines if not line.startswith(f"*@{domain} ")]
+    sign_lines.append(f"*@{domain} {selector}._domainkey.{domain}")
+    signing_table.write_text("\n".join(sign_lines) + "\n", encoding="utf-8", newline="\n")
+
+    reload_opendkim()
+
+
+def rotate_dkim_key(domain: str, old_selector: str, key_size: int = 2048) -> dict:
+    """
+    Generates a new DKIM selector/key for `domain` and switches OpenDKIM to
+    sign new mail with it, WITHOUT touching the previous selector's key files
+    or DNS record — so mail already in flight, signed with the old key,
+    keeps validating until the new selector's DNS TXT record has propagated
+    and an admin manually retires the old one.
+    """
+    domain = domain.strip().lower()
+    old_selector = old_selector.strip().lower()
+
+    base_selector = f"dk{date.today():%Y%m%d}"
+    new_selector = base_selector
+    dkim_base = get_dkim_dir()
+    suffix = 1
+    while (dkim_base / "keys" / domain / f"{new_selector}.private").exists():
+        suffix += 1
+        new_selector = f"{base_selector}-{suffix}"
+
+    new_key = generate_dkim_keys(domain, new_selector, key_size)
+    set_active_signing_selector(domain, new_selector)
+
+    return {
+        "domain": domain,
+        "newSelector": new_key["selector"],
+        "newDnsRecordName": new_key["dnsRecordName"],
+        "newDnsRecordValue": new_key["dnsRecordValue"],
+        "newPublicKey": new_key["publicKey"],
+        "keyLength": new_key["keyLength"],
+        "oldSelector": old_selector,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Mail Queue Management (F4.8)
+# ---------------------------------------------------------------------------
+
+_QUEUE_HEADER_RE = re.compile(
+    r"^([0-9A-Fa-f]+)(\*|!)?\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+)\s+(\S+)$"
+)
+
+
+def _run_postsuper(args: list) -> dict:
+    try:
+        proc = subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "postsuper", *args],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        message = (proc.stdout + proc.stderr).strip()
+        return {"success": proc.returncode == 0, "message": message}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+def list_queue() -> dict:
+    """
+    Parses `postqueue -p` output. Format: a header line, then repeating
+    blocks of "QUEUE_ID FLAG SIZE ARRIVAL_DATE SENDER" followed by one or
+    more indented recipient lines (a deferred/bounced recipient line ends
+    with a parenthetical reason), a blank line between messages, and a
+    trailing "-- N Kbytes in M Requests." summary line. FLAG is "*" for an
+    active message or "!" for one an admin has put on hold.
+    """
+    try:
+        proc = subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "postqueue", "-p"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception as e:
+        return {"messages": [], "totalCount": 0, "totalSizeBytes": 0, "lastChecked": datetime.now(timezone.utc).isoformat(), "error": str(e)}
+
+    messages = []
+    current = None
+    total_size = 0
+
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith("--") or line.startswith("Mail queue is empty") or line.lower().startswith("queue_id"):
+            continue
+
+        header_match = _QUEUE_HEADER_RE.match(line)
+        if header_match:
+            if current:
+                messages.append(current)
+            queue_id, flag, size_str, arrival, sender = header_match.groups()
+            size_bytes = int(size_str)
+            total_size += size_bytes
+            current = {
+                "queueId": queue_id,
+                "flagged": "held" if flag == "!" else ("active" if flag == "*" else "none"),
+                "sizeBytes": size_bytes,
+                "arrivalTime": arrival,
+                "sender": sender,
+                "recipients": [],
+                "reason": None,
+            }
+            continue
+
+        if current is not None and line.startswith((" ", "\t")):
+            stripped = line.strip()
+            reason_match = re.match(r"^(\S+)\s+\((.+)\)$", stripped)
+            if reason_match:
+                current["recipients"].append(reason_match.group(1))
+                current["reason"] = reason_match.group(2)
+            else:
+                current["recipients"].append(stripped)
+
+    if current:
+        messages.append(current)
+
+    return {
+        "messages": messages,
+        "totalCount": len(messages),
+        "totalSizeBytes": total_size,
+        "lastChecked": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def delete_queue_message(queue_id: str) -> dict:
+    return _run_postsuper(["-d", queue_id])
+
+
+def flush_queue(queue_id: str = None) -> dict:
+    if queue_id:
+        # Requeue one message for immediate redelivery, bypassing its backoff.
+        return _run_postsuper(["-r", queue_id])
+    try:
+        proc = subprocess.run(
+            ["docker", "exec", "vexlyx-postfix", "postqueue", "-f"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return {"success": proc.returncode == 0, "message": (proc.stdout + proc.stderr).strip()}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+def hold_queue_message(queue_id: str) -> dict:
+    return _run_postsuper(["-h", queue_id])
+
+
+def release_queue_message(queue_id: str) -> dict:
+    return _run_postsuper(["-H", queue_id])
+
+
+# ---------------------------------------------------------------------------
+# Delivery / Bounce Log (F4.8)
+# ---------------------------------------------------------------------------
+
+_LOG_LINE_RE = re.compile(
+    r"^(\S+\s+\d+\s+[\d:]+)\s+\S+\s+postfix/(\w+)\[\d+\]:\s+([0-9A-Fa-f]+):\s*(.*)$"
+)
+_STATUS_MAP = {"sent": "success", "deferred": "deferred", "bounced": "bounced", "expired": "bounced"}
+
+
+def get_delivery_log(domain: str = None, mailbox: str = None, status: str = None, limit: int = 200) -> dict:
+    log_path = get_mail_log_path()
+    if not log_path.exists():
+        return {"entries": [], "truncated": False}
+
+    domain = domain.strip().lower() if domain else None
+    mailbox = mailbox.strip().lower() if mailbox else None
+
+    entries = []
+    with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+        # Cap raw lines scanned — never load an unbounded, potentially
+        # multi-GB log file into memory.
+        raw_lines = deque(f, maxlen=20000)
+
+    for line in raw_lines:
+        m = _LOG_LINE_RE.match(line.rstrip("\n"))
+        if not m:
+            continue
+        timestamp, service, queue_id, rest = m.groups()
+        if service != "smtp" and service != "lmtp" and "status=" not in rest:
+            continue
+
+        to_match = re.search(r"to=<([^>]*)>", rest)
+        status_match = re.search(r"status=(\w+)", rest)
+        relay_match = re.search(r"relay=([^,]+)", rest)
+        delay_match = re.search(r"\bdelay=([^,]+)", rest)
+        reason_match = re.search(r"\((.+)\)\s*$", rest)
+
+        if not to_match or not status_match:
+            continue
+
+        mapped_status = _STATUS_MAP.get(status_match.group(1))
+        if not mapped_status:
+            continue
+
+        recipient = to_match.group(1).lower()
+        if domain and not recipient.endswith(f"@{domain}"):
+            continue
+        if mailbox and mailbox not in recipient:
+            continue
+        if status and mapped_status != status:
+            continue
+
+        entries.append({
+            "timestamp": timestamp,
+            "queueId": queue_id,
+            "sender": None,
+            "recipient": recipient,
+            "status": mapped_status,
+            "relay": relay_match.group(1) if relay_match else None,
+            "delay": delay_match.group(1) if delay_match else None,
+            "reason": reason_match.group(1) if reason_match else None,
+        })
+
+    entries.reverse()  # newest-first
+    truncated = len(entries) > limit
+    return {"entries": entries[:limit], "truncated": truncated}
 
 
 # ---------------------------------------------------------------------------
@@ -813,6 +1071,43 @@ def main():
             respond(test_open_relay(host, port))
         elif cmd == "send_test_email":
             respond(send_test_email(payload))
+        elif cmd == "queue_list":
+            respond(list_queue())
+        elif cmd == "queue_delete":
+            queue_id = payload.get("queueId")
+            if not queue_id:
+                respond({"error": "queueId is required", "code": "MISSING_QUEUE_ID"})
+                sys.exit(1)
+            respond(delete_queue_message(queue_id))
+        elif cmd == "queue_flush":
+            respond(flush_queue(payload.get("queueId")))
+        elif cmd == "queue_hold":
+            queue_id = payload.get("queueId")
+            if not queue_id:
+                respond({"error": "queueId is required", "code": "MISSING_QUEUE_ID"})
+                sys.exit(1)
+            respond(hold_queue_message(queue_id))
+        elif cmd == "queue_release":
+            queue_id = payload.get("queueId")
+            if not queue_id:
+                respond({"error": "queueId is required", "code": "MISSING_QUEUE_ID"})
+                sys.exit(1)
+            respond(release_queue_message(queue_id))
+        elif cmd == "delivery_log":
+            respond(get_delivery_log(
+                payload.get("domain"),
+                payload.get("mailbox"),
+                payload.get("status"),
+                int(payload.get("limit", 200)),
+            ))
+        elif cmd == "rotate_dkim":
+            domain = payload.get("domain")
+            if not domain:
+                respond({"error": "domain is required", "code": "MISSING_DOMAIN"})
+                sys.exit(1)
+            old_selector = payload.get("oldSelector", "default")
+            key_size = int(payload.get("keyLength", 2048))
+            respond(rotate_dkim_key(domain, old_selector, key_size))
         else:
             respond({"error": f"Unknown command: {cmd}", "code": "UNKNOWN_COMMAND"})
             sys.exit(1)

@@ -151,6 +151,7 @@ model User {
   databases      Database[]
   mailboxes      Mailbox[]
   virtualAliases VirtualAlias[]
+  dkimKeys       DkimKey[]
   sftpUser       SftpUser?
   reseller       User?          @relation("ResellerAccounts", fields: [resellerId], references: [id], onDelete: SetNull)
   subAccounts    User[]         @relation("ResellerAccounts")
@@ -280,6 +281,7 @@ model Domain {
   dnsRecords     DnsRecord[]
   mailboxes      Mailbox[]
   virtualAliases VirtualAlias[]
+  dkimKeys       DkimKey[]
   certificate    Certificate?
 
   @@index([userId])
@@ -398,6 +400,38 @@ model VirtualAlias {
   @@index([userId])
   @@index([domainId])
   @@map("virtual_aliases")
+}
+
+enum DkimKeyStatus {
+  ACTIVE
+  RETIRING
+  RETIRED
+}
+
+/// A DKIM selector/key pair for a domain (F4.8). Rotation keeps the previous
+/// selector's row (and its published DNS TXT record) around in RETIRING
+/// status so in-flight signed mail using the old key still validates while
+/// the new selector's DNS TXT record propagates. Nothing auto-transitions
+/// RETIRING -> RETIRED; an admin removes the old DNS record manually once
+/// propagation is confirmed.
+model DkimKey {
+  id        String        @id @default(cuid())
+  domainId  String        @map("domain_id")
+  userId    String        @map("user_id")
+  selector  String
+  status    DkimKeyStatus @default(ACTIVE)
+  publicKey String        @map("public_key") @db.Text
+  keyLength Int           @default(2048) @map("key_length")
+  createdAt DateTime      @default(now()) @map("created_at")
+  retiredAt DateTime?     @map("retired_at")
+
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, selector])
+  @@index([domainId])
+  @@index([userId])
+  @@map("dkim_keys")
 }
 
 /// A vacation / out-of-office automated responder configured for a mailbox.

@@ -1,6 +1,6 @@
 "use client";
 
-import { AppWindow, ExternalLink, KeyRound, RefreshCw } from "lucide-react";
+import { AppWindow, ExternalLink, KeyRound, RefreshCw, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 
 export function WebmailPanel() {
-  const { status, isLoading, isRefreshing, refresh } = useWebmail();
+  const { status, activity, isLoading, isRefreshing, refresh } = useWebmail();
 
   const isActive = status?.status === "active";
 
@@ -86,6 +86,42 @@ export function WebmailPanel() {
             <span className="font-medium text-foreground">Mailboxes</span> tab. Vexlyx does not
             store or auto-fill mailbox passwords.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border bg-card">
+        <CardContent className="pt-6">
+          <div className="mb-3 flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Recent Login Activity</h3>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ) : !activity || activity.logins.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No mailbox login activity available yet.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {activity.logins.map((login) => (
+                <div
+                  key={login.address}
+                  className="flex items-center justify-between rounded-md border border-border px-3 py-2"
+                >
+                  <span className="text-sm font-medium text-foreground">{login.address}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {login.lastLogin
+                      ? `Last login ${new Date(login.lastLogin).toLocaleString()}`
+                      : "Never logged in"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -167,3 +167,136 @@ export const SyncVirtualDomainsSchema = z.object({
 });
 
 export type SyncVirtualDomainsInput = z.infer<typeof SyncVirtualDomainsSchema>;
+
+/**
+ * Schema for a single message in the Postfix mail queue (F4.8).
+ */
+export const QueueMessageSchema = z.object({
+  queueId: z.string(),
+  flagged: z.enum(["active", "held", "none"]),
+  sizeBytes: z.number().int().nonnegative(),
+  arrivalTime: z.string(),
+  sender: z.string(),
+  recipients: z.array(z.string()),
+  reason: z.string().nullable(),
+});
+
+export type QueueMessage = z.infer<typeof QueueMessageSchema>;
+
+/**
+ * Schema validating the full Postfix mail queue listing (F4.8).
+ */
+export const QueueListResponseSchema = z.object({
+  messages: z.array(QueueMessageSchema),
+  totalCount: z.number().int().nonnegative(),
+  totalSizeBytes: z.number().int().nonnegative(),
+  lastChecked: z.string(),
+});
+
+export type QueueListResponse = z.infer<typeof QueueListResponseSchema>;
+
+/**
+ * Schema for the result of a queue action (delete/flush/hold/release) (F4.8).
+ */
+export const QueueActionResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
+export type QueueActionResult = z.infer<typeof QueueActionResultSchema>;
+
+/**
+ * Schema for a single Postfix delivery/bounce log entry (F4.8).
+ */
+export const DeliveryLogEntrySchema = z.object({
+  timestamp: z.string(),
+  queueId: z.string(),
+  sender: z.string().nullable(),
+  recipient: z.string(),
+  status: z.enum(["success", "deferred", "bounced"]),
+  relay: z.string().nullable(),
+  delay: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+
+export type DeliveryLogEntry = z.infer<typeof DeliveryLogEntrySchema>;
+
+/**
+ * Schema validating a delivery log query result (F4.8).
+ */
+export const DeliveryLogResponseSchema = z.object({
+  entries: z.array(DeliveryLogEntrySchema),
+  truncated: z.boolean(),
+});
+
+export type DeliveryLogResponse = z.infer<typeof DeliveryLogResponseSchema>;
+
+/**
+ * Schema validating delivery log filter/query parameters (F4.8).
+ */
+export const DeliveryLogFilterSchema = z.object({
+  domain: z.string().optional(),
+  mailbox: z.string().optional(),
+  status: z.enum(["success", "deferred", "bounced"]).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(200),
+});
+
+export type DeliveryLogFilterInput = z.infer<typeof DeliveryLogFilterSchema>;
+
+/**
+ * Lifecycle status of a DKIM key (F4.8). ACTIVE signs new outgoing mail;
+ * RETIRING is a previously-active key kept valid in DNS during rotation
+ * propagation; RETIRED means an admin has confirmed it can be removed.
+ */
+export const DkimKeyStatusSchema = z.enum(["ACTIVE", "RETIRING", "RETIRED"]);
+
+/**
+ * Schema for a single tracked DKIM selector/key (F4.8).
+ */
+export const DkimKeySchema = z.object({
+  id: z.string(),
+  domainId: z.string(),
+  selector: z.string(),
+  status: DkimKeyStatusSchema,
+  publicKey: z.string(),
+  keyLength: z.number().int(),
+  createdAt: z.string(),
+  retiredAt: z.string().nullable(),
+});
+
+export type DkimKey = z.infer<typeof DkimKeySchema>;
+
+/**
+ * Schema validating the result of a DKIM key rotation (F4.8).
+ */
+export const DkimRotateResponseSchema = z.object({
+  domain: z.string(),
+  newKey: DkimRecordSchema,
+  retiringKey: z.object({
+    selector: z.string(),
+    dnsRecordName: z.string(),
+  }),
+  keys: z.array(DkimKeySchema),
+});
+
+export type DkimRotateResponse = z.infer<typeof DkimRotateResponseSchema>;
+
+/**
+ * Schema for a single mailbox's Roundcube login activity (F4.8).
+ */
+export const WebmailLoginActivitySchema = z.object({
+  address: z.string(),
+  lastLogin: z.string().nullable(),
+});
+
+export type WebmailLoginActivity = z.infer<typeof WebmailLoginActivitySchema>;
+
+/**
+ * Schema validating recent Roundcube login activity across a user's mailboxes (F4.8).
+ */
+export const WebmailActivityResponseSchema = z.object({
+  logins: z.array(WebmailLoginActivitySchema),
+  checkedAt: z.string(),
+});
+
+export type WebmailActivityResponse = z.infer<typeof WebmailActivityResponseSchema>;

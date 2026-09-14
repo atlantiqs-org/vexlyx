@@ -10,6 +10,7 @@ import type {
   SendTestEmailInput,
   TestEmailResultResponse,
   MailAuthStatusResponse,
+  DkimRotateResponse,
 } from "@vexlyx/shared";
 
 export function useMail() {
@@ -87,6 +88,14 @@ export function useMail() {
     });
   };
 
+  const rotateDkim = async (domainId: string): Promise<DkimRotateResponse> => {
+    const result = await fetchAPI<DkimRotateResponse>(`/api/mail/dkim/${domainId}/rotate`, {
+      method: "POST",
+    });
+    await fetchDomains();
+    return result;
+  };
+
   const testOpenRelay = async () => {
     return await fetchAPI<{ safe: boolean; relayDenied: boolean; rcptResponse: string; transcript: string[] }>(
       "/api/mail/test-relay",
@@ -103,6 +112,7 @@ export function useMail() {
     syncDomains,
     generateDkim,
     regenerateMailAuth,
+    rotateDkim,
     sendTestEmail,
     testOpenRelay,
   };
