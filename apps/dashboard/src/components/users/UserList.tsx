@@ -12,6 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDate } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import type { UserResponse, Role } from "@vexlyx/shared";
 
 interface UserListProps {
@@ -34,6 +36,8 @@ function formatQuota(value: number | null): string {
 }
 
 export function UserList({ users, isLoading, currentUserId, isAdmin, onEdit, onDelete }: UserListProps) {
+  const timezone = useTimezone();
+
   if (isLoading) {
     return (
       <div className="space-y-2 p-4">
@@ -88,7 +92,7 @@ export function UserList({ users, isLoading, currentUserId, isAdmin, onEdit, onD
                 {u.role === "RESELLER" && <div>Sub-accounts: {formatQuota(u.maxSubAccounts)}</div>}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
-                {new Date(u.createdAt).toLocaleDateString()}
+                {formatDate(u.createdAt, timezone)}
               </TableCell>
               <TableCell className="text-right">
                 {canManage && (

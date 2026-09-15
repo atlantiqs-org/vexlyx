@@ -12,6 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import type { BackupSnapshotResponse, BackupStatus } from "@vexlyx/shared";
 
 interface BackupListProps {
@@ -38,6 +40,8 @@ function formatBytes(bytes: number | null): string {
 }
 
 export function BackupList({ snapshots, isLoading, progress, onView, onDelete }: BackupListProps) {
+  const timezone = useTimezone();
+
   if (isLoading) {
     return (
       <div className="space-y-2 p-4">
@@ -91,7 +95,7 @@ export function BackupList({ snapshots, isLoading, progress, onView, onDelete }:
             <TableCell className="text-sm text-muted-foreground">{s.trigger}</TableCell>
             <TableCell className="text-sm tabular-nums">{formatBytes(s.sizeBytes)}</TableCell>
             <TableCell className="text-sm text-muted-foreground">
-              {new Date(s.startedAt).toLocaleString()}
+              {formatDateTime(s.startedAt, timezone)}
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-1">

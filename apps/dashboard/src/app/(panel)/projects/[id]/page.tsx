@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/dialog";
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GitSettings } from "@/components/projects/GitSettings";
 import { BuildPanel } from "@/components/projects/BuildPanel";
@@ -97,11 +99,8 @@ function isTabValue(value: string | null): value is TabValue {
   return TAB_VALUES.includes(value as TabValue);
 }
 
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+function formatDate(date: Date | string, timezone?: string) {
+  return formatDateTime(date, timezone);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +153,7 @@ export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const id = params.id;
+  const timezone = useTimezone();
 
   const activeTab: TabValue = isTabValue(searchParams.get("tab"))
     ? (searchParams.get("tab") as TabValue)
@@ -360,8 +360,8 @@ export default function ProjectDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="divide-y divide-border">
-                <InfoRow label="Created" value={formatDate(project.createdAt)} />
-                <InfoRow label="Updated" value={formatDate(project.updatedAt)} />
+                <InfoRow label="Created" value={formatDate(project.createdAt, timezone)} />
+                <InfoRow label="Updated" value={formatDate(project.updatedAt, timezone)} />
               </CardContent>
             </Card>
           </div>

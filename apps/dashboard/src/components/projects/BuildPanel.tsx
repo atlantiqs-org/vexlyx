@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import { LogViewer } from "@/components/projects/LogViewer";
 import { useBuildLogs } from "@/hooks/useLogs";
@@ -81,11 +83,8 @@ function formatDuration(seconds: number | null): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+function formatDate(date: Date | string, timezone?: string): string {
+  return formatDateTime(date, timezone);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +119,7 @@ interface DeploymentRowProps {
 
 function DeploymentRow({ projectId, deployment, isActive }: DeploymentRowProps) {
   const [expanded, setExpanded] = useState(isActive);
+  const timezone = useTimezone();
 
   const { deployment: polled } = useDeploymentPolling(
     deployment.projectId,
@@ -161,7 +161,7 @@ function DeploymentRow({ projectId, deployment, isActive }: DeploymentRowProps) 
             </span>
           )}
           <span className="hidden text-xs text-muted-foreground sm:block">
-            {formatDate(displayDeployment.createdAt)}
+            {formatDate(displayDeployment.createdAt, timezone)}
           </span>
         </div>
 

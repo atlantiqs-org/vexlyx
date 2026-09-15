@@ -70,6 +70,29 @@ def bytes_to_int(value) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _get_cpu_stats(interval: float = 0.2) -> tuple:
+    """Return (aggregate_percent, per_core_percentages, core_count).
+
+    Uses a single psutil percpu call so the interval is only slept once;
+    the aggregate is the average of the per-core readings, which matches
+    psutil's own aggregate calculation closely enough for display purposes.
+    Falls back to the platform-specific single-value calculation (with a
+    single-element per-core list) when psutil is unavailable.
+    """
+    try:
+        import psutil  # type: ignore[import]
+        per_core = [float(p) for p in psutil.cpu_percent(interval=interval, percpu=True)]
+        core_count = len(per_core) or (psutil.cpu_count(logical=True) or 1)
+        aggregate = round(sum(per_core) / len(per_core), 2) if per_core else 0.0
+        return aggregate, per_core, core_count
+    except Exception:
+        pass
+
+    aggregate = _get_cpu_percent(interval=interval)
+    core_count = os.cpu_count() or 1
+    return aggregate, [aggregate], core_count
+
+
 def _get_cpu_percent(interval: float = 0.2) -> float:
     """Calculate CPU usage % using psutil, Windows GetSystemTimes, or Linux /proc/stat."""
     try:
@@ -288,7 +311,7 @@ def get_server_metrics() -> dict:
     Collect current server-level metrics.
     Prefers psutil when available; falls back cleanly on Windows (ctypes/shutil) or Linux (/proc).
     """
-    cpu_percent = _get_cpu_percent(interval=0.2)
+    cpu_percent, cpu_per_core, cpu_core_count = _get_cpu_stats(interval=0.2)
     mem_data = _get_mem()
     disk_data = _get_disk()
     net_data = _get_net()
@@ -297,6 +320,8 @@ def get_server_metrics() -> dict:
 
     return {
         "cpuPercent": round(float(cpu_percent), 2),
+        "cpuPerCore": [round(float(c), 2) for c in cpu_per_core],
+        "cpuCoreCount": int(cpu_core_count),
         "ramUsed": bytes_to_int(mem_data["ramUsed"]),
         "ramTotal": bytes_to_int(mem_data["ramTotal"]),
         "ramPercent": round(float(mem_data["ramPercent"]), 2),

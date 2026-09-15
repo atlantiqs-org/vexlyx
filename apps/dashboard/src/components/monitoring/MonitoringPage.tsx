@@ -24,6 +24,7 @@ import {
 } from "@/hooks/useMonitoring";
 import { ResourceGauge } from "./ResourceGauge";
 import { UsageBar } from "./UsageBar";
+import { PerCoreCpuBars } from "./PerCoreCpuBars";
 import { MetricHistoryChart } from "./MetricHistoryChart";
 import { ContainerMetricsTable } from "./ContainerMetricsTable";
 import { ThresholdAlertBadge } from "./ThresholdAlertBadge";
@@ -103,6 +104,18 @@ function LiveGaugesSection() {
                 dangerAt={90}
               />
             </div>
+
+            {metrics.cpuPerCore.length > 1 ? (
+              <PerCoreCpuBars cores={metrics.cpuPerCore} className="pb-5" />
+            ) : (
+              metrics.cpuCoreCount > 1 && (
+                <p className="pb-5 text-xs text-muted-foreground">
+                  Per-core breakdown unavailable — install{" "}
+                  <code className="rounded bg-muted px-1 py-0.5">psutil</code> on the server to
+                  enable it.
+                </p>
+              )
+            )}
 
             <Separator className="mb-5" />
 

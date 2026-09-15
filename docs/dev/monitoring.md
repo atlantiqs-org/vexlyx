@@ -173,3 +173,77 @@ To change defaults, edit `DEFAULT_THRESHOLDS` in `apps/api/src/modules/monitorin
 Currently only server-level snapshots are persisted. To add per-container history:
 1. Add a `ContainerSnapshot` model to `schema.prisma` with `containerId` + metrics fields
 2. Call `service.saveContainerSnapshots()` from the BullMQ job in `socket.ts`
+
+---
+
+## Per-Core CPU & Timezone (F5.13)
+
+### Per-core CPU
+
+`get_server_metrics()` now also returns `cpuPerCore` (array of per-core %) and
+`cpuCoreCount`. `_get_cpu_stats()` in `system_monitor.py` gets both in a single
+`psutil.cpu_percent(interval=0.2, percpu=True)` call (one sleep, not two) — the
+aggregate `cpuPercent` is the average of that list rather than a separate
+psutil call. When psutil is unavailable, it falls back to the existing
+single-value platform calculation, with `cpuPerCore` as a single-element array
+and `cpuCoreCount` from `os.cpu_count()`.
+
+This is **live-only** — per-core data is pushed over the existing
+`metrics:server` Socket.io event / `GET /api/monitoring/server` REST endpoint,
+but is **not** persisted to `MetricSnapshot` or exposed via `/history`, so
+there's no per-core historical trend. `MonitoringPage.tsx`'s
+`PerCoreCpuBars` component renders one bar per core (only when
+`cpuPerCore.length > 1`, i.e. psutil is available) next to the aggregate CPU
+gauge. When it isn't (`cpuPerCore.length <= 1` but `cpuCoreCount > 1` —
+i.e. the fallback engaged on a genuinely multi-core box), a muted
+"install psutil" hint renders instead of silently showing nothing.
+
+`system/scripts/install/steps/04-runtime.sh` installs `psutil` via
+`pip3 install --break-system-packages` alongside `cryptography`, so a fresh
+production install always has real per-core data. A local dev box the
+installer never touched (e.g. this repo's own Windows dev environment) still
+needs `pip install psutil` by hand to see it — otherwise it silently runs the
+`/proc`-parsing fallback (single aggregate value only).
+
+### Server timezone
+
+A new singleton `SystemSettings` model (`id: "default"`, mirrors
+`BackupSettings`/`FirewallSettings`) holds the server's configured IANA
+timezone, defaulting to `Intl.DateTimeFormat().resolvedOptions().timeZone` on
+first read. Managed via:
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/system/settings` | any authenticated user | Read the current timezone |
+| `PUT` | `/api/system/settings` | ADMIN | Update it (validated against the runtime's own IANA tz database via `Intl.DateTimeFormat`) |
+
+Edited from the **Settings page** (F5.11) "Server Timezone" card.
+
+**Backup cron.** `apps/api/src/modules/backups/routes.ts` passes `tz` to
+`backupQueue.upsertJobScheduler()` alongside the existing `pattern`. Since the
+timezone can change from a different module (`system/routes.ts`) than the one
+owning the queue (`backups/routes.ts`), `apps/api/src/modules/backups/scheduler.ts`
+exposes a small module-level singleton (`registerBackupQueue`,
+`setCurrentBackupCron`, `rescheduleBackupJob`) that mirrors `plugins/socket.ts`'s
+`getIO()` accessor pattern — `PUT /api/system/settings` calls
+`rescheduleBackupJob()` so a timezone change takes effect immediately, without
+a restart.
+
+**Dashboard timestamps.** `apps/dashboard/src/lib/datetime.ts` exports
+`formatDateTime` / `formatDate` / `formatTime`, each taking an explicit
+`timezone?: string` — sourced via `useTimezone()` from
+`apps/dashboard/src/hooks/useSystemSettings.ts` (a thin TanStack Query wrapper
+around `GET /api/system/settings`, 5-minute `staleTime`). Every page/component
+that previously called `toLocaleString()`/`toLocaleDateString()`/
+`toLocaleTimeString()` with an implicit browser timezone now goes through
+these helpers instead.
+
+### How to extend
+
+- **Persist per-core history:** add a `cpuPerCore Float[]` column to
+  `MetricSnapshot`, write it in `saveSnapshot()`, and extend
+  `MetricHistoryChart` to plot it — currently out of scope (live-only, see
+  above).
+- **New timezone-aware surface:** import `formatDateTime`/`formatDate`/
+  `formatTime` from `@/lib/datetime` and `useTimezone()` from
+  `@/hooks/useSystemSettings` — don't call `toLocaleString()` directly.

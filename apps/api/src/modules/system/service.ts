@@ -1,10 +1,12 @@
 import dns from "node:dns";
+import type { PrismaClient } from "@prisma/client";
 import type {
   DnsOnboardingInfoResponse,
   DnsRecordSuggestion,
   DnsResolverCheckResult,
   DnsRecordVerification,
   DnsVerificationResponse,
+  SystemSettingsResponse,
 } from "@vexlyx/shared";
 import { env } from "../../config/env.js";
 
@@ -19,6 +21,33 @@ const PUBLIC_RESOLVERS = [
 ];
 
 export class SystemService {
+  constructor(private prisma: PrismaClient) {}
+
+  // Server timezone setting (F5.13). Defaults to the server OS's own detected
+  // timezone on first read (rather than a hardcoded "UTC"), since that's the
+  // value an admin who never touches this setting would actually want.
+  async getSettings(): Promise<SystemSettingsResponse> {
+    const existing = await this.prisma.systemSettings.findUnique({ where: { id: "default" } });
+    if (existing) {
+      return { timezone: existing.timezone, updatedAt: existing.updatedAt.toISOString() };
+    }
+
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const created = await this.prisma.systemSettings.create({
+      data: { id: "default", timezone: detected },
+    });
+    return { timezone: created.timezone, updatedAt: created.updatedAt.toISOString() };
+  }
+
+  async updateSettings(timezone: string): Promise<SystemSettingsResponse> {
+    const updated = await this.prisma.systemSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default", timezone },
+      update: { timezone },
+    });
+    return { timezone: updated.timezone, updatedAt: updated.updatedAt.toISOString() };
+  }
+
   // Builds the DNS/IP reference info an admin needs to point their domain(s)
   // at this server (F5.9). Returns an empty record list — rather than
   // guessing — whenever the domain or public IP isn't known, since a

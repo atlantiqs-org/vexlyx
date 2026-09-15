@@ -349,6 +349,15 @@ export type {
 } from "./schemas/dnsOnboarding.js";
 
 export {
+  SystemSettingsSchema,
+  UpdateSystemSettingsSchema,
+} from "./schemas/systemSettings.js";
+export type {
+  SystemSettingsResponse,
+  UpdateSystemSettingsInput,
+} from "./schemas/systemSettings.js";
+
+export {
   RoleSchema,
   UserResponseSchema,
   QuotaUsageSchema,

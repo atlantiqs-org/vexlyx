@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useRestoreItem } from "@/hooks/useBackups";
+import { useTimezone } from "@/hooks/useSystemSettings";
+import { formatDateTime } from "@/lib/datetime";
 import { RestoreConfirmDialog } from "./RestoreConfirmDialog";
 import type { BackupSnapshotResponse, BackupItemType } from "@vexlyx/shared";
 
@@ -41,6 +43,7 @@ interface RestoreTarget {
 export function BackupDetail({ snapshot, onOpenChange }: BackupDetailProps) {
   const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
   const { restore, isRestoring, progress } = useRestoreItem(snapshot?.id ?? "");
+  const timezone = useTimezone();
 
   const manifest = snapshot?.manifest;
 
@@ -56,7 +59,7 @@ export function BackupDetail({ snapshot, onOpenChange }: BackupDetailProps) {
           <SheetHeader>
             <SheetTitle>Backup Contents</SheetTitle>
             <SheetDescription>
-              {snapshot ? new Date(snapshot.createdAt).toLocaleString() : ""}
+              {snapshot ? formatDateTime(snapshot.createdAt, timezone) : ""}
             </SheetDescription>
           </SheetHeader>
 

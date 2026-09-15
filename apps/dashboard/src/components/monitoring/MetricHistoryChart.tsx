@@ -12,6 +12,7 @@ import {
 import type { MetricSnapshot, MetricsRange } from "@vexlyx/shared";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useTimezone } from "@/hooks/useSystemSettings";
 
 interface MetricHistoryChartProps {
   snapshots: MetricSnapshot[];
@@ -27,17 +28,17 @@ interface ChartDatum {
   disk: number;
 }
 
-function formatTime(iso: string, range: MetricsRange): string {
+function formatChartTime(iso: string, range: MetricsRange, timezone?: string): string {
   const date = new Date(iso);
   if (range === "1h" || range === "24h") {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: timezone });
   }
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  return date.toLocaleDateString([], { month: "short", day: "numeric", timeZone: timezone });
 }
 
-function toChartData(snapshots: MetricSnapshot[], range: MetricsRange): ChartDatum[] {
+function toChartData(snapshots: MetricSnapshot[], range: MetricsRange, timezone?: string): ChartDatum[] {
   return snapshots.map((s) => ({
-    time: formatTime(s.recordedAt, range),
+    time: formatChartTime(s.recordedAt, range, timezone),
     cpu: Math.round(s.cpuPercent * 10) / 10,
     ram:
       s.ramTotal > 0
@@ -87,6 +88,8 @@ export function MetricHistoryChart({
   isLoading = false,
   className,
 }: MetricHistoryChartProps) {
+  const timezone = useTimezone();
+
   if (isLoading) {
     return <Skeleton className={cn("h-[220px] w-full rounded-lg", className)} />;
   }
@@ -106,7 +109,7 @@ export function MetricHistoryChart({
     );
   }
 
-  const data = toChartData(snapshots, range);
+  const data = toChartData(snapshots, range, timezone);
 
   // Downsample to at most 120 points for performance
   const step = Math.max(1, Math.floor(data.length / 120));

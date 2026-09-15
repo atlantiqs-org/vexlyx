@@ -48,6 +48,8 @@ import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { useUsage } from "@/hooks/useUsage";
 import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DatabaseDetail, DatabaseType, Project } from "@vexlyx/shared";
 
@@ -55,11 +57,8 @@ import type { DatabaseDetail, DatabaseType, Project } from "@vexlyx/shared";
 // Helpers & Types
 // ---------------------------------------------------------------------------
 
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+function formatDate(date: Date | string, timezone?: string) {
+  return formatDateTime(date, timezone);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +100,7 @@ export default function DatabasesPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { isRefreshing, refresh } = useRefreshAnimation();
+  const timezone = useTimezone();
   const [search, setSearch] = useState("");
   const [engineFilter, setEngineFilter] = useState<"ALL" | DatabaseType>("ALL");
 
@@ -532,7 +532,7 @@ export default function DatabasesPage() {
 
                     <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground border-t border-border/40">
                       <span>Created</span>
-                      <span>{formatDate(db.createdAt)}</span>
+                      <span>{formatDate(db.createdAt, timezone)}</span>
                     </div>
                   </div>
 
