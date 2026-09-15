@@ -55,6 +55,8 @@ import { useUsage } from "@/hooks/useUsage";
 import { QuotaBadge, isQuotaAtLimit } from "@/components/quota/QuotaBadge";
 import { SubdomainModal } from "@/components/domains/SubdomainModal";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DomainResponse, DomainStatus } from "@vexlyx/shared";
 
@@ -62,11 +64,8 @@ import type { DomainResponse, DomainStatus } from "@vexlyx/shared";
 // Helpers & Types
 // ---------------------------------------------------------------------------
 
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+function formatDate(date: Date | string, timezone?: string) {
+  return formatDateTime(date, timezone);
 }
 
 const STATUS_CONFIG: Record<
@@ -137,6 +136,7 @@ export default function DomainsPage() {
 
   const { projects } = useProjects();
   const { usage, isLoading: isUsageLoading } = useUsage();
+  const timezone = useTimezone();
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -573,7 +573,7 @@ export default function DomainsPage() {
                     )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Added:</span>
-                      <span className="text-foreground">{formatDate(domain.createdAt)}</span>
+                      <span className="text-foreground">{formatDate(domain.createdAt, timezone)}</span>
                     </div>
                   </div>
 

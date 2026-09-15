@@ -7,10 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWebmail } from "@/hooks/useWebmail";
 import { cn } from "@/lib/utils";
+import { formatTime, formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 
 export function WebmailPanel() {
   const { status, activity, isLoading, isRefreshing, refresh } = useWebmail();
+  const timezone = useTimezone();
 
   const isActive = status?.status === "active";
 
@@ -45,7 +48,7 @@ export function WebmailPanel() {
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {status?.lastChecked
-                      ? `Last checked ${new Date(status.lastChecked).toLocaleTimeString()}`
+                      ? `Last checked ${formatTime(status.lastChecked, timezone)}`
                       : "Status unavailable"}
                   </p>
                 </div>
@@ -115,7 +118,7 @@ export function WebmailPanel() {
                   <span className="text-sm font-medium text-foreground">{login.address}</span>
                   <span className="text-xs text-muted-foreground">
                     {login.lastLogin
-                      ? `Last login ${new Date(login.lastLogin).toLocaleString()}`
+                      ? `Last login ${formatDateTime(login.lastLogin, timezone)}`
                       : "Never logged in"}
                   </span>
                 </div>

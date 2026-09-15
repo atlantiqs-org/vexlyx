@@ -42,20 +42,20 @@ import {
 import { fetchAPI, ApiRequestError } from "@/lib/api";
 import { useDomainSsl } from "@/hooks/useDomainSsl";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/datetime";
+import { useTimezone } from "@/hooks/useSystemSettings";
 import { refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DomainResponse } from "@vexlyx/shared";
 
-function formatDate(date: Date | string | null | undefined) {
+function formatDate(date: Date | string | null | undefined, timezone?: string) {
   if (!date) return "—";
-  return new Date(date).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return formatDateTime(date, timezone);
 }
 
 export default function DomainSslPage() {
   const params = useParams();
   const domainId = params.id as string;
+  const timezone = useTimezone();
 
   const [domain, setDomain] = useState<DomainResponse | null>(null);
   const [domainLoading, setDomainLoading] = useState(true);
@@ -378,7 +378,7 @@ export default function DomainSslPage() {
               <span className="font-bold underline">
                 {certificate?.daysRemaining} days
               </span>{" "}
-              on {formatDate(certificate?.validTo)}. If automatic renewal fails, your visitors will see a security warning.
+              on {formatDate(certificate?.validTo, timezone)}. If automatic renewal fails, your visitors will see a security warning.
             </p>
             <div className="pt-1 flex items-center gap-2">
               <Button
@@ -401,7 +401,7 @@ export default function DomainSslPage() {
           <div className="space-y-1 text-xs">
             <h4 className="font-semibold text-sm">Certificate Expired</h4>
             <p>
-              This certificate expired on {formatDate(certificate?.validTo)}. Web browsers are currently blocking access to this site with security warnings.
+              This certificate expired on {formatDate(certificate?.validTo, timezone)}. Web browsers are currently blocking access to this site with security warnings.
             </p>
             <div className="pt-1 flex items-center gap-2">
               <Button
@@ -500,7 +500,7 @@ export default function DomainSslPage() {
                         Valid From
                       </div>
                       <div className="font-medium text-foreground">
-                        {formatDate(certificate.validFrom)}
+                        {formatDate(certificate.validFrom, timezone)}
                       </div>
                     </div>
 
@@ -510,7 +510,7 @@ export default function DomainSslPage() {
                         Valid Until
                       </div>
                       <div className="font-medium text-foreground">
-                        {formatDate(certificate.validTo)}
+                        {formatDate(certificate.validTo, timezone)}
                       </div>
                     </div>
 

@@ -545,6 +545,18 @@ model FirewallRule {
   @@map("firewall_rules")
 }
 
+/// Singleton row (id is always "default") holding the configurable server
+/// timezone (F5.13) — governs the backup cron's `tz` option and, optionally,
+/// how timestamps are displayed across the dashboard. Defaults to the
+/// server's detected local timezone but is overridable from Settings.
+model SystemSettings {
+  id        String   @id @default("default")
+  timezone  String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
 /// Singleton row (id is always "default") holding UFW's default policy for
 /// incoming/outgoing traffic, editable from the dashboard.
 model FirewallSettings {

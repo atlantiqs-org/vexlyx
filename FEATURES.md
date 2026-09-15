@@ -1941,7 +1941,7 @@ CLAUDE.md's design system mandates a dedicated `isRefreshing` state with `animat
 ---
 
 ### F5.13 — Monitoring: Per-Core CPU & Configurable Timezone
-**Status:** 🔴 NOT STARTED
+**Status:** 🟢 COMPLETED
 
 **Description:**
 Two related gaps found during review:
@@ -1949,16 +1949,20 @@ Two related gaps found during review:
 - **Timezone**: nothing in the repo is timezone-aware. Every displayed timestamp uses `toLocaleString(undefined, …)` (browser-default, unlabeled) across `databases/page.tsx`, `domains/page.tsx`, `domains/[id]/ssl/page.tsx`, `projects/[id]/page.tsx`, `BuildPanel.tsx`, `BackupList.tsx`, `BackupDetail.tsx`, etc. The backup schedule cron (`BackupSettings.scheduleCron`) is passed to BullMQ's repeatable job with no `tz` option (`apps/api/src/modules/backups/service.ts`), so "0 3 * * *" silently means "3am in whatever timezone the API server's OS is set to" — and the UI (`BackupSettingsCard.tsx`) labels it "daily at 3am" with no qualifier, which is confusing for a server in a different timezone than the admin.
 
 **Acceptance Criteria:**
-- [ ] `system_monitor.py` collects per-core percentages (`psutil.cpu_percent(percpu=True)`) and core count, stored either as a new JSON column or a separate table, and exposed via the monitoring API
-- [ ] Monitoring dashboard shows a per-core breakdown (e.g. a small bar per core) alongside the existing aggregate CPU chart
-- [ ] A server-timezone setting is added (e.g. to the new Settings page from F5.11, or `BackupSettings`), defaulting to the server's detected local timezone but overridable
-- [ ] The backup cron schedule is passed to BullMQ with an explicit `tz` option matching the configured timezone, and the Settings/Backups UI states which timezone "3am" refers to
-- [ ] Displayed timestamps across the dashboard optionally respect the configured timezone rather than silently using the browser's
+- [x] `system_monitor.py` collects per-core percentages (`psutil.cpu_percent(percpu=True)`) and core count — live-only (per user decision, not persisted to `MetricSnapshot`/history), exposed via the existing `ServerMetrics` payload (`cpuPerCore`, `cpuCoreCount`)
+- [x] Monitoring dashboard shows a per-core breakdown (`PerCoreCpuBars.tsx`, one bar per core) alongside the existing aggregate CPU gauge
+- [x] A server-timezone setting is added — new `SystemSettings` singleton model (per user decision, not folded into `BackupSettings`), defaulting to `Intl.DateTimeFormat().resolvedOptions().timeZone`, overridable from the Settings page (F5.11)'s new "Server Timezone" card
+- [x] The backup cron schedule is passed to BullMQ with an explicit `tz` option matching the configured timezone (`backups/scheduler.ts` re-upserts immediately on a timezone change), and `BackupSettingsCard.tsx` states which timezone "3am" refers to
+- [x] Displayed timestamps across the dashboard respect the configured timezone — full sweep (per user decision) of all 11 files found using `toLocaleString`/`toLocaleDateString`/`toLocaleTimeString`, now routed through `lib/datetime.ts` + `useTimezone()`
+
+**Follow-up (user-confirmed live via a monitoring screenshot):** the monitoring page rendered correctly with no per-core bars — confirmed as the expected fallback (psutil not installed on this dev box), not a bug. Two fixes applied:
+- `system/scripts/install/steps/04-runtime.sh` now `pip3 install`s `psutil` alongside the existing `cryptography` — previously nothing in the installer actually installed it despite `system_monitor.py`'s own docstring calling it required/preferred, so every fresh production install was silently running the degraded `/proc`-parsing fallback (no per-core data) unless someone installed it by hand.
+- `MonitoringPage.tsx` now shows a muted "Per-core breakdown unavailable — install `psutil`..." hint instead of silently hiding the section, but only when `cpuCoreCount > 1` (i.e. the server genuinely has multiple cores and the fallback engaged) — avoids a misleading hint on an actual single-core box.
 
 **Test Plan:**
-1. Monitoring page shows N per-core bars matching the server's actual core count
-2. Set the timezone setting to something other than the server's OS timezone → backup runs at the expected wall-clock time in that zone, and the UI states the zone explicitly
-3. Confirm existing aggregate CPU/RAM/disk charts are unaffected
+1. Monitoring page shows N per-core bars matching the server's actual core count — first checked with psutil absent (dev box, pre-existing condition): `GET /api/monitoring/server` correctly returned `cpuCoreCount: 8` with `cpuPerCore` as a single-element fallback array, `PerCoreCpuBars` correctly stayed hidden and the new "install psutil" hint rendered instead — confirmed live via a `/monitoring` screenshot (no per-core bars, page otherwise fully intact). After `pip install psutil` + a clean restart of the API dev process (a set of stale orphaned `tsx watch` processes from earlier in this session were holding the pre-install environment — killed and relaunched fresh), `GET /api/monitoring/server` returned real per-core data: `cpuPerCore: [0, 0, 38.5, 7.7, 8.3, 7.7, 8.3, 0]`, 8 independent values matching `cpuCoreCount: 8`. `system/python/system_monitor.py` invoked directly also confirmed correct psutil-path output.
+2. Set the timezone via `PUT /api/system/settings` → verified live: rejects an invalid tz (400, `VALIDATION_ERROR`), accepts `Europe/London` (200), API stayed up (uptime kept climbing, no restart) confirming the immediate BullMQ re-upsert didn't crash the process. Reset back to the auto-detected `Asia/Karachi` afterward.
+3. Confirmed existing aggregate CPU/RAM/disk charts are unaffected — `pnpm typecheck`/`pnpm lint`/`pnpm build` pass clean across `@vexlyx/shared`, `@vexlyx/api`, `@vexlyx/dashboard`; `/settings` and `/monitoring` confirmed live via browser screenshot (user-provided) showing the page fully intact — gauges, historical chart, container table all rendering correctly alongside the new per-core section.
 
 **Developer Docs:**
 - **Location:** `docs/dev/monitoring.md` (append "Per-Core CPU & Timezone" section)

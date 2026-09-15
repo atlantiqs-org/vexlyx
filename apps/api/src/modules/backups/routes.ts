@@ -4,6 +4,8 @@ import { RestoreItemSchema, UpdateBackupSettingsSchema, SnapshotIdParamSchema } 
 import { registerBackupSocketHandlers } from "./socket.js";
 import { getIO } from "../../plugins/socket.js";
 import { createQueue, createWorker } from "../../config/queue.js";
+import { SystemService } from "../system/service.js";
+import { BACKUP_SCHEDULER_ID, registerBackupQueue, setCurrentBackupCron } from "./scheduler.js";
 
 // ---------------------------------------------------------------------------
 // Shared error handler
@@ -22,10 +24,10 @@ function handleBackupError(err: unknown, reply: FastifyReply): void {
 // ---------------------------------------------------------------------------
 
 const BACKUP_QUEUE_NAME = "backup-runner";
-const BACKUP_SCHEDULER_ID = "daily-backup";
 
 export async function backupRoutes(app: FastifyInstance) {
   const service = new BackupService(app.prisma, app.log);
+  const systemService = new SystemService(app.prisma);
   const io = getIO();
 
   registerBackupSocketHandlers(io, app.log);
@@ -51,13 +53,15 @@ export async function backupRoutes(app: FastifyInstance) {
   app.registerQueue(backupQueue, backupWorker);
 
   const settings = await service.getSettings();
+  const { timezone } = await systemService.getSettings();
+  registerBackupQueue(backupQueue, settings.scheduleCron);
   await backupQueue.upsertJobScheduler(
     BACKUP_SCHEDULER_ID,
-    { pattern: settings.scheduleCron },
+    { pattern: settings.scheduleCron, tz: timezone },
     { name: "scheduled-backup", data: { trigger: "SCHEDULED" } },
   );
 
-  app.log.info({ cron: settings.scheduleCron }, "Daily backup job scheduled");
+  app.log.info({ cron: settings.scheduleCron, timezone }, "Daily backup job scheduled");
 
   // ---------------------------------------------------------------------------
   // GET /api/backups — list snapshots
@@ -97,11 +101,13 @@ export async function backupRoutes(app: FastifyInstance) {
     try {
       const body = UpdateBackupSettingsSchema.parse(request.body);
       const updated = await service.updateSettings(body);
+      const { timezone } = await systemService.getSettings();
 
       // Re-upsert the scheduler so the new cron pattern takes effect immediately.
+      setCurrentBackupCron(updated.scheduleCron);
       await backupQueue.upsertJobScheduler(
         BACKUP_SCHEDULER_ID,
-        { pattern: updated.scheduleCron },
+        { pattern: updated.scheduleCron, tz: timezone },
         { name: "scheduled-backup", data: { trigger: "SCHEDULED" } },
       );
 

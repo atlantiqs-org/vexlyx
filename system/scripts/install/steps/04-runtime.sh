@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Node.js 22 + pnpm, Python 3 + cryptography, and Nixpacks — the runtime
-# toolchain the panel itself needs on the host to build (F5.1 runs `pnpm
-# build` directly on the host — see step 08) and to build/deploy user
-# projects at runtime (build_manager.py, docker_manager.py).
+# Node.js 22 + pnpm, Python 3 + cryptography + psutil, and Nixpacks — the
+# runtime toolchain the panel itself needs on the host to build (F5.1 runs
+# `pnpm build` directly on the host — see step 08) and to build/deploy user
+# projects at runtime (build_manager.py, docker_manager.py). psutil backs
+# system_monitor.py's server_metrics collector (F5.2/F5.13) — without it,
+# metrics still work via /proc parsing but with no per-core CPU breakdown.
 set -euo pipefail
 
 log_step "[4/16] Installing Node.js, pnpm, Python, and Nixpacks"
@@ -32,7 +34,7 @@ apt-get install -y --no-install-recommends python3 python3-pip python3-venv
 if ! has_cmd python; then
   ln -sf "$(command -v python3)" /usr/local/bin/python
 fi
-pip3 install --break-system-packages --no-cache-dir cryptography
+pip3 install --break-system-packages --no-cache-dir cryptography psutil
 log_ok "Python ready ($(python --version))."
 
 if ! has_cmd nixpacks; then

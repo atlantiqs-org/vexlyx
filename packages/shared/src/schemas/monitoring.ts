@@ -6,6 +6,8 @@ import { z } from "zod";
 
 export const ServerMetricsSchema = z.object({
   cpuPercent: z.number().min(0).max(100),
+  cpuPerCore: z.array(z.number().min(0).max(100)),
+  cpuCoreCount: z.number().int().positive(),
   ramUsed: z.number().int().nonnegative(),
   ramTotal: z.number().int().positive(),
   ramPercent: z.number().min(0).max(100),

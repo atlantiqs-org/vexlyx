@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -8,7 +8,9 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Globe,
   KeyRound,
+  Loader2,
   RefreshCw,
   Server,
   ShieldQuestion,
@@ -21,12 +23,26 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useDnsInfo } from "@/hooks/useDnsInfo";
+import { useSystemSettings } from "@/hooks/useSystemSettings";
 import { ApiRequestError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/datetime";
 import { useRefreshAnimation, refreshIconClassName } from "@/hooks/useRefreshAnimation";
 import type { DnsRecordVerification } from "@vexlyx/shared";
+
+// IANA timezone identifiers, sourced from the runtime's own tz database
+// rather than a hardcoded list. Falls back to a short common set on very
+// old browsers that lack Intl.supportedValuesOf.
+function listTimezones(): string[] {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    return ["UTC", "America/New_York", "America/Los_Angeles", "Europe/London", "Europe/Berlin", "Asia/Tokyo"];
+  }
+}
 
 /**
  * Settings page (F5.11): read-only account info, self-service password
@@ -44,6 +60,15 @@ export function SettingsPage() {
     isVerifying,
     verify: verifyDns,
   } = useDnsInfo(isAdmin);
+  const { settings: tzSettings, isLoading: isTzLoading, updateTimezone, isSaving: isSavingTz } =
+    useSystemSettings();
+  const [timezone, setTimezone] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tzSettings && timezone === null) {
+      setTimezone(tzSettings.timezone);
+    }
+  }, [tzSettings, timezone]);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -84,6 +109,10 @@ export function SettingsPage() {
   };
 
   const handleRefreshDns = () => refreshDnsAnimation(() => refreshDns());
+
+  const handleSaveTimezone = () => {
+    if (timezone) updateTimezone(timezone);
+  };
 
   const copyRecord = (text: string, index: number) => {
     void navigator.clipboard.writeText(text);
@@ -201,6 +230,53 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Server Timezone (F5.13) — governs the backup cron's wall-clock time
+          and (where adopted) how timestamps are displayed across the dashboard. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-4 w-4" />
+            Server Timezone
+          </CardTitle>
+          <CardDescription>
+            {isAdmin
+              ? "Used for the backup schedule's wall-clock time and dashboard timestamps."
+              : "The timezone this server's timestamps and backup schedule use."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isTzLoading ? (
+            <Skeleton className="h-9 w-64" />
+          ) : isAdmin ? (
+            <div className="max-w-sm space-y-3">
+              <Select value={timezone ?? undefined} onValueChange={setTimezone}>
+                <SelectTrigger id="server-timezone">
+                  <SelectValue placeholder="Select a timezone" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {listTimezones().map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={handleSaveTimezone}
+                disabled={isSavingTz || !timezone || timezone === tzSettings?.timezone}
+                className="gap-1.5"
+              >
+                {isSavingTz && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save Timezone
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm font-medium">{tzSettings?.timezone}</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* DNS Records & Public IP reference (F5.9), ADMIN only */}
       {isAdmin && (
         <Card>
@@ -256,7 +332,7 @@ export function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">
                     {verification
-                      ? `Last checked ${new Date(verification.checkedAt).toLocaleTimeString()}`
+                      ? `Last checked ${formatTime(verification.checkedAt, tzSettings?.timezone)}`
                       : "Not checked yet"}
                   </span>
                   <Button

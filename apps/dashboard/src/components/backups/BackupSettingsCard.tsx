@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBackupSettings } from "@/hooks/useBackups";
+import { useSystemSettings } from "@/hooks/useSystemSettings";
 
 /**
  * Editable schedule + retention policy. A change here re-schedules the
@@ -15,6 +16,7 @@ import { useBackupSettings } from "@/hooks/useBackups";
  */
 export function BackupSettingsCard() {
   const { settings, isLoading, updateSettings, isSaving } = useBackupSettings();
+  const { timezone } = useSystemSettings();
 
   const [scheduleCron, setScheduleCron] = useState("");
   const [retentionDaily, setRetentionDaily] = useState(7);
@@ -62,6 +64,13 @@ export function BackupSettingsCard() {
               />
               <p className="text-xs text-muted-foreground">
                 Default: <code className="rounded bg-muted px-1 py-0.5">0 3 * * *</code> (daily at 3am)
+                {timezone && (
+                  <>
+                    {" "}
+                    — times are in <span className="font-medium text-foreground">{timezone}</span>, set
+                    on the <a href="/settings" className="underline underline-offset-2">Settings page</a>
+                  </>
+                )}
               </p>
             </div>
 
